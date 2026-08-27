@@ -1,5 +1,6 @@
 import {createPublicClient, defineChain, hexToString, http, type PublicClient, type Transport} from "viem";
 import {ERC20_ABI, FACTORY_ABI, MARKET_ABI} from "./abi";
+import {SpecStore, type MarketSpec} from "./zg-storage";
 import {
   CapabilityUnavailableError,
   type Candle,
@@ -27,10 +28,16 @@ import {
  * every page load would be the dishonest way out; that is what the indexer is
  * for (F4).
  *
- * Two fields on a market are unanswerable here even though the market itself is
- * fully readable: `question` and `rules` live in a 0G Storage blob committed to
- * by `specRoot`, and `createdAt` is not in `Market`'s storage at all — it exists
- * only in the `MarketCreated` event. All three come back `null`.
+ * `createdAt` is unanswerable here even though the market itself is fully
+ * readable: it is not in `Market`'s storage at all, existing only in the
+ * `MarketCreated` event. It comes back `null`.
+ *
+ * `question` and `rules` are a different case. They live in a 0G Storage
+ * document committed to by `specRoot`, which is a plain HTTPS GET away — so
+ * they are answerable HERE, without an indexer, when `zgIndexerUrl` is
+ * configured, and `MARKET_SPEC_BLOB` appears in `capabilities` only then. A
+ * market whose document was never uploaded still returns `null`, which is the
+ * true answer rather than a failure.
  */
 
 /** Narrowed from the ABI so a typo in a read name is a compile error, not a
@@ -62,6 +69,15 @@ export interface ChainSourceConfig {
    * transport is ordinary viem practice, not a test-only hatch.
    */
   transport?: Transport;
+  /**
+   * The 0G Storage indexer, e.g. `https://indexer-storage-testnet-turbo.0g.ai`.
+   *
+   * Optional because it is a genuinely separate network from the EVM RPC: a
+   * deployment can have a chain and no storage. Absent, `question` and `rules`
+   * stay `null` and `MARKET_SPEC_BLOB` stays out of `capabilities`, which is
+   * exactly the behaviour that shipped before this existed.
+   */
+  zgIndexerUrl?: string;
 }
 
 export class ChainSource implements DataSource {
@@ -72,11 +88,7 @@ export class ChainSource implements DataSource {
    * view; `AGENT_POSITIONS` is not, because `getPositions` returns EVERY agent's
    * position and enumerating holders needs transfer events.
    */
-  readonly capabilities: ReadonlySet<Capability> = new Set<Capability>([
-    "LIST_MARKETS",
-    "MARKET_STATE",
-    "AGENT_BALANCE",
-  ]);
+  readonly capabilities: ReadonlySet<Capability>;
 
   /**
    * Exposed so `LogSource` can decorate this source rather than build a second
@@ -89,11 +101,20 @@ export class ChainSource implements DataSource {
 
   private readonly client: PublicClient;
   private readonly factory: `0x${string}`;
+  /** Absent when no 0G Storage indexer is configured. */
+  private readonly specs: SpecStore | null;
   /** Token metadata never changes, and a market list would otherwise re-read it once per row. */
   private readonly tokens = new Map<string, CollateralInfo>();
 
   constructor(config: ChainSourceConfig) {
     this.factory = config.factory;
+    this.specs = config.zgIndexerUrl ? new SpecStore(config.zgIndexerUrl) : null;
+    this.capabilities = new Set<Capability>([
+      "LIST_MARKETS",
+      "MARKET_STATE",
+      "AGENT_BALANCE",
+      ...(this.specs ? (["MARKET_SPEC_BLOB"] as const) : []),
+    ]);
     this.client = createPublicClient({
       chain: defineChain({
         id: config.chainId,
@@ -121,11 +142,22 @@ export class ChainSource implements DataSource {
     return info;
   }
 
-  private async summary(address: `0x${string}`): Promise<MarketSummary> {
+  /**
+   * Everything both the list and the detail page need, read once.
+   *
+   * `specRoot` is read here rather than in `getMarket` because the list needs
+   * the question too. Splitting them would fetch the same document twice per
+   * market — once for the row, once for the page it links to.
+   */
+  private async readMarket(address: `0x${string}`): Promise<{
+    summary: MarketSummary;
+    specRoot: `0x${string}`;
+    spec: MarketSpec | null;
+  }> {
     const read = <T,>(functionName: MarketFn) =>
       this.client.readContract({address, abi: MARKET_ABI, functionName}) as Promise<T>;
 
-    const [q, poolWad, status, tier, category, tradingEnd, collateral] = await Promise.all([
+    const [q, poolWad, status, tier, category, tradingEnd, collateral, specRoot] = await Promise.all([
       read<readonly [bigint, bigint]>("qArray"),
       read<bigint>("poolWad"),
       read<number>("status"),
@@ -133,6 +165,7 @@ export class ChainSource implements DataSource {
       read<`0x${string}`>("category"),
       read<bigint>("tradingEnd"),
       read<`0x${string}`>("collateral"),
+      read<`0x${string}`>("specRoot"),
     ]);
 
     const statusLabel = STATUSES[status];
@@ -142,20 +175,31 @@ export class ChainSource implements DataSource {
     if (statusLabel === undefined) throw new Error(`Market ${address} returned unknown status ${status}`);
     if (tierLabel === undefined) throw new Error(`Market ${address} returned unknown tier ${tier}`);
 
+    // Awaited after the enum checks so a market this UI cannot describe fails on
+    // that, not on a storage fetch it was never going to be able to use.
+    const spec = this.specs ? await this.specs.get(specRoot) : null;
+
     return {
-      address,
-      question: null,
-      // `category` is bytes32, right-padded with zeros. `hexToString` with an
-      // explicit size strips them; without it the label carries NUL characters
-      // that render as nothing and break an exact-text match.
-      category: hexToString(category, {size: 32}),
-      tier: tierLabel,
-      status: statusLabel,
-      q,
-      poolWad,
-      createdAt: null,
-      tradingEnd: Number(tradingEnd),
-      collateral: await this.collateralInfo(collateral),
+      specRoot,
+      spec,
+      summary: {
+        address,
+        // The document supplies only what the chain cannot: the chain's own
+        // category, tier and tradingEnd are the ones that bind, so a document
+        // that disagrees with its market cannot change what the market is.
+        question: spec?.question ?? null,
+        // `category` is bytes32, right-padded with zeros. `hexToString` with an
+        // explicit size strips them; without it the label carries NUL characters
+        // that render as nothing and break an exact-text match.
+        category: hexToString(category, {size: 32}),
+        tier: tierLabel,
+        status: statusLabel,
+        q,
+        poolWad,
+        createdAt: null,
+        tradingEnd: Number(tradingEnd),
+        collateral: await this.collateralInfo(collateral),
+      },
     };
   }
 
@@ -180,28 +224,27 @@ export class ChainSource implements DataSource {
         }),
       ),
     );
-    return Promise.all(addresses.map((address) => this.summary(address)));
+    return Promise.all(addresses.map(async (address) => (await this.readMarket(address)).summary));
   }
 
   async getMarket(address: `0x${string}`): Promise<MarketDetail> {
     const read = <T,>(functionName: MarketFn) =>
       this.client.readContract({address, abi: MARKET_ABI, functionName}) as Promise<T>;
 
-    const [base, feeBps, settlementDeadline, creator, specRoot] = await Promise.all([
-      this.summary(address),
+    const [base, feeBps, settlementDeadline, creator] = await Promise.all([
+      this.readMarket(address),
       read<number>("feeBps"),
       read<bigint>("settlementDeadline"),
       read<`0x${string}`>("creator"),
-      read<`0x${string}`>("specRoot"),
     ]);
 
     return {
-      ...base,
+      ...base.summary,
       feeBps,
       settlementDeadline: Number(settlementDeadline),
       creator,
-      specRoot,
-      rules: null,
+      specRoot: base.specRoot,
+      rules: base.spec?.rules ?? null,
     };
   }
 

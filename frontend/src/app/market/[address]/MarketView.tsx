@@ -46,10 +46,12 @@ import type {
  * never exist here, and this page's test asserts that no buy/sell/approve
  * control remains.
  *
- * There is no SpecViewer here, deliberately: its content comes from 0G Storage
- * via `specRoot`, and that integration does not exist. The settlement rules stay
- * readable through `market.rules` below, and the criteria the committee actually
- * used through `ResolutionEvidence` once the market settles.
+ * There is no SpecViewer here yet. The MarketSpec is now readable — `specRoot`
+ * is a 0G Storage content address and the document behind it is fetched and
+ * verified — but the panel that would show its SOURCES and settlement prompt is
+ * still to be built. What that document supplies today is the question and the
+ * settlement rules below, and the criteria the committee actually used arrive
+ * through `ResolutionEvidence` once the market settles.
  */
 export function MarketView({address}: {address: `0x${string}`}): React.JSX.Element {
   const market = useMarket(address);
@@ -135,10 +137,13 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
           {renderPositions(positions, market, source.mode)}
           {renderTrades(trades, market.collateral)}
 
-          {/* The settlement rules come from MARKET_STATE — any mode can answer
-              them, so they are never `unavailable`. An inspection page without the
-              rules that bind it hides the very thing a reader most needs to check
-              before the market resolves. */}
+          {/* The rules come from the MarketSpec on 0G Storage, not from chain
+              state — MARKET_SPEC_BLOB, and so genuinely unavailable where no
+              storage indexer is configured or where the creator never uploaded a
+              document. An inspection page without the rules that bind it hides
+              the very thing a reader most needs to check before the market
+              resolves, which is why the absence is stated rather than left
+              blank. */}
           <Panel testId="settlement-rules">
             <PanelHeader
               eyebrow="Market specification"
@@ -148,7 +153,7 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
             {/* Rendering `{market.rules}` unconditionally put a heading over an
                 empty paragraph the moment the rules were null — and a panel that
                 promises a settlement rule and delivers nothing reads as "this
-                market has no rules", not as "this mode cannot read them". Exactly
+                market has no rules", not as "this cannot be read here". Exactly
                 the defect ResolutionEvidence shipped once already; fixtures never
                 show it because a fixture always has rules. */}
             {market.rules === null ? (

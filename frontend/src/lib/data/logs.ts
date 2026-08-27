@@ -53,19 +53,22 @@ export class LogSource implements DataSource {
   readonly mode: DataMode = "indexer";
 
   /**
-   * The chain's capabilities plus everything a `Trade` log carries. Note what is
-   * still absent: `SETTLEMENT_RECEIPT` and `MARKET_SPEC_BLOB` are 0G Storage
-   * documents, not events, so no amount of log reading produces them.
+   * Whatever the source it decorates can do, plus everything a `Trade` log
+   * carries. Composed rather than restated: `MARKET_SPEC_BLOB` depends on
+   * whether a 0G Storage indexer is configured, and a hand-written literal here
+   * would quietly claim otherwise the moment one is.
+   *
+   * `SETTLEMENT_RECEIPT` is still absent, and no amount of log reading produces
+   * it — it is a 0G Storage document with no root on chain to fetch it by.
    */
-  readonly capabilities: ReadonlySet<Capability> = new Set<Capability>([
-    "LIST_MARKETS",
-    "MARKET_STATE",
-    "AGENT_BALANCE",
+  readonly capabilities: ReadonlySet<Capability>;
+
+  private static readonly FROM_LOGS = [
     "TRADE_TAPE",
     "PRICE_HISTORY",
     "AGENT_POSITIONS",
     "COST_BASIS",
-  ]);
+  ] as const satisfies readonly Capability[];
 
   private readonly chain: ChainSource;
   private readonly client: PublicClient;
@@ -76,6 +79,7 @@ export class LogSource implements DataSource {
 
   constructor(config: LogSourceConfig) {
     this.chain = new ChainSource(config);
+    this.capabilities = new Set<Capability>([...this.chain.capabilities, ...LogSource.FROM_LOGS]);
     this.client = this.chain.publicClient;
     this.factory = config.factory;
     this.fromBlock = config.fromBlock;

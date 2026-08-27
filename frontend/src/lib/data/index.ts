@@ -20,6 +20,7 @@ function chainConfig() {
   const chainId = process.env.NEXT_PUBLIC_CHAIN_ID;
   const factory = process.env.NEXT_PUBLIC_MARKET_FACTORY;
   const fromBlock = process.env.NEXT_PUBLIC_FROM_BLOCK;
+  const zgIndexer = process.env.NEXT_PUBLIC_ZG_INDEXER;
 
   const missing = [
     rpcUrl ? null : "NEXT_PUBLIC_RPC_URL",
@@ -47,6 +48,10 @@ function chainConfig() {
     // bound scans wider than necessary, whereas a wrong one drops the events
     // below it and shows a market as having no history at all.
     fromBlock: fromBlock ? BigInt(fromBlock) : 0n,
+    // Deliberately NOT in `missing`. 0G Storage is a separate network from the
+    // EVM RPC, and a deployment without it is a real configuration rather than a
+    // broken one — it just cannot read questions, and says so.
+    zgIndexerUrl: zgIndexer,
   };
 }
 
