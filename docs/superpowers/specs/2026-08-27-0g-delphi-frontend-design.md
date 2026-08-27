@@ -34,14 +34,15 @@ Ini tabel yang mendorong seluruh desain. Ketiga mode **tidak** setara.
 |---|:--:|:--:|:--:|---|
 | `LIST_MARKETS` | ✓ | ✓ | ✓ | `MarketFactory.marketCount/marketAt` · tabel terindeks |
 | `MARKET_STATE` | ✓ | ✓ | ✓ | `Market.qArray/probability/poolWad/status` |
-| `MARKET_STATS` | ✓ | ✓ | ✓ | `Market.poolWad/feeBps/closeTime/...` · volume butuh indexer |
-| `AGENT_POSITIONS` | ✓ | sebagian | ✓ | `OutcomeShares.balanceOfOutcome`; harga masuk butuh indexer |
+| `AGENT_POSITIONS` | ✓ | ✓ | ✓ | `OutcomeShares.balanceOfOutcome` + `Market.seedSharesOf` |
 | `POSITIONS_CURRENT` | ✓ | ✓ | ✓ | `OutcomeShares.balanceOfOutcome` + `Market.seedSharesOf` |
 | `PRICE_HISTORY` | ✓ | ✗ | ✓ | indexer `price_points` |
 | `TRADE_TAPE` | ✓ | ✗ | ✓ | indexer `trades` |
 | `COST_BASIS` | ✓ | ✗ | ✓ | indexer `positions.avg_cost` |
 | `MARKET_SPEC_BLOB` | ✓ | ✗ | ✓ | 0G Storage lewat `specRoot` |
 | `SETTLEMENT_RECEIPT` | ✓ | ✗ | ✓ | 0G Storage + `resolutions` |
+
+**Tidak ada kemampuan `MARKET_STATS`, dan itu disengaja.** Panel statistik menggabungkan field dari sumber yang ketersediaannya berbeda: fee, kedalaman, dan garis waktu berasal dari `MARKET_STATE` (selalu ada), sedangkan volume berasal dari `TRADE_TAPE` (kosong di mode `chain`). Menjadikannya satu kemampuan akan membuat seluruh panel `unavailable` hanya karena volumenya tidak diketahui — membuang enam fakta yang kita punya demi satu yang tidak. Ketersediaan dievaluasi **per baris**, bukan per panel.
 
 `QUOTE` dan `EXECUTE` **tidak lagi ada di tabel ini.** Keduanya milik `@0g-delphi/agent-kit`; lapisan data frontend tidak pernah memanggil `Market.buy`, `sell`, `redeem`, atau `liquidate`, dan tidak menyimpan signer. Itu batas yang struktural, bukan konvensi — `DataSource` sama sekali tidak punya metode yang menulis.
 
