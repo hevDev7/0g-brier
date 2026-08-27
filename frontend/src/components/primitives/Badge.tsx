@@ -13,11 +13,26 @@ const TONES: Record<Tone, string> = {
   verified: "border-verified/35 bg-verified/10 text-verified",
 };
 
-export function Badge({tone, label}: {tone: Tone; label: string}) {
+const DOTS: Record<Tone, string> = {
+  neutral: "bg-text-faint",
+  positive: "bg-pos",
+  negative: "bg-neg",
+  warning: "bg-warn",
+  verified: "bg-verified",
+};
+
+/**
+ * `dot` is opt-in and is used for lifecycle STATUS only. A dot on every badge —
+ * tier, TEE, dissent — would turn a signal into wallpaper; on a status badge it
+ * is what lets a reader find the one row that is not Open without reading seven
+ * words.
+ */
+export function Badge({tone, label, dot = false}: {tone: Tone; label: string; dot?: boolean}) {
   return (
     <span
-      className={`inline-flex items-center rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-[0.08em] uppercase ${TONES[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-[0.08em] whitespace-nowrap uppercase ${TONES[tone]}`}
     >
+      {dot && <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${DOTS[tone]}`} />}
       {label}
     </span>
   );

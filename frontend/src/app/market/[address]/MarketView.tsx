@@ -98,7 +98,7 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
         description="Inspect the price, its history, who holds what, and the evidence behind the settlement. Every trade shown here was executed by an agent through the SDK."
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={statusTone(market.status)} label={market.status} />
+            <Badge tone={statusTone(market.status)} label={market.status} dot />
             {/* A countdown only makes sense while trading is still running: on a
                 closed market formatCountdown returns "closed" and the line would
                 read "closes in closed". The status badge above already says it. */}

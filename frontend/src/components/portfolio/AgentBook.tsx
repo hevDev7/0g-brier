@@ -178,7 +178,7 @@ function BookRowCells({row}: {row: BookRow}) {
         )}
       </td>
       <td className="px-4 py-3">
-        <Badge tone={statusTone(market.status)} label={holdingStatus(market.status)} />
+        <Badge tone={statusTone(market.status)} label={holdingStatus(market.status)} dot />
       </td>
     </tr>
   );

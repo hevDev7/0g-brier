@@ -1,6 +1,6 @@
 import {TrendingUp} from "lucide-react";
 import {Panel, PanelHeader} from "@/components/primitives/Panel";
-import {seriesPath, xTicks, yTicks, type Box} from "@/lib/chart";
+import {areaPath, seriesPath, xTicks, yTicks, type Box} from "@/lib/chart";
 import type {Candle} from "@/lib/data/types";
 
 const WAD = 10n ** 18n;
@@ -32,6 +32,7 @@ export function ProbabilityChart({candles}: {candles: Candle[]}) {
   // the complement WAD - close, which is exact because the two probabilities are
   // guaranteed to sum to WAD by construction, not by rounding.
   const yes = seriesPath(candles, BOX, extent, (c) => c.close);
+  const yesArea = areaPath(candles, BOX, extent, (c) => c.close);
   const no = seriesPath(candles, BOX, extent, (c) => WAD - c.close);
 
   return (
@@ -75,6 +76,9 @@ export function ProbabilityChart({candles}: {candles: Candle[]}) {
                 {t.label}
               </text>
             ))}
+            {/* No data-series on the fill: it is the same value as the YES
+                line, and the tests count series, not ink. */}
+            <path data-area="yes" d={yesArea} className="fill-pos/10" stroke="none" />
             <path data-series="no" d={no} fill="none" className="stroke-neg" strokeWidth={1.5} />
             <path data-series="yes" d={yes} fill="none" className="stroke-pos" strokeWidth={1.5} />
           </svg>

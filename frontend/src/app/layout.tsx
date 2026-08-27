@@ -31,7 +31,16 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en" className={`${manrope.variable} ${dmMono.variable}`} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{__html: THEME_SCRIPT}} />
+        {/*
+          `suppressHydrationWarning` belongs on the SCRIPT, not only on <html>:
+          the attribute covers one level, and the mismatch React reports is on
+          this element, two levels down. React cannot read an inline script's
+          contents back out of the DOM, so it compares the client's __html
+          against an empty server value and calls it a mismatch — while the
+          script itself is served inside <head> ahead of <body> and has already
+          run. The no-flash guarantee is intact; only the comparison is not.
+        */}
+        <script suppressHydrationWarning dangerouslySetInnerHTML={{__html: THEME_SCRIPT}} />
       </head>
       <body className="min-h-dvh bg-bg text-text">
         <AppShell>{children}</AppShell>

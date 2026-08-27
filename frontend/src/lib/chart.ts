@@ -71,12 +71,51 @@ export function seriesPath(
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * The same line, closed down to the baseline so it can be filled.
+ *
+ * The fill carries no information the line does not — it is a legibility aid,
+ * which is why it is drawn at low opacity and only under ONE series. Filling
+ * both would put two translucent washes over each other wherever they cross,
+ * and the eye would read the overlap as a third value.
+ */
+export function areaPath(
+  candles: Candle[],
+  box: Box,
+  extent: Extent,
+  pick: (c: Candle) => bigint,
+): string {
+  const line = seriesPath(candles, box, extent, pick);
+  if (line === "") return "";
+  const bottom = round(plotBottom(box));
+  return `${line}L${round(plotRight(box))},${bottom}L${round(plotLeft(box))},${bottom}Z`;
+}
+
+
 export function yTicks(box: Box): {y: number; label: string}[] {
   const h = plotBottom(box) - plotTop(box);
   return [0, 25, 50, 75, 100].map((pct) => ({
     y: round(plotBottom(box) - (pct / 100) * h),
     label: `${pct}%`,
   }));
+}
+
+const TWO_DAYS = 2 * 86_400;
+
+/**
+ * Ticks are dated or timed depending on the window they span.
+ *
+ * A 24-hour window of hourly buckets labelled by date prints the same day five
+ * times, which tells a reader nothing about where they are on the axis. Below
+ * two days the label becomes the hour; above it, the date. The threshold is on
+ * the EXTENT rather than on the interval, because a sparse day of 1m buckets
+ * spans a day just as an hourly one does.
+ */
+function tickLabel(bucketStart: number, spanSeconds: number): string {
+  const at = new Date(bucketStart * 1000);
+  return spanSeconds < TWO_DAYS
+    ? at.toLocaleTimeString("en-US", {hour: "2-digit", minute: "2-digit", hour12: false})
+    : at.toLocaleDateString("en-US", {day: "numeric", month: "short"});
 }
 
 export function xTicks(
@@ -95,10 +134,7 @@ export function xTicks(
     const tx = span === 0 ? 0 : (c.bucketStart - extent.minT) / span;
     out.push({
       x: round(plotLeft(box) + tx * w),
-      label: new Date(c.bucketStart * 1000).toLocaleDateString("en-US", {
-        day: "numeric",
-        month: "short",
-      }),
+      label: tickLabel(c.bucketStart, span),
     });
   }
   return out;

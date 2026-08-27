@@ -281,7 +281,7 @@ function MarketRow({
         <Badge tone="neutral" label={market.tier} />
       </td>
       <td className="px-3 py-4">
-        <Badge tone={statusTone(market.status)} label={market.status} />
+        <Badge tone={statusTone(market.status)} label={market.status} dot />
       </td>
       <td
         className="px-3 py-4 text-right font-mono text-[12px] text-text-muted"

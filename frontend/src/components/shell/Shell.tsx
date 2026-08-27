@@ -94,6 +94,12 @@ export function Shell({children}: {children: React.ReactNode}) {
                 >
                   <Icon size={16} strokeWidth={1.8} aria-hidden />
                   {label}
+                  {/* A marker for the section you are in. `aria-current` above
+                      already says it to a screen reader, so this is decoration
+                      for that one item only and is hidden from the tree. */}
+                  {active && (
+                    <span aria-hidden className="ml-auto size-1.5 rounded-full bg-accent" />
+                  )}
                 </Link>
               );
             })}
