@@ -1,6 +1,12 @@
 import type {Capability, DataMode} from "@/lib/data/types";
 
-const LABELS: Record<Capability, string> = {
+/**
+ * Exported so the source-notes disclosure and the observation legend name a
+ * capability exactly as the `unavailable` cell does. A second copy of these
+ * strings is how a reader ends up told about "Trade history" in one place and
+ * "Trade tape" in another, for the same missing thing.
+ */
+export const CAPABILITY_LABELS: Record<Capability, string> = {
   LIST_MARKETS: "Market list",
   MARKET_STATE: "Market state",
   PRICE_HISTORY: "Price history",
@@ -48,10 +54,10 @@ export function Unavailable({
     return (
       <span
         role="status"
-        title={`${LABELS[capability]} is not available in ${mode} mode — this source keeps no history. Available in ${PROVIDED_BY[capability]} mode.`}
+        title={`${CAPABILITY_LABELS[capability]} is not available in ${mode} mode — this source keeps no history. Available in ${PROVIDED_BY[capability]} mode.`}
         className="inline-flex items-center rounded border border-dashed border-border-strong px-1.5 py-0.5 text-[11px] whitespace-nowrap text-text-muted"
       >
-        {LABELS[capability]} not available
+        {CAPABILITY_LABELS[capability]} not available
       </span>
     );
   }
@@ -68,7 +74,7 @@ export function Unavailable({
           joins only an element's DIRECT text nodes (see get-node-text.js) and does
           not descend into children — so a phrase that must match together as a
           single string may not be split across elements. */}
-      <span className="font-medium text-text">{LABELS[capability]} not available</span> in{" "}
+      <span className="font-medium text-text">{CAPABILITY_LABELS[capability]} not available</span> in{" "}
       <span className="font-mono">{mode}</span> mode — this source keeps no history. Available in{" "}
       <span className="font-mono">{PROVIDED_BY[capability]}</span> mode.
     </div>

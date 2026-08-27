@@ -45,6 +45,14 @@ export function ProbabilityPanel({q}: {q: readonly [bigint, bigint]}) {
           <span className="flex-1 bg-neg/70" />
         </div>
 
+        {/* End labels, so the bar reads as a fixed 0-100 scale rather than as a
+            proportion of something unstated. The split itself is not labelled —
+            both sides are already printed in full above it. */}
+        <div className="mt-1.5 flex justify-between font-mono text-[10px] text-text-faint">
+          <span>0%</span>
+          <span>100%</span>
+        </div>
+
         {/*
           The pair can come up one wad unit short of 100% — two independent floor
           divisions. Both are shown as they are; forcing the total would mean

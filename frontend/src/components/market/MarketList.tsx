@@ -3,7 +3,7 @@
 import {useMemo, useState} from "react";
 import Link from "next/link";
 import {usePathname, useRouter, useSearchParams} from "next/navigation";
-import {ArrowDownUp, Filter, Search} from "lucide-react";
+import {ArrowDownUp, ChevronRight, Filter, Search} from "lucide-react";
 import {toTokensFloor} from "@0g-delphi/protocol";
 import {Badge} from "@/components/primitives/Badge";
 import {Countdown} from "@/components/primitives/Countdown";
@@ -179,7 +179,7 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
             row at a time defeats the point of the page.
           */
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px] text-left text-[13px]">
+            <table className="w-full min-w-[920px] text-left text-[13px]">
               <caption className="sr-only">
                 Binary prediction markets, with implied probability, 24-hour change, traded
                 volume, and pool depth.
@@ -207,8 +207,11 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
                   <th scope="col" className="px-3 py-3 font-medium">
                     Status
                   </th>
-                  <th scope="col" className="px-4 py-3 text-right font-medium">
+                  <th scope="col" className="px-3 py-3 text-right font-medium">
                     Closes
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    <span className="sr-only">Open market</span>
                   </th>
                 </tr>
               </thead>
@@ -252,7 +255,7 @@ function MarketRow({
   const decimals = market.collateral.decimals;
   return (
     <tr className="group border-t border-border hover:bg-bg-sunken/50">
-      <th scope="row" className="max-w-[380px] px-4 py-3 text-left font-normal">
+      <th scope="row" className="max-w-[380px] px-4 py-4 text-left font-normal">
         <Link href={`/market/${market.address}`} className="block">
           <span className="text-[13px] leading-snug font-semibold text-text group-hover:text-accent">
             {market.question}
@@ -262,26 +265,26 @@ function MarketRow({
           </span>
         </Link>
       </th>
-      <td className="px-3 py-3 text-right font-mono font-medium">
+      <td className="px-3 py-4 text-right font-mono font-medium">
         {formatProbability(probabilityWad(market.q, 1))}
       </td>
-      <td className="px-3 py-3 text-right">
+      <td className="px-3 py-4 text-right">
         <DeltaCell candles={candles} />
       </td>
-      <td className="px-3 py-3 text-right font-mono">
+      <td className="px-3 py-4 text-right font-mono">
         <VolumeCell trades={trades} collateral={market.collateral} />
       </td>
-      <td className="px-3 py-3 text-right font-mono text-text-muted">
+      <td className="px-3 py-4 text-right font-mono text-text-muted">
         {formatCollateral(toTokensFloor(market.poolWad, decimals), decimals)}
       </td>
-      <td className="px-3 py-3">
+      <td className="px-3 py-4">
         <Badge tone="neutral" label={market.tier} />
       </td>
-      <td className="px-3 py-3">
+      <td className="px-3 py-4">
         <Badge tone={statusTone(market.status)} label={market.status} />
       </td>
       <td
-        className="px-4 py-3 text-right font-mono text-[12px] text-text-muted"
+        className="px-3 py-4 text-right font-mono text-[12px] text-text-muted"
         title={formatTimestamp(market.tradingEnd)}
       >
         {/* A countdown is only meaningful while trading is still open; on a
@@ -293,6 +296,13 @@ function MarketRow({
           formatTimestamp(market.tradingEnd)
         )}
       </td>
+      <td className="px-4 py-4 text-right">
+        <ChevronRight
+          size={15}
+          aria-hidden
+          className="ml-auto text-text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-accent"
+        />
+      </td>
     </tr>
   );
 }
@@ -303,13 +313,17 @@ function DeltaCell({candles}: {candles: Query<Candle[]> | undefined}): React.JSX
     case "ready": {
       const delta = delta24h(candles.data);
       if (delta === null) {
-        return <span className="text-[11px] text-text-faint">not enough history</span>;
+        return (
+          <span className="text-[11px] whitespace-nowrap text-text-faint">not enough history</span>
+        );
       }
       const tone =
         delta.deltaWad > 0n ? "text-pos" : delta.deltaWad < 0n ? "text-neg" : "text-text-muted";
       return (
         <span
-          className={`font-mono ${tone}`}
+          // nowrap: the value and its unit are one figure, and "+0.5" on one
+          // line above "pt" on the next reads as two.
+          className={`font-mono whitespace-nowrap ${tone}`}
           // The header says 24h; this says what was actually measured. A market
           // four hours old has no 24-hour move, and reporting one would be false.
           title={`Measured over ${formatCountdown(delta.spanSeconds)} of recorded history`}

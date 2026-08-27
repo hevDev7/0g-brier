@@ -1,6 +1,6 @@
 import {Database} from "lucide-react";
 import {toTokensFloor} from "@0g-delphi/protocol";
-import {Panel, PanelHeader, Row} from "@/components/primitives/Panel";
+import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {Skeleton} from "@/components/primitives/Skeleton";
 import {Unavailable} from "@/components/primitives/Unavailable";
 import {formatCollateral, formatFeeRate, shortAddress} from "@/lib/format";
@@ -29,39 +29,58 @@ export function MarketStats({market, trades}: {market: MarketDetail; trades: Que
   return (
     <Panel testId="market-stats">
       <PanelHeader eyebrow="Registry facts" title="Market statistics" icon={Database} />
-      <div className="flex flex-col gap-2.5 p-4 md:p-5">
-        <Row label="Volume" testId="stat-volume">
+      {/*
+        A grid of cells rather than a list of rows: at six facts the label/value
+        rows left a long ragged gutter down the middle of a 340px sidebar, and a
+        cell gives the `unavailable` chip somewhere to sit without squeezing its
+        neighbour. Two columns, not three — the sidebar is too narrow for three.
+      */}
+      <dl className="grid grid-cols-2 divide-x divide-y divide-border">
+        <Cell label="Volume" testId="stat-volume">
           <VolumeValue trades={trades} market={market} />
-        </Row>
-        <Row label="Depth" testId="stat-liquidity">
-          <span className="font-mono">
-            {formatCollateral(depth, decimals)}{" "}
-            <span className="text-text-muted">{market.collateral.symbol}</span>
-          </span>
-        </Row>
-        <Row label="Fee" testId="stat-fee">
-          <span className="font-mono">{formatFeeRate(market.feeBps)}</span>
-        </Row>
-        <Row label="Collateral" testId="stat-collateral">
-          <span className="font-mono" title={market.collateral.address}>
-            {market.collateral.symbol}
-          </span>
-        </Row>
-        <Row label="Creator" testId="stat-creator">
-          <span className="font-mono" title={market.creator}>
-            {shortAddress(market.creator)}
-          </span>
-        </Row>
+        </Cell>
+        <Cell label="Depth" testId="stat-liquidity">
+          {formatCollateral(depth, decimals)}{" "}
+          <span className="text-text-muted">{market.collateral.symbol}</span>
+        </Cell>
+        <Cell label="Fee" testId="stat-fee">
+          {formatFeeRate(market.feeBps)}
+        </Cell>
+        <Cell label="Collateral" testId="stat-collateral" title={market.collateral.address}>
+          {market.collateral.symbol}
+        </Cell>
+        <Cell label="Creator" testId="stat-creator" title={market.creator}>
+          {shortAddress(market.creator)}
+        </Cell>
         {/* The spec blob itself lives in 0G Storage and that integration does not
             exist yet, so this is the hash and nothing more — deliberately not a
             link, which would promise a viewer this page does not have. */}
-        <Row label="Spec root" testId="stat-spec-root">
-          <span className="font-mono text-text-muted" title={market.specRoot}>
-            {shortAddress(market.specRoot)}
-          </span>
-        </Row>
-      </div>
+        <Cell label="Spec root" testId="stat-spec-root" title={market.specRoot}>
+          <span className="text-text-muted">{shortAddress(market.specRoot)}</span>
+        </Cell>
+      </dl>
     </Panel>
+  );
+}
+
+function Cell({
+  label,
+  testId,
+  title,
+  children,
+}: {
+  label: string;
+  testId: string;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-[74px] flex-col justify-between gap-2 p-3.5">
+      <dt className="text-[10px] tracking-[0.08em] text-text-faint uppercase">{label}</dt>
+      <dd data-testid={testId} title={title} className="font-mono text-[12px] text-text">
+        {children}
+      </dd>
+    </div>
   );
 }
 
