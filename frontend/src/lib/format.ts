@@ -48,19 +48,27 @@ export function formatPayout(payoutWad: bigint): string {
 /**
  * A fee in basis points (1 bps = 0.01%) → a percentage rate: 100 → "1.00%".
  *
- * Unlike the other functions in this file: `feeBps` is NOT a monetary bigint —
- * it is a small configuration integer (`MarketDetail.feeBps: number`), so this
- * file's ban on Number()/parseFloat does not apply here; the rule that does
- * apply is only "components do not format numbers themselves". It is still
- * computed through integer division and modulo rather than `.toFixed`, so that
- * no floating-point rounding happens at all.
+ * `feeBps` is the one input here that is NOT a monetary bigint — it is a small
+ * configuration integer (`MarketDetail.feeBps: number`) — but it is widened to
+ * bigint immediately and formatted by `formatFixed` like everything else, so
+ * this module has exactly ONE place where a sign is decided.
+ *
+ * That is the whole point of the shape. The previous version composed
+ * `Math.trunc(bps / 100)` with `Math.abs(bps % 100)`, which handled magnitude
+ * and sign on separate paths and dropped the sign for -100 < bps < 0:
+ * `Math.trunc(-0.5)` is `-0`, and `${-0}` is `"0"`, so -50 bps rendered as
+ * "0.50%" while -150 bps rendered correctly as "-1.50%". Sign handling in this
+ * file has now leaked twice — the "-0.0" bug, then this one — and both leaks
+ * were at a seam between a magnitude path and a sign path. Removing the seam is
+ * the fix; a third special case would not have been.
+ *
+ * 1 bps = 1e-4 = 1e14 wad, so `bps * 1e16` is the rate in wad as a percentage.
  */
 export function formatFeeRate(bps: number): string {
-  const whole = Math.trunc(bps / 100);
-  const frac = Math.abs(bps % 100)
-    .toString()
-    .padStart(2, "0");
-  return `${whole}.${frac}%`;
+  if (!Number.isInteger(bps)) {
+    throw new RangeError(`feeBps must be an integer: ${bps}`);
+  }
+  return `${formatFixed(BigInt(bps) * 10n ** 16n, 18, 2)}%`;
 }
 
 /** A collateral amount in the smallest token unit → "1,234.56". */

@@ -27,6 +27,21 @@ const MUSDC: CollateralInfo = {
 };
 
 const HOUR = 3_600;
+
+/**
+ * Bucket width per interval. A `Record<Interval, number>` rather than a ternary
+ * chain on purpose: the chain ended in a bare `: 5 * 60`, which quietly made
+ * `"1m"` a five-minute bucket — the two finest intervals returned identical
+ * candles and nothing said so. A Record makes TypeScript demand an entry when a
+ * new interval is added, instead of letting it fall into whatever the last
+ * branch happened to be.
+ */
+const BUCKET_SECONDS: Record<Interval, number> = {
+  "1m": 60,
+  "5m": 5 * 60,
+  "1h": HOUR,
+  "1d": 24 * HOUR,
+};
 const NOW = 1_790_000_000;
 
 /** poolWad is derived, never typed — a fixture must not break a chain invariant. */
@@ -271,7 +286,7 @@ export class MockSource implements DataSource {
     // fixtureTrades() is newest-first; reverse into ascending time order so the
     // first trade processed per bucket really is the earliest one.
     const trades = [...fixtureTrades(this.find(address))].reverse();
-    const step = interval === "1d" ? 24 * HOUR : interval === "1h" ? HOUR : 5 * 60;
+    const step = BUCKET_SECONDS[interval];
 
     // Group trades into buckets by bucketStart — ONE candle per bucket, not one
     // candle per trade. open/close come from the first/last trade within that

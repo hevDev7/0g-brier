@@ -54,6 +54,51 @@ describe("formatFeeRate", () => {
   });
 });
 
+/**
+ * Sign handling in `format.ts` has leaked twice: the "-0.0" bug, where the sign was captured
+ * before rounding, and then `formatFeeRate` losing the sign on -100 < bps < 0 because
+ * `Math.trunc(-0.5)` is `-0` and `${-0}` is `"0"`. Both leaks were at a seam between a
+ * magnitude path and a sign path, so the whole sign surface is checked here at once rather
+ * than one function at a time as each failure surfaces.
+ *
+ * Note what is NOT asserted: the bigint formatters render a negative dust value as an unsigned
+ * zero ("0.00", not "-0.00"). That is deliberate and is what the first fix installed — a
+ * magnitude that rounds away should not leave a minus sign behind.
+ */
+describe("sign handling across every formatter that touches one", () => {
+  it("formatFeeRate keeps the sign below one percent, where -0 used to eat it", () => {
+    expect(formatFeeRate(-50)).toBe("-0.50%");
+    expect(formatFeeRate(-5)).toBe("-0.05%");
+    expect(formatFeeRate(-1)).toBe("-0.01%");
+  });
+
+  it("formatFeeRate keeps the sign at and above one percent", () => {
+    expect(formatFeeRate(-100)).toBe("-1.00%");
+    expect(formatFeeRate(-150)).toBe("-1.50%");
+    expect(formatFeeRate(-10_000)).toBe("-100.00%");
+  });
+
+  it("formatFeeRate never renders a negative zero", () => {
+    expect(formatFeeRate(0)).toBe("0.00%");
+    expect(formatFeeRate(-0)).toBe("0.00%");
+  });
+
+  it("formatFeeRate rejects a non-integer rather than formatting nonsense", () => {
+    expect(() => formatFeeRate(1.5)).toThrow(RangeError);
+  });
+
+  it("the bigint formatters drop a sign only when the magnitude rounds away", () => {
+    expect(formatCollateral(-1n, 6)).toBe("0.00");
+    expect(formatShares(-1n)).toBe("0.00");
+    expect(formatPricePerShare(-1n)).toBe("0.0000");
+    expect(formatPayout(-1n)).toBe("0.00×");
+    // ...and keep it when the magnitude survives.
+    expect(formatCollateral(-1_500_000n, 6)).toBe("-1.50");
+    expect(formatShares(-(10n ** 18n))).toBe("-1.00");
+    expect(formatPayout(-(10n ** 18n))).toBe("-1.00×");
+  });
+});
+
 describe("formatCollateral", () => {
   it("respects the token decimals and groups thousands", () => {
     expect(formatCollateral(1_234_560_000n, 6)).toBe("1,234.56");

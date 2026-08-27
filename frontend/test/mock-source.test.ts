@@ -117,6 +117,26 @@ describe("MockSource", () => {
       }
     });
 
+    /**
+     * `"1m"` and `"5m"` used to return byte-identical candles. The step came from a ternary
+     * chain ending in a bare `: 5 * 60`, so `"1m"` fell into the five-minute branch — the two
+     * finest intervals were the same interval and nothing said so. With hourly fixture trades
+     * both still yield one candle per trade, which is exactly why no existing test noticed:
+     * the bucket WIDTH is the observable that differs, not the candle count.
+     */
+    it("1m and 5m are different bucket widths, not the same one twice", async () => {
+      const [first] = await source.listMarkets();
+      const minute = await source.getCandles(first!.address, "1m");
+      const fiveMinute = await source.getCandles(first!.address, "5m");
+
+      // Every bucketStart is a multiple of its own width, and the fixture timestamps are not
+      // all multiples of 300 — so a 60-second bucketing lands somewhere a 300-second one
+      // cannot.
+      for (const c of minute) expect(c.bucketStart % 60).toBe(0);
+      for (const c of fiveMinute) expect(c.bucketStart % 300).toBe(0);
+      expect(minute.some((c) => c.bucketStart % 300 !== 0)).toBe(true);
+    });
+
     it("the 1d interval merges 24 hourly trades into 2 candles, not 24", async () => {
       const [first] = await source.listMarkets();
       const daily = await source.getCandles(first!.address, "1d");
