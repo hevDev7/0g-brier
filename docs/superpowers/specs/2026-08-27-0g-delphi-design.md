@@ -117,7 +117,7 @@ Payout per lembar menang    C(q) / q_menang  =  1 / p_menang
 | **Normalisasi** | `Σ pᵢ² = 1` | `pᵢ²` adalah distribusi probabilitas sah |
 | **Euler (homogen derajat 1)** | `Σ pᵢ·qᵢ = C(q)` | likuidasi membayar `pᵢ` per lembar dan **persis** menghabiskan pool |
 | **Path independence** | biaya hanya bergantung pada `q` awal & akhir | tidak bisa diarbitrase lewat pemecahan order |
-| **Batas rugi penyedia** | rugi ≤ `1 − 1/√2 ≈ 29.29%` dari setoran | creator/LP punya batas risiko yang bisa dinyatakan |
+| **Batas rugi penyedia** | rugi ≤ `1 − min(p₀, p₁)` **pada saat masuk** — yang bernilai `1 − 1/√2 ≈ 29.29%` HANYA bila buku simetris | batas risiko tetap bisa dinyatakan, tetapi ia fungsi dari kemiringan buku, bukan konstanta |
 | **Netralitas LP** | tambah `λ` proporsional ⇒ `Pᵢ` tidak berubah | primitif likuiditas tanpa menggeser harga |
 
 **Bukti batas 29.29%.** Penyedia menyetor `L = C(q₀,q₀) = q₀√2` dan menerima `q₀` lembar tiap sisi. Saat settle, ia menerima `q₀ · C(q_final)/q_win`. Karena `C(q) ≥ q_win` untuk semua `q`, penerimaan `≥ q₀`. Rasio terburuk `q₀ / (q₀√2) = 1/√2`. ∎
@@ -869,10 +869,23 @@ INV-3  Σ redeem  <= poolBalance                 saat Settled
 INV-4  Σ liquidate == poolBalance (± 2 wei)     saat Failed/Voided        [Euler: Σ pᵢ·qᵢ = C(q)]
 INV-5  buy(x) lalu sell(x) mengembalikan <= yang dibayar    (round-trip tak pernah untung)
 INV-6  qᵢ >= seedSupplyᵢ >= creatorSeedᵢ > 0    selalu, termasuk setelah removeLiquidity apa pun
-INV-7  rugi penyedia <= 29.30% setoran          di bawah aliran order sembarang
+INV-7  rugi penyedia <= setoran * (1 - min(p0,p1) pada saat masuk)   di bawah aliran order sembarang
+       (= 29.30% hanya untuk seed simetris creator; LP proporsional yang masuk
+        di buku miring bisa rugi jauh lebih besar — lihat catatan di bawah)
 INV-8  Σ probability(i) == WAD (± 2 wei)
 INV-9  addLiquidity proporsional tidak mengubah probability (± 2 wei)
 INV-10 sell/redeem/liquidate/withdraw berhasil walau paused == true
+
+**Catatan INV-7 — koreksi, ditemukan suite invarian Task 18.** Angka 29,29% berasal dari seed
+creator yang SIMETRIS, q = (s, s), di mana p₀ = p₁ = 1/√2. Ia bukan batas universal untuk
+penyedia likuiditas. Seorang LP yang menambah secara proporsional ke buku yang sudah miring
+menghadapi batas `1 − min(p₀, p₁)` pada harga saat ia masuk: pada buku dengan p_min ≈ 0,11
+(probabilitas ≈ 1,2%), ruginya bisa mencapai ~89% setoran.
+Rumus umum itu menurun persis ke 29,29% saat buku simetris, jadi ia generalisasi yang benar,
+bukan angka yang bersaing. Yang salah adalah menyatakan kasus khusus sebagai kalau-kalau ia berlaku
+umum. Konsekuensinya nyata: UI atau SDK yang memberi tahu LP "rugi maksimal 29,3%" akan berbohong
+kepada siapa pun yang menyediakan likuiditas ke market yang timpang — persis jenis klaim-tahu
+yang seluruh desain ini berusaha cegah.
 ```
 
 ### 14.2 Lapisan uji
