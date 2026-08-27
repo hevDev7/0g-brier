@@ -175,3 +175,58 @@ describe("MockSource", () => {
     });
   });
 });
+
+describe("kemampuan observasi", () => {
+  const addr = FIXTURE_MARKETS[0]!.address;
+
+  it("getPositions melempar bila AGENT_POSITIONS diomit", async () => {
+    const src = new MockSource({omit: ["AGENT_POSITIONS"]});
+    await expect(src.getPositions(addr)).rejects.toBeInstanceOf(CapabilityUnavailableError);
+  });
+
+  it("getReceipt melempar bila SETTLEMENT_RECEIPT diomit", async () => {
+    const src = new MockSource({omit: ["SETTLEMENT_RECEIPT"]});
+    await expect(src.getReceipt(addr)).rejects.toBeInstanceOf(CapabilityUnavailableError);
+  });
+
+  it("posisi menjumlah ke q market, per outcome", async () => {
+    const src = new MockSource();
+    for (const m of FIXTURE_MARKETS) {
+      const pos = await src.getPositions(m.address);
+      for (const outcome of [0, 1] as const) {
+        const held = pos
+          .filter((p) => p.outcome === outcome)
+          .reduce((a, p) => a + p.shares, 0n);
+        expect(held).toBeLessThanOrEqual(m.q[outcome]);
+      }
+    }
+  });
+
+  it("harga masuk tiap posisi berada di antara 0 dan WAD", async () => {
+    const src = new MockSource();
+    const pos = await src.getPositions(FIXTURE_MARKETS[0]!.address);
+    expect(pos.length).toBeGreaterThan(0);
+    for (const p of pos) {
+      expect(p.entryPriceWad).not.toBeNull();
+      expect(p.entryPriceWad!).toBeGreaterThan(0n);
+      expect(p.entryPriceWad!).toBeLessThan(10n ** 18n);
+    }
+  });
+
+  it("COST_BASIS diomit -> posisi tetap ada, harga masuknya null", async () => {
+    const src = new MockSource({omit: ["COST_BASIS"]});
+    const pos = await src.getPositions(FIXTURE_MARKETS[0]!.address);
+    expect(pos.length).toBeGreaterThan(0);
+    for (const p of pos) expect(p.entryPriceWad).toBeNull();
+  });
+
+  it("receipt market Settled menyebut outcome, dan yang Open tidak", async () => {
+    const src = new MockSource();
+    const settled = FIXTURE_MARKETS.find((m) => m.status === "Settled");
+    expect(settled, "fixture wajib punya satu market Settled").toBeDefined();
+    expect((await src.getReceipt(settled!.address)).outcome).not.toBeNull();
+
+    const open = FIXTURE_MARKETS.find((m) => m.status === "Open")!;
+    expect((await src.getReceipt(open.address)).outcome).toBeNull();
+  });
+});

@@ -2,21 +2,25 @@ import type {Capability, DataMode} from "@/lib/data/types";
 
 const LABELS: Record<Capability, string> = {
   LIST_MARKETS: "Daftar market",
-  MARKET_STATE: "Keadaan market",
-  QUOTE: "Kuotasi",
-  EXECUTE: "Eksekusi",
+  MARKET_STATE: "Status market",
   PRICE_HISTORY: "Riwayat harga",
   TRADE_TAPE: "Riwayat transaksi",
+  AGENT_POSITIONS: "Posisi agent",
+  COST_BASIS: "Harga masuk",
+  SETTLEMENT_RECEIPT: "Bukti resolusi",
 };
 
 /** Mode paling ringan yang menyediakan kemampuan ini. */
 const PROVIDED_BY: Record<Capability, DataMode> = {
   LIST_MARKETS: "chain",
   MARKET_STATE: "chain",
-  QUOTE: "chain",
-  EXECUTE: "chain",
   PRICE_HISTORY: "indexer",
   TRADE_TAPE: "indexer",
+  // AGENT_POSITIONS bisa dibaca langsung dari OutcomeShares di rantai — tidak
+  // seperti COST_BASIS dan SETTLEMENT_RECEIPT, yang butuh riwayat event.
+  AGENT_POSITIONS: "chain",
+  COST_BASIS: "indexer",
+  SETTLEMENT_RECEIPT: "indexer",
 };
 
 /**
