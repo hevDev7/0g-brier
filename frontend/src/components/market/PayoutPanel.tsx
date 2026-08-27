@@ -31,9 +31,9 @@ export function PayoutPanel({q}: {q: readonly [bigint, bigint]}) {
         ))}
       </div>
       <p className="mt-3 border-t border-border pt-3 text-[12px] leading-relaxed text-warn">
-        Payout mengambang sampai market tutup. Semakin banyak yang membeli sisi yang sama denganmu,
-        semakin kecil payout per lembar mereka. Posisi bisa dijual kapan saja lewat agent untuk
-        mengunci harga saat ini.
+        Payout mengambang sampai market tutup. Semakin banyak yang membeli satu sisi, semakin kecil
+        payout per lembar di sisi itu. Posisi bisa dijual kapan saja lewat agent untuk mengunci
+        harga saat ini.
       </p>
     </div>
   );
