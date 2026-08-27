@@ -182,4 +182,64 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         if (status != Status.Open) revert NotOpen();
         if (block.timestamp >= tradingEnd) revert TradingEnded();
     }
+
+    // ── beli ─────────────────────────────────────────────────────────────────
+
+    function quoteBuy(uint8 outcome, uint256 sharesOut) public view returns (uint256 tokensIn, uint256 fee) {
+        if (outcome > 1) revert BadOutcome();
+        if (sharesOut == 0) revert ZeroAmount();
+        uint256[2] memory qNew = _q;
+        qNew[outcome] += sharesOut;
+        uint256 costTokens = Math.ceilDiv(DPMMath.costUp(qNew) - poolWad, scale);
+        fee = (costTokens * feeBps) / 10_000;
+        tokensIn = costTokens + fee;
+    }
+
+    /// @notice Taksiran lembar yang didapat untuk `tokensIn` (agent berpikir dalam nominal).
+    /// @dev Dibulatkan ke bawah dan tidak otoritatif — `buy` menghitung ulang biaya
+    ///      sebenarnya, dan pemanggil melindungi diri lewat `maxTokensIn`.
+    function quoteBuySpend(uint8 outcome, uint256 tokensIn) public view returns (uint256 sharesOut, uint256 fee) {
+        if (outcome > 1) revert BadOutcome();
+        fee = (tokensIn * feeBps) / (10_000 + feeBps);
+        uint256 spendWad = (tokensIn - fee) * scale;
+        if (spendWad == 0) return (0, fee);
+        sharesOut = DPMMath.sharesForSpend(_q, outcome, spendWad);
+    }
+
+    /// @dev Pemakaian pertama `nonReentrant` di kontrak ini. Aman di atas clone EIP-1167
+    ///      walau constructor yang menyetel `_status = NOT_ENTERED` tidak pernah berjalan:
+    ///      guard OpenZeppelin membandingkan `_status == ENTERED`, bukan `_status == NOT_ENTERED`,
+    ///      jadi slot storage nol bawaan clone sudah berperilaku seperti NOT_ENTERED sejak
+    ///      panggilan pertama yang dijaga.
+    function buy(uint8 outcome, uint256 sharesOut, uint256 maxTokensIn, address to)
+        external
+        nonReentrant
+        returns (uint256 tokensIn)
+    {
+        _requireTradable();
+        if (outcome > 1) revert BadOutcome();
+        if (sharesOut == 0) revert ZeroAmount();
+
+        uint256[2] memory qNew = _q;
+        qNew[outcome] += sharesOut;
+
+        uint256 target = DPMMath.costUp(qNew); // revert bila melampaui MAX_Q
+        uint256 costTokens = Math.ceilDiv(target - poolWad, scale);
+        if (costTokens < minTradeTokens) revert TradeTooSmall();
+
+        uint256 fee = (costTokens * feeBps) / 10_000;
+        tokensIn = costTokens + fee;
+        if (tokensIn > maxTokensIn) revert SlippageExceeded(tokensIn, maxTokensIn);
+
+        // Efek sebelum interaksi: mint ERC-1155 memanggil balik `to`.
+        _q = qNew;
+        poolWad = target;
+        feeAccrued += fee;
+
+        collateral.safeTransferFrom(msg.sender, address(this), tokensIn);
+        shares.mint(to, outcome, sharesOut);
+
+        uint256 probAfter = DPMMath.probability(qNew, outcome);
+        emit Trade(msg.sender, to, outcome, int256(sharesOut), tokensIn, fee, qNew, probAfter);
+    }
 }
