@@ -1,6 +1,7 @@
+import {cleanup} from "@testing-library/react";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import type {TestingLibraryMatchers} from "@testing-library/jest-dom/matchers";
-import {expect} from "vitest";
+import {afterEach, expect} from "vitest";
 
 // Bukan `import "@testing-library/jest-dom/vitest"` (biasa dipakai): berkas itu
 // mengimpor `expect` dari 'vitest' miliknya sendiri, yang di-resolve dari lokasi
@@ -12,6 +13,14 @@ import {expect} from "vitest";
 // Mengimpor matcher mentah lalu extend `expect` yang di-resolve dari sini
 // (frontend/) menjamin keduanya memakai instance vitest yang sama.
 expect.extend(matchers);
+
+// `test.globals` sengaja tidak diaktifkan (lihat vitest.config.ts), jadi `afterEach`
+// bukan global — dan auto-cleanup bawaan @testing-library/react (yang hanya mendaftar
+// diri saat `typeof afterEach === "function"` di lingkupnya sendiri) tidak pernah
+// terpicu. Tanpa baris ini, render() dari satu `it` tetap menumpuk di document.body
+// setelahnya, dan query berbasis `screen` di `it` berikutnya (dalam berkas yang sama)
+// bisa menemukan node duplikat peninggalan test lain alih-alih hanya miliknya sendiri.
+afterEach(cleanup);
 
 // Augmentasi tipe yang sama harus dideklarasikan dari SINI (frontend/), bukan
 // diimpor dari `@testing-library/jest-dom/vitest`, dengan alasan yang identik:
