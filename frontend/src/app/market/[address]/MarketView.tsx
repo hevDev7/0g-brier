@@ -10,6 +10,7 @@ import {ProbabilityPanel} from "@/components/market/ProbabilityPanel";
 import {TradeTape} from "@/components/market/TradeTape";
 import {useMarket} from "@/hooks/useMarket";
 import {useTrades} from "@/hooks/useTrades";
+import type {CollateralInfo, Query, Trade} from "@/lib/data/types";
 
 export function MarketView({address}: {address: `0x${string}`}) {
   const market = useMarket(address);
@@ -45,15 +46,7 @@ export function MarketView({address}: {address: `0x${string}`}) {
         <div className="flex flex-col gap-4">
           <ProbabilityPanel q={m.q} />
           <PayoutPanel q={m.q} />
-          {trades.status === "ready" ? (
-            <TradeTape trades={trades.data} collateral={m.collateral} />
-          ) : trades.status === "unavailable" ? (
-            <Unavailable capability={trades.capability} mode={trades.mode} />
-          ) : trades.status === "error" ? (
-            <div className="text-[13px] text-neg">Gagal memuat transaksi.</div>
-          ) : (
-            <div className="text-[13px] text-text-muted">Memuat transaksi…</div>
-          )}
+          {renderTrades(trades, m.collateral)}
           <section className="rounded-lg border border-border p-4">
             <h2 className="mb-2 text-[12px] uppercase tracking-wide text-text-faint">
               Aturan penyelesaian
@@ -67,6 +60,36 @@ export function MarketView({address}: {address: `0x${string}`}) {
       </div>
     </Shell>
   );
+}
+
+/**
+ * Diekstrak dari ternary jadi switch atas `trades.status` supaya jaminan
+ * exhaustiveness-nya STRUKTURAL, bukan kebetulan cara kode ini ditulis hari
+ * ini. Tipe kembalian non-nullable eksplisit (`React.JSX.Element`) adalah
+ * bagian yang menegakkan itu: di bawah `strict`, fungsi yang "jatuh" dari
+ * akhir switch tanpa return mengembalikan `undefined`, dan `undefined` tak
+ * bisa ditetapkan ke `React.JSX.Element` — jadi menghapus satu `case` gagal
+ * kompilasi (TS2366), persis seperti menghapus salah satu early-return
+ * `market` di atas mematahkan `market.data`. Tanpa anotasi ini TypeScript
+ * diam-diam menyimpulkan `| undefined` dan jaminannya lenyap.
+ *
+ * SENGAJA TIDAK ADA `default`: menambahkannya "demi jaga-jaga" akan melucuti
+ * exhaustiveness check ini — compiler berhenti memaksa kasus baru ditangani
+ * begitu ada fallback yang menampung segalanya.
+ */
+function renderTrades(trades: Query<Trade[]>, collateral: CollateralInfo): React.JSX.Element {
+  switch (trades.status) {
+    case "ready":
+      return <TradeTape trades={trades.data} collateral={collateral} />;
+    case "unavailable":
+      return <Unavailable capability={trades.capability} mode={trades.mode} />;
+    case "error":
+      return (
+        <div className="text-[13px] text-neg">Gagal memuat transaksi: {trades.error.message}</div>
+      );
+    case "loading":
+      return <div className="text-[13px] text-text-muted">Memuat transaksi…</div>;
+  }
 }
 
 function Shell({children}: {children: React.ReactNode}) {
