@@ -614,7 +614,99 @@ contract MarketInvariantsDirectedTest is Fixtures {
         assertGe(back * 10_000, SEED * 7_070, "INV-7: creator loss > 29.30% on fail");
     }
 
-    // ── INV-8 ────────────────────────────────────────────────────────────────
+    /// @notice The GENERAL INV-7 bound, on a provider who is not the creator.
+    ///
+    /// @dev Until now every INV-7 assertion in this repo used 7070/10000 against the creator,
+    ///      whose seed is symmetric by construction — so the corrected general form
+    ///      (`recovery ≥ deposit × min(p₀,p₁) at entry`) was stated in the spec and asserted
+    ///      nowhere. That is the exact shape of the original error: a special case, verified
+    ///      thoroughly, mistaken for the rule.
+    ///
+    ///      The sequence below is the worst case the spec's proof describes. An LP enters on a
+    ///      book already skewed toward YES, so the marginal price of NO — the side that will
+    ///      eventually win — is small at the moment of entry. Then NO is bought until it
+    ///      dominates, which drives `C(q_f)/q_{f,NO}` toward 1 and therefore drives the LP's
+    ///      recovery down to its floor of `deposit × p_NO`.
+    ///
+    ///      An LP who enters and is never traded against gets the whole deposit back: the
+    ///      payout is `λq_w·C(q_f)/q_{f,w}`, and with `q_f = q(1+λ)` that collapses to `λC(q)`,
+    ///      which is the deposit. The loss is other people's order flow, not the entry itself —
+    ///      which is why `test_lpLossOnASkewedBookExceedsTheSymmetricConstant` below needs the
+    ///      flood to say anything at all.
+    function test_lpRecoveryRespectsTheGeneralBoundOnASkewedBook() public {
+        _fund(alice, type(uint128).max, address(m));
+        _fund(bob, type(uint128).max, address(m));
+
+        // Skew the book toward YES, so NO is the cheap side at the moment bob enters.
+        vm.prank(alice);
+        m.buy(1, 4_000e18, type(uint256).max, alice);
+
+        uint256 pNoAtEntry = m.marginalPrice(0);
+        uint256 bobBefore = usdc.balanceOf(bob);
+        vm.prank(bob);
+        m.addLiquidity(500e6, 0, bob);
+        uint256 deposited = bobBefore - usdc.balanceOf(bob);
+        assertGt(deposited, 0, "precondition: the LP actually paid something");
+
+        // Now flood the side that was cheap, so it wins from far behind.
+        vm.prank(alice);
+        m.buy(0, 400_000e18, type(uint256).max, alice);
+
+        vm.warp(m.tradingEnd());
+        m.close();
+        vm.prank(resolutionModule);
+        m.settle(0);
+
+        vm.prank(bob);
+        uint256 back = m.redeem(bob);
+
+        // The bound is `deposit × min(p₀,p₁) at entry`; here NO is the cheaper side, and it is
+        // also the winner, which is the worst case rather than a coincidence.
+        uint256 floorTokens = Math.mulDiv(deposited, Math.min(pNoAtEntry, m.marginalPrice(1)), DPMMath.WAD);
+        // One token unit of slack, and it is derived rather than chosen: every intermediate
+        // floor in this path (λ, minted[i], the payout mulDiv) loses less than one wei at WAD
+        // scale, and WAD-scale dust divided by `scale` (1e12) reaches zero tokens. Only the
+        // final division into token units can cost a whole unit.
+        assertGe(back + 1, floorTokens, "INV-7 general: recovery below deposit x min(p) at entry");
+    }
+
+    /// @dev The corollary that kills the constant. If 29.29% were a universal bound, this
+    ///      assertion could not hold — and the whole point of the correction is that it does.
+    ///      The number is not asserted as a target; what is asserted is that the symmetric
+    ///      constant is BREACHED, which is a property of the book's skew alone.
+    function test_lpLossOnASkewedBookExceedsTheSymmetricConstant() public {
+        _fund(alice, type(uint128).max, address(m));
+        _fund(bob, type(uint128).max, address(m));
+
+        vm.prank(alice);
+        m.buy(1, 4_000e18, type(uint256).max, alice);
+        assertLt(m.marginalPrice(0), (DPMMath.WAD * 7_070) / 10_000, "precondition: NO is priced below 1/sqrt(2)");
+
+        uint256 bobBefore = usdc.balanceOf(bob);
+        vm.prank(bob);
+        m.addLiquidity(500e6, 0, bob);
+        uint256 deposited = bobBefore - usdc.balanceOf(bob);
+
+        vm.prank(alice);
+        m.buy(0, 400_000e18, type(uint256).max, alice);
+
+        vm.warp(m.tradingEnd());
+        m.close();
+        vm.prank(resolutionModule);
+        m.settle(0);
+
+        vm.prank(bob);
+        uint256 back = m.redeem(bob);
+
+        assertLt(
+            back * 10_000,
+            deposited * 7_070,
+            "a proportional LP on a skewed book must be able to lose more than the symmetric 29.30%"
+        );
+        console.log("LP deposit / recovery", deposited, back);
+    }
+
+    // ── INV-8 ─────────────────────────────────────────────────────────────
 
     /// @dev Extreme skew is where the probability sum is most likely to slip; the 2 wei bound in
     ///      INV-8 does not scale with q, so it must be tested precisely here.

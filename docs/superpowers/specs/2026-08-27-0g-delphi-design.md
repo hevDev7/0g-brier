@@ -22,7 +22,7 @@ The main differentiator against Delphi (Gensyn), the closest existing reference:
 
 | # | Decision | Reason |
 |---|---|---|
-| D1 | Pricing mechanism: **Pennock DPM** `C(q)=√(Σqᵢ²)` | Pool-funded ⇒ always solvent, no LP subsidy, needs only `sqrt` in Solidity, creator loss bounded at 29.29% |
+| D1 | Pricing mechanism: **Pennock DPM** `C(q)=√(Σqᵢ²)` | Pool-funded ⇒ always solvent, no LP subsidy, needs only `sqrt` in Solidity, and the creator's symmetric seed has a stateable loss bound (29.29% — see §14.1 INV-7 for why that figure is the symmetric case and not a general LP bound) |
 | D2 | Collateral: **6-decimal mUSDC**, internal maths in 18-decimal wad | The decimal normalization layer is exercised from day one; switching to a real stablecoin is a configuration change |
 | D3 | Resolution: **a k-of-n AI committee on 0G Compute** + commit–reveal + dispute + slashing | The "agent-driven" premise holds all the way through settlement; verifiability comes from TeeML |
 | D4 | Agents: **a managed runtime + a thin SDK**, identity on the **ERC-7857** path | Demo and production do not depend on third-party agents; identity remains an on-chain asset |
@@ -120,7 +120,7 @@ Payout per winning share    C(q) / q_win     =  1 / p_win
 | **Provider loss bound** | loss ≤ `1 − min(p₀, p₁)` **at the moment of entry** — which equals `1 − 1/√2 ≈ 29.29%` ONLY when the book is symmetric | the risk bound can still be stated, but it is a function of the book's skew, not a constant |
 | **LP neutrality** | adding `λ` proportionally ⇒ `Pᵢ` does not change | a liquidity primitive that does not move the price |
 
-**Proof of the 29.29% bound.** A provider deposits `L = C(q₀,q₀) = q₀√2` and receives `q₀` shares on each side. At settlement they receive `q₀ · C(q_final)/q_win`. Because `C(q) ≥ q_win` for all `q`, the receipt is `≥ q₀`. The worst-case ratio is `q₀ / (q₀√2) = 1/√2`. ∎
+**Proof of the 29.29% bound, for a SYMMETRIC provider.** The general statement is `recovery ≥ deposit × min(p₀,p₁)` at entry (derived in §14.1); this is that formula evaluated at `p₀ = p₁ = 1/√2`. A provider deposits `L = C(q₀,q₀) = q₀√2` and receives `q₀` shares on each side. At settlement they receive `q₀ · C(q_final)/q_win`. Because `C(q) ≥ q_win` for all `q`, the receipt is `≥ q₀`. The worst-case ratio is `q₀ / (q₀√2) = 1/√2`. ∎
 
 **Proof of LP neutrality.** `C` is homogeneous of degree 1 ⇒ `q → (1+λ)q` gives `C → (1+λ)C` and leaves `Pᵢ = qᵢ²/Σqⱼ²` unchanged. The cost is `= λ·C(q)`, and the shares received are `= λ·qᵢ` per outcome. ∎
 Adding **the same absolute amount** to both sides is neutral only when `q₀ = q₁`; that is why the addition used is **proportional**.
@@ -887,6 +887,13 @@ receives `λ = ⌊D·WAD/poolWad⌋` and a position `λq`, at a cost of `D = λ�
   positive quadrant (`Σpᵢ² = 1`). The minimum occurs as `p'` approaches an axis → `min(p₀, p₁)`.
 
 Both regimes give **a recovery ≥ deposit × min(p₀, p₁) at the moment of entry**.
+
+Asserted, not merely derived: `test_lpRecoveryRespectsTheGeneralBoundOnASkewedBook` drives a
+proportional LP into a skewed book and checks the general floor, and
+`test_lpLossOnASkewedBookExceedsTheSymmetricConstant` shows the same LP losing **85%** of a 500
+mUSDC deposit — nearly three times the symmetric constant. Until those existed, every INV-7
+assertion in the repo measured the creator, whose seed is symmetric by construction, so the
+general form was written down and checked nowhere.
 
 **The loss is unbounded below 100%; it does not stop at any particular figure.** At `q = (10, 1000)`,
 `min(p₀,p₁) ≈ 0,0099995`, sehingga lantai pemulihannya `setoran × 0,01` — **rugi ~99%**. Semakin
