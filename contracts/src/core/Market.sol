@@ -86,6 +86,10 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     error BadTransition();
     error NotResolutionModule();
     error NotGuardian();
+    error NotSettled();
+    error NotLiquidatable();
+    error NothingToClaim();
+    error TooEarly();
 
     constructor() {
         _disableInitializers();
@@ -535,5 +539,86 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         if (toResolvers > 0) collateral.safeTransfer(resolverPool, toResolvers);
         if (toTreasury > 0) collateral.safeTransfer(treasuryAddr, toTreasury);
         emit FeesDistributed(toCreator, toResolvers, toTreasury);
+    }
+
+    // ── keluar ───────────────────────────────────────────────────────────────
+
+    /// @notice Menebus lembar sisi menang pada kurs yang dipotret saat settle.
+    /// @dev Lembar sisi kalah — tradable maupun seed — bernilai nol dan dihapus.
+    function redeem(address to) external nonReentrant returns (uint256 tokensOut) {
+        if (status != Status.Settled) revert NotSettled();
+
+        uint8 w = winningOutcome;
+        uint8 l = w == 0 ? 1 : 0;
+
+        uint256 tradable = shares.balanceOfOutcome(msg.sender, address(this), w);
+        uint256 seed = _seedShares[msg.sender][w];
+        uint256 amount = tradable + seed;
+        if (amount == 0) revert NothingToClaim();
+
+        uint256 payoutWad = Math.mulDiv(amount, payoutPerShareWad, DPMMath.WAD);
+        tokensOut = payoutWad / scale;
+
+        _seedShares[msg.sender][w] = 0;
+        _seedShares[msg.sender][l] = 0;
+        poolWad -= payoutWad;
+
+        if (tradable > 0) shares.burn(msg.sender, w, tradable);
+        if (tokensOut > 0) collateral.safeTransfer(to, tokensOut);
+        emit Redeemed(msg.sender, amount, tokensOut);
+    }
+
+    /// @notice Market gagal atau dibatalkan: setiap sisi dibayar pᵢ per lembar.
+    /// @dev Menurut identitas Euler Σ pᵢ·qᵢ = C(q), pembayaran ini SEHARUSNYA persis
+    ///      menghabiskan pool — tapi `price()` membagi dengan `cost()` yang dibulatkan ke
+    ///      bawah sementara `poolWad` adalah `costUp()` yang dibulatkan ke atas (lihat catatan
+    ///      di DPMMath.sol), jadi jumlah dua kaki yang MASING-MASING dibulatkan ke bawah bisa
+    ///      melampaui poolWad walau identitas Euler eksak menyamakan keduanya secara real.
+    ///      Tanpa clamp, `poolWad -= payoutWad` bisa underflow dan mengunci dana pengguna
+    ///      permanen — jadi payout selalu dipotong ke sisa pool yang benar-benar ada, bukan
+    ///      diasumsikan selalu pas.
+    function liquidate(address to) external nonReentrant returns (uint256 tokensOut) {
+        if (status != Status.Failed && status != Status.Voided) revert NotLiquidatable();
+
+        uint256[2] memory amounts;
+        uint256 payoutWad;
+        for (uint8 i = 0; i < 2; ++i) {
+            uint256 tradable = shares.balanceOfOutcome(msg.sender, address(this), i);
+            uint256 seed = _seedShares[msg.sender][i];
+            amounts[i] = tradable + seed;
+            if (amounts[i] == 0) continue;
+
+            payoutWad += Math.mulDiv(amounts[i], _liqPerShareWad[i], DPMMath.WAD);
+            if (seed > 0) _seedShares[msg.sender][i] = 0;
+            if (tradable > 0) shares.burn(msg.sender, i, tradable);
+        }
+        if (amounts[0] == 0 && amounts[1] == 0) revert NothingToClaim();
+
+        // Clamp WAJIB, bukan optimisasi defensif: dikonfirmasi konkret pada q kecil (mis.
+        // q=(2,2): dua kaki floor berjumlah 4, poolWad=costUp([2,2])=3) bahwa jumlah dua
+        // kaki yang MASING-MASING dibulatkan ke bawah bisa melampaui poolWad walau identitas
+        // Euler eksak menyamakan keduanya secara real (lihat dev-note di atas). Rezim ini
+        // tak terjangkau lewat MIN_SEED protokol nyata (q awal ~7e20), tapi sebuah revert di
+        // sini berarti dana pengguna terkunci PERMANEN — jadi tidak boleh bergantung pada
+        // "tak terjangkau". Dipotong di sini, SEBELUM `tokensOut` diturunkan, supaya baik
+        // transfer maupun pengurangan pool memakai nilai yang sudah diclamp; kerugian
+        // pembulatan jatuh ke penebus TERAKHIR pada q kecil, bukan membuatnya revert.
+        if (payoutWad > poolWad) payoutWad = poolWad;
+
+        tokensOut = payoutWad / scale;
+        poolWad -= payoutWad;
+        if (tokensOut > 0) collateral.safeTransfer(to, tokensOut);
+        emit Liquidated(msg.sender, amounts, tokensOut);
+    }
+
+    /// @notice Menyapu sisa yang tak pernah diklaim ke Treasury setelah jendela panjang.
+    function sweepUnclaimed() external {
+        if (status != Status.Settled && status != Status.Failed && status != Status.Voided) revert BadTransition();
+        if (block.timestamp < resolvedAt + config.params(ConfigKeys.SWEEP_UNCLAIMED_AFTER)) revert TooEarly();
+
+        uint256 bal = collateral.balanceOf(address(this));
+        if (bal == 0) revert ZeroAmount();
+        poolWad = 0;
+        collateral.safeTransfer(config.addresses(ConfigKeys.TREASURY), bal);
     }
 }
