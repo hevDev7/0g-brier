@@ -21,11 +21,18 @@ contract DPMDifferentialTest is Test {
         assertGt(q0.length, 256, "vektor terlalu sedikit; jalankan npm run gen:vectors");
         assertEq(q1.length, q0.length);
 
-        // Menjamin cakupan magnitudo klaim generator benar-benar tercapai, bukan cuma
-        // cabang switch-nya tereksekusi (bug rng128: cabang "besar"/"dekat-MAX_Q" jalan
-        // 85x tapi modulo-nya no-op karena rng() < modulus — pagar ini menangkap itu).
+        // Tiga pagar cakupan magnitudo, masing-masing menjaga properti berbeda:
+        //   - maxQ0 dan bothLegsLarge menjamin seluruh 36 pasangan bucket dari skema (b)
+        //     di gen-vectors.ts benar-benar hadir, termasuk (MAX_Q, MAX_Q) di kasus 35 —
+        //     tapi keduanya bisa lolos semata dari baris konstanta itu (nol panggilan
+        //     RNG), jadi TIDAK membuktikan rng128 (a) sungguh dipakai.
+        //   - beyondOldRngCeiling menutup celah itu: menghitung nilai q BUKAN MAX_Q yang
+        //     melampaui batas lama 2^64-1 — properti yang secara struktural hanya
+        //     tercapai lewat rng128, sehingga regresi ke `rng() % modulus` polos
+        //     tertangkap di sini walau dua pagar pertama tetap lolos.
         uint256 maxQ0 = 0;
         bool bothLegsLarge = false;
+        uint256 beyondOldRngCeiling = 0;
 
         for (uint256 k = 0; k < q0.length; k++) {
             uint256[2] memory q;
@@ -34,6 +41,8 @@ contract DPMDifferentialTest is Test {
 
             if (q0[k] > maxQ0) maxQ0 = q0[k];
             if (q0[k] >= 1e30 && q1[k] >= 1e30) bothLegsLarge = true;
+            if (q0[k] != DPMMath.MAX_Q && q0[k] > type(uint64).max) beyondOldRngCeiling++;
+            if (q1[k] != DPMMath.MAX_Q && q1[k] > type(uint64).max) beyondOldRngCeiling++;
 
             assertEq(DPMMath.cost(q), expCost[k], string.concat("cost tidak cocok pada kasus ", vm.toString(k)));
             assertEq(DPMMath.costUp(q), expCostUp[k], string.concat("costUp tidak cocok pada kasus ", vm.toString(k)));
@@ -49,5 +58,10 @@ contract DPMDifferentialTest is Test {
             maxQ0, 1e30, "q0 maksimum di bawah 1e30 - cakupan magnitudo menyempit; jalankan ulang npm run gen:vectors"
         );
         assertTrue(bothLegsLarge, "tak ada kasus dengan kedua kaki >= 1e30 - jalankan ulang npm run gen:vectors");
+        assertGt(
+            beyondOldRngCeiling,
+            0,
+            "generator tidak melampaui 2^64 di luar konstanta MAX_Q - rng128 hilang? jalankan npm run gen:vectors"
+        );
     }
 }
