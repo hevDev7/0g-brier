@@ -11,5 +11,5 @@ export function useReceipt(address: `0x${string}`): Query<SettlementReceipt> {
     queryKey: ["receipt", source.mode, address],
     queryFn: () => source.getReceipt(address),
   });
-  return toQuery(result, source.mode);
+  return toQuery(result);
 }

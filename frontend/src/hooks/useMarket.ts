@@ -11,5 +11,5 @@ export function useMarket(address: `0x${string}`): Query<MarketDetail> {
     queryKey: ["market", source.mode, address],
     queryFn: () => source.getMarket(address),
   });
-  return toQuery(result, source.mode);
+  return toQuery(result);
 }

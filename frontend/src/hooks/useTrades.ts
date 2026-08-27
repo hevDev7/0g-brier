@@ -11,5 +11,5 @@ export function useTrades(address: `0x${string}`, limit: number): Query<Trade[]>
     queryKey: ["trades", source.mode, address, limit],
     queryFn: () => source.getTrades(address, limit),
   });
-  return toQuery(result, source.mode);
+  return toQuery(result);
 }
