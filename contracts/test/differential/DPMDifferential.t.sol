@@ -17,6 +17,7 @@ contract DPMDifferentialTest is Test {
         uint256[] memory expCostUp = vm.parseJsonUintArray(json, ".costUp");
         uint256[] memory expPrice0 = vm.parseJsonUintArray(json, ".price0");
         uint256[] memory expProb0 = vm.parseJsonUintArray(json, ".prob0");
+        uint256[] memory expSeed = vm.parseJsonUintArray(json, ".seed");
 
         assertGt(q0.length, 256, "vektor terlalu sedikit; jalankan npm run gen:vectors");
         assertEq(q1.length, q0.length);
@@ -51,6 +52,11 @@ contract DPMDifferentialTest is Test {
                 DPMMath.probability(q, 0),
                 expProb0[k],
                 string.concat("probability tidak cocok pada kasus ", vm.toString(k))
+            );
+            assertEq(
+                DPMMath.seedShares(q0[k]),
+                expSeed[k],
+                string.concat("seedShares tidak cocok pada kasus ", vm.toString(k))
             );
         }
 

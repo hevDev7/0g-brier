@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { cost, costUp, price, probability, MAX_Q, type Q } from '../src/dpm.js';
+import { cost, costUp, price, probability, seedShares, MAX_Q, type Q } from '../src/dpm.js';
 
 const OUT = join(process.cwd(), '../../contracts/test/vectors/dpm.json');
 const COUNT = 512;
@@ -48,6 +48,7 @@ const cst: string[] = [];
 const cstUp: string[] = [];
 const price0: string[] = [];
 const prob0: string[] = [];
+const seed: string[] = [];
 
 const hex = (v: bigint) => `0x${v.toString(16)}`;
 
@@ -67,8 +68,9 @@ for (let k = 0; k < COUNT; k++) {
   cstUp.push(hex(costUp(q)));
   price0.push(hex(price(q, 0)));
   prob0.push(hex(probability(q, 0)));
+  seed.push(hex(seedShares(a)));
 }
 
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, `${JSON.stringify({ q0, q1, cost: cst, costUp: cstUp, price0, prob0 }, null, 2)}\n`);
+writeFileSync(OUT, `${JSON.stringify({ q0, q1, cost: cst, costUp: cstUp, price0, prob0, seed }, null, 2)}\n`);
 console.log(`menulis ${COUNT} vektor ke ${OUT}`);

@@ -86,4 +86,16 @@ library DPMMath {
         if (newQi <= q[i]) revert InsufficientSpend();
         return newQi - q[i];
     }
+
+    /// @notice Lembar simetris terbesar (q₀ = q₁) yang biayanya tidak melebihi `seedWad`.
+    /// @dev q₀ = ⌊√(⌊seedWad²/2⌋)⌋. Dari situ 2q₀² ≤ seedWad², yang setara dengan
+    ///      costUp([q₀,q₀]) ≤ seedWad karena ⌈√x⌉ ≤ S ⟺ x ≤ S².
+    ///
+    ///      Jangan tergoda menulis q₀ = seedWad·WAD/SQRT2_WAD: konstanta √2 yang
+    ///      dibulatkan ke bawah membuat hasil baginya sedikit TERLALU BESAR, sehingga
+    ///      pool yang dibutuhkan melebihi collateral yang benar-benar disetor.
+    function seedShares(uint256 seedWad) internal pure returns (uint256) {
+        if (seedWad > MAX_Q) revert QOverflow();
+        return Math.sqrt((seedWad * seedWad) / 2, Math.Rounding.Floor);
+    }
 }

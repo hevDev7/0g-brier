@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WAD } from '../src/units.js';
-import { cost, costUp, isqrt, isqrtCeil, price, probability, sharesForSpend, MAX_Q } from '../src/dpm.js';
+import { cost, costUp, isqrt, isqrtCeil, price, probability, seedShares, sharesForSpend, MAX_Q } from '../src/dpm.js';
 
 const E18 = WAD;
 
@@ -50,5 +50,20 @@ describe('cermin DPM — nilai emas dihitung tangan', () => {
 
   it('menolak q di atas MAX_Q', () => {
     expect(() => cost([MAX_Q + 1n, 0n])).toThrow(/MAX_Q/);
+  });
+});
+
+describe('seedShares', () => {
+  it('tidak pernah berbiaya lebih dari yang disetor, dan maksimal', () => {
+    for (const w of [1n, 1000n, E18, 1000n * E18, 10n ** 30n]) {
+      const s = seedShares(w);
+      expect(costUp([s, s])).toBeLessThanOrEqual(w);
+      expect(costUp([s + 1n, s + 1n])).toBeGreaterThan(w);
+    }
+  });
+
+  it('market mulai tepat di 50%', () => {
+    const s = seedShares(1000n * E18);
+    expect(probability([s, s], 0)).toBe(E18 / 2n);
   });
 });

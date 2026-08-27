@@ -208,4 +208,31 @@ contract DPMMathTest is Test {
         uint256 realCost = DPMMath.costUp(qAfter) - DPMMath.costUp(q);
         assertLe(realCost, uint256(spend));
     }
+
+    function test_seedSharesOfZeroIsZero() public pure {
+        assertEq(DPMMath.seedShares(0), 0);
+    }
+
+    /// @dev Sifat yang harus dijamin: biaya pool untuk lembar seed TIDAK PERNAH
+    ///      melebihi collateral yang disetor. Menurunkan q₀ dengan membagi konstanta
+    ///      ⌊√2·1e18⌋ akan MELANGGAR ini — pembagi yang dibulatkan ke bawah menghasilkan
+    ///      hasil bagi yang terlalu besar. Karena itu rumusnya lewat kuadrat.
+    function testFuzz_seedNeverCostsMoreThanDeposited(uint96 seed) public pure {
+        uint256 seedWad = uint256(seed);
+        uint256 s = DPMMath.seedShares(seedWad);
+        assertLe(DPMMath.costUp(_q(s, s)), seedWad);
+    }
+
+    /// @dev ...dan tetap maksimal: satu lembar lagi di kedua sisi sudah melampaui setoran.
+    function testFuzz_seedIsMaximal(uint96 seed) public pure {
+        vm.assume(seed > 0);
+        uint256 seedWad = uint256(seed);
+        uint256 s = DPMMath.seedShares(seedWad);
+        assertGt(DPMMath.costUp(_q(s + 1, s + 1)), seedWad);
+    }
+
+    function test_seedIsBalancedSoMarketStartsAtFiftyPercent() public pure {
+        uint256 s = DPMMath.seedShares(1000e18);
+        assertEq(DPMMath.probability(_q(s, s), 0), 5e17);
+    }
 }

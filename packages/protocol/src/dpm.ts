@@ -60,3 +60,8 @@ export function sharesForSpend(q: Q, i: Outcome, spendWad: bigint): bigint {
   if (newQi <= q[i]) throw new RangeError('sharesForSpend: spend terlalu kecil untuk satu lembar pun');
   return newQi - q[i];
 }
+
+export function seedShares(seedWad: bigint): bigint {
+  if (seedWad > MAX_Q) throw new RangeError(`seedWad melampaui MAX_Q: ${seedWad}`);
+  return isqrt((seedWad * seedWad) / 2n);
+}
