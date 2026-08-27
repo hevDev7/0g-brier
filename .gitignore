@@ -1,8 +1,11 @@
 node_modules/
 .env
 .env.local
-out/
-cache/
-broadcast/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
 .next/
 *.log
+coverage/
+lcov.info

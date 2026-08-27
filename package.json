@@ -1,0 +1,13 @@
+{
+  "name": "0g-delphi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent-native binary prediction market di 0G Chain — DPM pricing, komite resolver ber-TEE.",
+  "workspaces": ["packages/*"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "gen:vectors": "npm run gen:vectors -w @0g-delphi/protocol"
+  }
+}

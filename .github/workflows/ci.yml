@@ -1,0 +1,33 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with: { version: stable }
+      - name: install deps
+        run: |
+          cd contracts
+          forge install foundry-rs/forge-std@v1.9.6 --no-git
+          forge install OpenZeppelin/openzeppelin-contracts@v5.4.0 --no-git
+          forge install OpenZeppelin/openzeppelin-contracts-upgradeable@v5.4.0 --no-git
+      - name: format
+        run: cd contracts && forge fmt --check
+      - name: build (default)
+        run: cd contracts && forge build
+      - name: build (prod, via_ir)
+        run: cd contracts && FOUNDRY_PROFILE=prod forge build
+      - name: test
+        run: cd contracts && FOUNDRY_PROFILE=ci forge test -vvv
+
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test --workspaces --if-present

@@ -1,0 +1,48 @@
+[profile.default]
+src            = "src"
+out            = "out"
+libs           = ["lib"]
+test           = "test"
+script         = "script"
+solc_version   = "0.8.28"
+evm_version    = "cancun"
+optimizer      = true
+optimizer_runs = 800
+via_ir         = false
+bytecode_hash  = "none"
+fs_permissions = [
+  { access = "read-write", path = "../deployments" },
+  { access = "read",       path = "./test/vectors" },
+]
+
+[profile.default.fuzz]
+runs = 512
+
+[profile.default.invariant]
+runs            = 128
+depth           = 64
+fail_on_revert  = false
+
+# Profil rilis: via_ir menyala. CI wajib membangun profil ini agar
+# "kompilasi hanya berhasil tanpa via_ir" tidak pernah lolos diam-diam.
+[profile.prod]
+via_ir         = true
+optimizer_runs = 20000
+
+[profile.ci.fuzz]
+runs = 4096
+
+[profile.ci.invariant]
+runs  = 512
+depth = 128
+
+[fmt]
+line_length = 120
+tab_width   = 4
+bracket_spacing = false
+int_types   = "long"
+
+[rpc_endpoints]
+local   = "http://127.0.0.1:8545"
+galileo = "${ZERO_G_TESTNET_RPC}"
+mainnet = "${ZERO_G_MAINNET_RPC}"
