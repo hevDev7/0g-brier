@@ -18,14 +18,25 @@ function makeRng(seed: bigint): () => bigint {
   };
 }
 
+/** Komposisi dua tarikan 64-bit menjadi nilai 128-bit. rng() sendiri terbatas pada
+ *  [0, 2^64) ≈ 1.845e19 — lebih kecil dari modulus bucket "besar" (1e24) dan
+ *  "dekat-MAX_Q" (1e33), sehingga `rng() % modulus` untuk keduanya jadi no-op tanpa ini
+ *  (modulus > ruang nilai berarti operasi modulo tidak pernah memotong apa pun).
+ *  Temporer eksplisit (hi, lo) supaya urutan pemanggilan rng() tidak ambigu bagi pembaca. */
+function rng128(rng: () => bigint): bigint {
+  const hi = rng();
+  const lo = rng();
+  return (hi << 64n) | lo;
+}
+
 /** Sebaran lintas magnitudo: nol, debu, skala wad, besar, dan tepat di MAX_Q. */
 function sample(rng: () => bigint, bucket: number): bigint {
   switch (bucket % 6) {
     case 0: return 0n;
     case 1: return rng() % 1_000_000n;
     case 2: return rng() % (10n ** 18n);
-    case 3: return rng() % (10n ** 24n);
-    case 4: return rng() % (10n ** 33n);
+    case 3: return rng128(rng) % (10n ** 24n);
+    case 4: return rng128(rng) % (10n ** 33n);
     default: return MAX_Q;
   }
 }
@@ -40,9 +51,15 @@ const prob0: string[] = [];
 
 const hex = (v: bigint) => `0x${v.toString(16)}`;
 
+/** Kasus 0..35 menjangkau eksplisit seluruh 36 pasangan bucket (termasuk (MAX_Q, MAX_Q),
+ *  yang skema offset-3 di bawah TIDAK PERNAH bisa capai — bucket i selalu berpasangan
+ *  dengan bucket (i+3)%6, jadi kedua kaki tak pernah sama-sama di tier tertinggi).
+ *  Kasus 36.. memakai skema offset-3 semula untuk sisa sampel acak. */
 for (let k = 0; k < COUNT; k++) {
-  const a = sample(rng, k);
-  const b = sample(rng, k + 3);
+  const bucketA = k < 36 ? Math.floor(k / 6) : k % 6;
+  const bucketB = k < 36 ? k % 6 : k + 3;
+  const a = sample(rng, bucketA);
+  const b = sample(rng, bucketB);
   const q: Q = [a, b];
   q0.push(hex(a));
   q1.push(hex(b));

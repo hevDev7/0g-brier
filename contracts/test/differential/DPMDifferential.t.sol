@@ -21,10 +21,19 @@ contract DPMDifferentialTest is Test {
         assertGt(q0.length, 256, "vektor terlalu sedikit; jalankan npm run gen:vectors");
         assertEq(q1.length, q0.length);
 
+        // Menjamin cakupan magnitudo klaim generator benar-benar tercapai, bukan cuma
+        // cabang switch-nya tereksekusi (bug rng128: cabang "besar"/"dekat-MAX_Q" jalan
+        // 85x tapi modulo-nya no-op karena rng() < modulus — pagar ini menangkap itu).
+        uint256 maxQ0 = 0;
+        bool bothLegsLarge = false;
+
         for (uint256 k = 0; k < q0.length; k++) {
             uint256[2] memory q;
             q[0] = q0[k];
             q[1] = q1[k];
+
+            if (q0[k] > maxQ0) maxQ0 = q0[k];
+            if (q0[k] >= 1e30 && q1[k] >= 1e30) bothLegsLarge = true;
 
             assertEq(DPMMath.cost(q), expCost[k], string.concat("cost tidak cocok pada kasus ", vm.toString(k)));
             assertEq(DPMMath.costUp(q), expCostUp[k], string.concat("costUp tidak cocok pada kasus ", vm.toString(k)));
@@ -35,5 +44,10 @@ contract DPMDifferentialTest is Test {
                 string.concat("probability tidak cocok pada kasus ", vm.toString(k))
             );
         }
+
+        assertGe(
+            maxQ0, 1e30, "q0 maksimum di bawah 1e30 - cakupan magnitudo menyempit; jalankan ulang npm run gen:vectors"
+        );
+        assertTrue(bothLegsLarge, "tak ada kasus dengan kedua kaki >= 1e30 - jalankan ulang npm run gen:vectors");
     }
 }
