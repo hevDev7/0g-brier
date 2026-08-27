@@ -77,6 +77,16 @@ describe("AgentBook", () => {
     expect(container.textContent).toContain("74.22");
   });
 
+  /** The same guard as the leaderboard's: the cell names the live mode. */
+  it("names the mode it is really running in", async () => {
+    renderBook(new MockSource({omit: ["COST_BASIS"]}));
+    const table = await screen.findByRole("table");
+    const cell = within(within(table).getAllByRole("row")[1]!).getByTestId("book-entry");
+    const status = within(cell).getByRole("status");
+    expect(status.getAttribute("title")).toMatch(/in mock mode/i);
+    expect(status.getAttribute("title")).not.toMatch(/in chain mode/i);
+  });
+
   it("says so plainly when an address holds nothing", async () => {
     renderBook(new MockSource(), `0x${"9".repeat(40)}`);
     expect(

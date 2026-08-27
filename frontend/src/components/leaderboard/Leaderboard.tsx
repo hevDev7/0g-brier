@@ -10,11 +10,12 @@ import {SkeletonRows} from "@/components/primitives/Skeleton";
 import {Unavailable} from "@/components/primitives/Unavailable";
 import {usePositionsByMarket, useBalances, useTradesByMarket} from "@/hooks/useMarketRows";
 import {useMarkets} from "@/hooks/useMarkets";
+import {useDataSource} from "@/hooks/provider";
 import {collect} from "@/lib/collect";
 import {agentsSeen} from "@/lib/agent-book";
 import {compareRows, leaderboard, type LeaderboardRow, type SortKey} from "@/lib/leaderboard";
 import {formatCollateral, shortAddress} from "@/lib/format";
-import type {CollateralInfo, MarketSummary} from "@/lib/data/types";
+import type {CollateralInfo, DataMode, MarketSummary} from "@/lib/data/types";
 
 /** The fixtures hold 24 trades a market; a real indexer would page this. */
 const TAPE_LIMIT = 500;
@@ -222,6 +223,10 @@ function Row({
   rank: number;
   collateral: CollateralInfo | undefined;
 }) {
+  // Read, never assumed. A cell that says "not available in chain mode" while
+  // the app is running on `mock` names the wrong source, and sends a reader
+  // looking for a fix in a place that has nothing to do with it.
+  const {mode} = useDataSource();
   const decimals = collateral?.decimals ?? 6;
   return (
     <tr className="group border-t border-border hover:bg-bg-sunken/50">
@@ -236,36 +241,41 @@ function Row({
           {shortAddress(row.agent)}
         </Link>
       </th>
-      <Cell testId="lb-trades" value={row.trades} render={(v) => String(v)} capability="TRADE_TAPE" />
+      <Cell testId="lb-trades" value={row.trades} render={(v) => String(v)} capability="TRADE_TAPE" mode={mode} />
       <Cell
         testId="lb-volume"
         value={row.volumeTokens}
         render={(v) => formatCollateral(v, decimals)}
         capability="TRADE_TAPE"
+        mode={mode}
       />
       <Cell
         testId="lb-deployed"
         value={row.positionValueTokens}
         render={(v) => formatCollateral(v, decimals)}
         capability="AGENT_POSITIONS"
+        mode={mode}
       />
       <Cell
         testId="lb-free"
         value={row.balanceTokens}
         render={(v) => formatCollateral(v, decimals)}
         capability="AGENT_BALANCE"
+        mode={mode}
       />
       <Cell
         testId="lb-account"
         value={row.accountValueTokens}
         render={(v) => formatCollateral(v, decimals)}
         capability="AGENT_BALANCE"
+        mode={mode}
         strong
       />
       <Cell
         testId="lb-unrealised"
         value={row.unrealisedTokens}
         capability="COST_BASIS"
+        mode={mode}
         last
         render={(v) => (
           <span className={v > 0n ? "text-pos" : v < 0n ? "text-neg" : ""}>
@@ -289,6 +299,7 @@ function Cell<T extends bigint | number>({
   value,
   render,
   capability,
+  mode,
   strong = false,
   last = false,
 }: {
@@ -296,6 +307,7 @@ function Cell<T extends bigint | number>({
   value: T | null;
   render: (value: T) => React.ReactNode;
   capability: Parameters<typeof Unavailable>[0]["capability"];
+  mode: DataMode;
   strong?: boolean;
   last?: boolean;
 }) {
@@ -306,7 +318,7 @@ function Cell<T extends bigint | number>({
         strong ? "font-medium text-text" : ""
       }`}
     >
-      {value === null ? <Unavailable capability={capability} mode="chain" compact /> : render(value)}
+      {value === null ? <Unavailable capability={capability} mode={mode} compact /> : render(value)}
     </td>
   );
 }

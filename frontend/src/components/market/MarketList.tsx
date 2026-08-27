@@ -13,6 +13,7 @@ import {Skeleton, SkeletonRows} from "@/components/primitives/Skeleton";
 import {Unavailable} from "@/components/primitives/Unavailable";
 import {useCandlesByMarket, useTradesByMarket} from "@/hooks/useMarketRows";
 import {useMarkets} from "@/hooks/useMarkets";
+import {useDataSource} from "@/hooks/provider";
 import {probabilityWad} from "@/lib/dpm-view";
 import {delta24h, statusTone, volumeOf} from "@/lib/market-rows";
 import {
@@ -21,6 +22,7 @@ import {
   formatProbability,
   formatProbabilityDelta,
   formatTimestamp,
+  shortAddress,
 } from "@/lib/format";
 import type {Candle, CollateralInfo, MarketSummary, Query, Trade} from "@/lib/data/types";
 
@@ -258,18 +260,37 @@ function MarketRow({
   trades: Query<Trade[]> | undefined;
   candles: Query<Candle[]> | undefined;
 }) {
+  // The live mode, not a guess. A cell that names the wrong mode is worse than
+  // one that names none: it sends a reader to a source that would not help.
+  const {mode} = useDataSource();
   const decimals = market.collateral.decimals;
   return (
     <tr className="group border-t border-border hover:bg-bg-sunken/50">
       <th scope="row" className="max-w-[380px] px-4 py-4 text-left font-normal">
+        {/*
+          A null question is not a market without a question: only `specRoot` is
+          on chain, and the text it commits to lives in 0G Storage. Rendering it
+          raw left this cell blank, which is the same lie as a zero — it read as
+          a market with no name. The address is the identity that IS known, so
+          the row stays usable and the explanation sits beneath it.
+        */}
         <Link href={`/market/${market.address}`} className="block">
-          <span className="text-[13px] leading-snug font-semibold text-text group-hover:text-accent">
-            {market.question}
+          <span
+            className={`leading-snug font-semibold text-text group-hover:text-accent ${
+              market.question === null ? "font-mono text-[12px]" : "text-[13px]"
+            }`}
+          >
+            {market.question ?? shortAddress(market.address)}
           </span>
           <span className="mt-1 block font-mono text-[10px] text-text-faint">
             {market.category}
           </span>
         </Link>
+        {market.question === null && (
+          <span className="mt-1.5 inline-block">
+            <Unavailable capability="MARKET_SPEC_BLOB" mode={mode} compact />
+          </span>
+        )}
       </th>
       <td className="px-3 py-4 text-right font-mono font-medium">
         {formatProbability(probabilityWad(market.q, 1))}

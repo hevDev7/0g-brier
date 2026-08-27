@@ -1,6 +1,7 @@
 import type {Metadata} from "next";
 import {MarketView} from "./MarketView";
 import {getDataSource} from "@/lib/data";
+import {shortAddress} from "@/lib/format";
 
 /**
  * The tab should name the market, not just the product. A market that cannot be
@@ -15,7 +16,9 @@ export async function generateMetadata({
   const {address} = await params;
   try {
     const market = await getDataSource().getMarket(address as `0x${string}`);
-    return {title: market.question};
+    // A null question means this mode cannot read the 0G Storage blob. The tab
+    // still needs an identity, and the address is the one that is known.
+    return {title: market.question ?? shortAddress(address)};
   } catch {
     return {title: "Market"};
   }

@@ -86,6 +86,21 @@ describe("Leaderboard", () => {
     expect(within(table).getAllByTestId("lb-deployed")[0]).not.toHaveTextContent(/not available/i);
   });
 
+  /**
+   * The cell must name the mode the app is ACTUALLY in. These cells hard-coded
+   * "chain", so running on `mock` with a capability omitted sent a reader
+   * looking for a fix in a source that had nothing to do with it.
+   */
+  it("names the mode it is really running in, not a hard-coded one", async () => {
+    renderBoard(["COST_BASIS"]);
+    const table = await screen.findByRole("table");
+    const cell = within(table).getAllByTestId("lb-unrealised")[0]!;
+    await waitFor(() => expect(cell).toHaveTextContent(/not available/i));
+    const status = within(cell).getByRole("status");
+    expect(status.getAttribute("title")).toMatch(/in mock mode/i);
+    expect(status.getAttribute("title")).not.toMatch(/in chain mode/i);
+  });
+
   it("says nothing at all rather than an empty ranking when no agent can be seen", async () => {
     renderBoard(["AGENT_POSITIONS", "TRADE_TAPE"]);
     expect(await screen.findByText(/agent positions not available/i)).toBeInTheDocument();

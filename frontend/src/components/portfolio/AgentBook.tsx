@@ -8,11 +8,12 @@ import {ErrorNote} from "@/components/primitives/QueryStates";
 import {SkeletonRows} from "@/components/primitives/Skeleton";
 import {Unavailable} from "@/components/primitives/Unavailable";
 import {usePositionsByMarket} from "@/hooks/useMarketRows";
+import {useDataSource} from "@/hooks/provider";
 import {useMarkets} from "@/hooks/useMarkets";
 import {agentBook, holdingStatus, type BookRow} from "@/lib/agent-book";
 import {collect} from "@/lib/collect";
 import {statusTone} from "@/lib/market-rows";
-import {formatCollateral, formatPricePerShare, formatShares} from "@/lib/format";
+import {formatCollateral, formatPricePerShare, formatShares, shortAddress} from "@/lib/format";
 import type {MarketSummary} from "@/lib/data/types";
 
 /**
@@ -134,6 +135,9 @@ function Book({agent, markets}: {agent: string; markets: MarketSummary[]}): Reac
 }
 
 function BookRowCells({row}: {row: BookRow}) {
+  // See Leaderboard: naming a mode the app is not in points the reader at the
+  // wrong source.
+  const {mode} = useDataSource();
   const {market} = row;
   const decimals = market.collateral.decimals;
   return (
@@ -141,9 +145,13 @@ function BookRowCells({row}: {row: BookRow}) {
       <th scope="row" className="max-w-[320px] px-4 py-3 text-left font-normal">
         <Link
           href={`/market/${market.address}`}
-          className="text-[12px] leading-snug font-semibold text-text group-hover:text-accent"
+          className={`leading-snug font-semibold text-text group-hover:text-accent ${
+            market.question === null ? "font-mono text-[11px]" : "text-[12px]"
+          }`}
         >
-          {market.question}
+          {/* See MarketList: a null question means this mode cannot read the
+              0G Storage blob, not that the market is nameless. */}
+          {market.question ?? shortAddress(market.address)}
         </Link>
       </th>
       <td
@@ -156,7 +164,7 @@ function BookRowCells({row}: {row: BookRow}) {
       <td className="px-3 py-3 text-right font-mono">{formatShares(row.shares)}</td>
       <td data-testid="book-entry" className="px-3 py-3 text-right font-mono">
         {row.entryPriceWad === null ? (
-          <Unavailable capability="COST_BASIS" mode="chain" compact />
+          <Unavailable capability="COST_BASIS" mode={mode} compact />
         ) : (
           formatPricePerShare(row.entryPriceWad)
         )}
@@ -169,7 +177,7 @@ function BookRowCells({row}: {row: BookRow}) {
       </td>
       <td data-testid="book-pnl" className="px-3 py-3 text-right font-mono">
         {row.pnlTokens === null ? (
-          <Unavailable capability="COST_BASIS" mode="chain" compact />
+          <Unavailable capability="COST_BASIS" mode={mode} compact />
         ) : (
           <span className={row.pnlTokens > 0n ? "text-pos" : row.pnlTokens < 0n ? "text-neg" : ""}>
             {row.pnlTokens > 0n ? "+" : ""}
@@ -185,6 +193,7 @@ function BookRowCells({row}: {row: BookRow}) {
 }
 
 function Totals({rows}: {rows: BookRow[]}) {
+  const {mode} = useDataSource();
   const collaterals = new Set(
     rows.map((r) => `${r.market.collateral.symbol}:${r.market.collateral.decimals}`),
   );
@@ -219,7 +228,7 @@ function Totals({rows}: {rows: BookRow[]}) {
           ) : rows.length === 0 ? (
             <span className="text-[13px] text-text-muted">no positions</span>
           ) : (
-            <Unavailable capability="COST_BASIS" mode="chain" compact />
+            <Unavailable capability="COST_BASIS" mode={mode} compact />
           )
         }
       />
