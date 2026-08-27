@@ -1,14 +1,29 @@
 export type Outcome = 0 | 1;
 export type DataMode = "mock" | "chain" | "indexer";
 
-export type Capability =
-  | "LIST_MARKETS"
-  | "MARKET_STATE"
-  | "PRICE_HISTORY"
-  | "TRADE_TAPE"
-  | "AGENT_POSITIONS"
-  | "COST_BASIS"
-  | "SETTLEMENT_RECEIPT";
+/**
+ * The canonical list, and the type is derived FROM it rather than declared
+ * alongside it.
+ *
+ * A hand-written union plus a hand-written array is two places to add a member
+ * and one place to forget: `MockSource`'s array was not exhaustiveness-checked,
+ * so adding `MARKET_SPEC_BLOB` to the union left the mock silently claiming it
+ * could not answer something it answers from a fixture. `Record<Capability, T>`
+ * still fails to compile when a member is missing, so the label and provider
+ * tables keep their guarantee.
+ */
+export const CAPABILITIES = [
+  "LIST_MARKETS",
+  "MARKET_STATE",
+  "PRICE_HISTORY",
+  "TRADE_TAPE",
+  "AGENT_POSITIONS",
+  "COST_BASIS",
+  "MARKET_SPEC_BLOB",
+  "SETTLEMENT_RECEIPT",
+] as const;
+
+export type Capability = (typeof CAPABILITIES)[number];
 
 export class CapabilityUnavailableError extends Error {
   constructor(
@@ -46,7 +61,17 @@ export interface CollateralInfo {
 
 export interface MarketSummary {
   address: `0x${string}`;
-  question: string;
+  /**
+   * The question, from the MarketSpec on 0G Storage.
+   *
+   * `null` means the current mode CANNOT read it — not that the market has no
+   * question. Only `specRoot` is on chain; the text it commits to lives in 0G
+   * Storage, and that integration does not exist yet (`MARKET_SPEC_BLOB`). A
+   * `chain`-mode consumer must render `<Unavailable capability="MARKET_SPEC_BLOB">`
+   * rather than an empty heading, for the same reason it must not render 0 for an
+   * unknown number.
+   */
+  question: string | null;
   category: string;
   tier: Tier;
   status: MarketStatus;
@@ -55,12 +80,16 @@ export interface MarketSummary {
   /** Always equal to dpm.costUp(q). Never typed by hand. */
   poolWad: bigint;
   /**
-   * Creation time, unix seconds. It lives on the SUMMARY rather than only on
-   * the detail because the market list sorts by it, and a list may not reach
-   * for a field the type it receives does not carry. It costs nothing to
-   * provide: it is MARKET_STATE, answerable in every mode.
+   * Creation time, unix seconds, or `null` when the mode cannot know it.
+   *
+   * The earlier comment here claimed this was MARKET_STATE and "answerable in
+   * every mode". It is not: `Market` has no `createdAt` in storage at all — the
+   * time a market was created exists only in the `MarketCreated` event, which
+   * means an indexer. `chain` mode returns null and relies on
+   * `MarketFactory.marketAt` being append-only, so creation ORDER survives even
+   * where the timestamp does not.
    */
-  createdAt: number;
+  createdAt: number | null;
   tradingEnd: number;
   collateral: CollateralInfo;
 }
@@ -70,7 +99,9 @@ export interface MarketDetail extends MarketSummary {
   settlementDeadline: number;
   creator: `0x${string}`;
   specRoot: `0x${string}`;
-  rules: string;
+  /** The resolution rules, from the MarketSpec on 0G Storage. `null` for the same
+   *  reason as `question`: the root is on chain, the text is not. */
+  rules: string | null;
 }
 
 export interface Trade {
@@ -148,5 +179,20 @@ export interface DataSource {
   getTrades(address: `0x${string}`, limit: number): Promise<Trade[]>;
   getCandles(address: `0x${string}`, interval: Interval): Promise<Candle[]>;
   getPositions(address: `0x${string}`): Promise<Position[]>;
+  /**
+   * An agent's FREE collateral — what it has not put into a market — in that
+   * token's smallest unit.
+   *
+   * It takes the collateral address because a balance is a property of a token,
+   * not of the system: two markets may settle in different tokens, and summing
+   * across them would produce a number meaning nothing. On chain this is a plain
+   * `IERC20.balanceOf` view call, which is why AGENT_BALANCE is answerable in
+   * every mode rather than only where an indexer exists.
+   *
+   * Without it "account value" cannot be told the truth: positions alone are
+   * what an agent has DEPLOYED, and calling that its account silently redefines
+   * the term.
+   */
+  getBalance(agent: `0x${string}`, collateral: `0x${string}`): Promise<bigint>;
   getReceipt(address: `0x${string}`): Promise<SettlementReceipt>;
 }

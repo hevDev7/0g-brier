@@ -82,7 +82,13 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
           (!params.category || market.category === params.category) &&
           (!params.status || market.status === params.status) &&
           (!params.tier || market.tier === params.tier) &&
-          (!needle || market.question.toLowerCase().includes(needle)),
+          // The address is searchable too, and not only as a convenience: in a mode
+          // that cannot read the MarketSpec blob the question is null, and a filter
+          // that matched on the question alone would make those markets unreachable
+          // through search rather than merely unlabelled.
+          (!needle ||
+            (market.question ?? "").toLowerCase().includes(needle) ||
+            market.address.toLowerCase().includes(needle)),
       )
       .sort((a, b) => compareRows(a.market, b.market, params.sort, volumes));
   }, [markets, params.category, params.status, params.tier, params.sort, search, volumes]);
@@ -508,7 +514,17 @@ function compareRows(
   volumes: Map<string, bigint | null>,
 ): number {
   if (sort === "closing") return a.tradingEnd - b.tradingEnd;
-  if (sort === "newest") return b.createdAt - a.createdAt;
+  if (sort === "newest") {
+    // A market whose creation time is unknown sorts after every market that has
+    // one, and unknowns keep their incoming order relative to each other. That
+    // order is not arbitrary: `MarketFactory.marketAt` is an append-only array, so
+    // the source can preserve creation ORDER even where it cannot supply a
+    // timestamp.
+    if (a.createdAt === null && b.createdAt === null) return 0;
+    if (a.createdAt === null) return 1;
+    if (b.createdAt === null) return -1;
+    return b.createdAt - a.createdAt;
+  }
   const va = volumes.get(a.address) ?? null;
   const vb = volumes.get(b.address) ?? null;
   if (va === null && vb === null) return 0;

@@ -14,8 +14,12 @@ function step(label: string): HTMLElement {
 
 describe("Lifecycle", () => {
   it("shows the complete lifecycle timeline", () => {
-    render(<Lifecycle market={open} />);
-    for (const at of [open.createdAt, open.tradingEnd, open.settlementDeadline]) {
+    render(<Lifecycle market={open} mode="mock" />);
+    // `createdAt` is nullable now — a mode without an indexer cannot know it. The
+    // fixture supplies one, so the assertion still covers all three, but it says so
+    // rather than assuming.
+    expect(open.createdAt).not.toBeNull();
+    for (const at of [open.createdAt!, open.tradingEnd, open.settlementDeadline]) {
       expect(screen.getByText(formatTimestamp(at))).toBeInTheDocument();
     }
   });
@@ -26,20 +30,20 @@ describe("Lifecycle", () => {
    * reader to subtract two dates, is the whole reason this panel exists.
    */
   it("names the dispute window as a duration", () => {
-    render(<Lifecycle market={open} />);
+    render(<Lifecycle market={open} mode="mock" />);
     // 76h - 52h = 24h after the fixture clock.
     expect(screen.getByText(/dispute window/i)).toHaveTextContent("1d 0h");
   });
 
   it("an open market has not reached the later steps", () => {
-    render(<Lifecycle market={open} />);
+    render(<Lifecycle market={open} mode="mock" />);
     expect(within(step("Created")).getByText(/reached/)).toHaveTextContent("— reached");
     expect(step("Trading closes")).toHaveTextContent("not yet reached");
     expect(step("Settlement deadline")).toHaveTextContent("not yet reached");
   });
 
   it("a settled market has reached every step", () => {
-    render(<Lifecycle market={settled} />);
+    render(<Lifecycle market={settled} mode="mock" />);
     for (const label of ["Created", "Trading closes", "Settlement deadline"]) {
       expect(step(label)).not.toHaveTextContent("not yet reached");
     }
@@ -53,14 +57,14 @@ describe("Lifecycle", () => {
    */
   it("reads progress from status, not from the clock", () => {
     // tradingEnd is far in the PAST, yet the chain still reports Open.
-    const stale: MarketDetail = {...open, tradingEnd: open.createdAt + 1, status: "Open"};
-    render(<Lifecycle market={stale} />);
+    const stale: MarketDetail = {...open, tradingEnd: open.createdAt! + 1, status: "Open"};
+    render(<Lifecycle market={stale} mode="mock" />);
     expect(step("Trading closes")).toHaveTextContent("not yet reached");
   });
 
   it("a closed-but-unsettled market shows exactly one step outstanding", () => {
     const closed: MarketDetail = {...open, status: "Closed"};
-    render(<Lifecycle market={closed} />);
+    render(<Lifecycle market={closed} mode="mock" />);
     expect(step("Trading closes")).not.toHaveTextContent("not yet reached");
     expect(step("Settlement deadline")).toHaveTextContent("not yet reached");
   });

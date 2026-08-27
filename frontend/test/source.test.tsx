@@ -4,6 +4,7 @@ import {describe, expect, it} from "vitest";
 import {ObservationLegend} from "@/components/source/ObservationLegend";
 import {SourceNotes} from "@/components/source/SourceNotes";
 import {AppProviders} from "@/hooks/provider";
+import {CAPABILITY_LABELS} from "@/components/primitives/Unavailable";
 import {MockSource} from "@/lib/data/mock";
 
 function renderNotes(source = new MockSource()) {
@@ -41,7 +42,11 @@ describe("SourceNotes", () => {
     renderNotes(new MockSource({omit: ["TRADE_TAPE", "COST_BASIS"]}));
     await user.click(screen.getByTestId("source-notes-toggle"));
     const items = within(screen.getByTestId("source-notes")).getAllByRole("listitem");
-    expect(items).toHaveLength(7);
+    // Counted from CAPABILITY_LABELS rather than written as a literal. The literal
+    // was 7 and became wrong the moment MARKET_SPEC_BLOB joined the union — which
+    // is the failure mode this test exists to catch in the COMPONENT, so it should
+    // not have been reproduced in the test itself.
+    expect(items).toHaveLength(Object.keys(CAPABILITY_LABELS).length);
 
     const missing = items.filter((li) => li.textContent?.includes("not available"));
     expect(missing.map((li) => li.textContent?.replace("not available", "").trim())).toEqual([

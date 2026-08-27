@@ -1,7 +1,8 @@
 import {Check, Clock} from "lucide-react";
 import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {formatCountdown, formatTimestamp} from "@/lib/format";
-import type {MarketDetail, MarketStatus} from "@/lib/data/types";
+import {Unavailable} from "@/components/primitives/Unavailable";
+import type {DataMode, MarketDetail, MarketStatus} from "@/lib/data/types";
 
 /**
  * Which stage a market has actually reached is read from its STATUS, never from
@@ -25,9 +26,9 @@ function reached(status: MarketStatus): {closed: boolean; settled: boolean} {
   }
 }
 
-export function Lifecycle({market}: {market: MarketDetail}) {
+export function Lifecycle({market, mode}: {market: MarketDetail; mode: DataMode}) {
   const {closed, settled} = reached(market.status);
-  const steps = [
+  const steps: {label: string; at: number | null; done: boolean}[] = [
     {label: "Created", at: market.createdAt, done: true},
     {label: "Trading closes", at: market.tradingEnd, done: closed},
     {label: "Settlement deadline", at: market.settlementDeadline, done: settled},
@@ -69,7 +70,15 @@ export function Lifecycle({market}: {market: MarketDetail}) {
                 <span className="sr-only">{step.done ? " — reached" : " — not yet reached"}</span>
               </span>
               <span className="mt-0.5 block font-mono text-[11px] text-text-muted">
-                {formatTimestamp(step.at)}
+                {/* `createdAt` is not in Market's storage — it exists only in the
+                    MarketCreated event, so a mode without an indexer genuinely does
+                    not have it. The step still renders, because the market WAS
+                    created; only its timestamp is unknown. */}
+                {step.at === null ? (
+                  <Unavailable capability="MARKET_STATE" mode={mode} compact />
+                ) : (
+                  formatTimestamp(step.at)
+                )}
               </span>
             </span>
           </li>

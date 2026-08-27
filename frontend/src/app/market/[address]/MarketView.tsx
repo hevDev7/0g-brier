@@ -94,7 +94,11 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
 
       <PageHeading
         eyebrow={`${market.category} / ${market.tier}`}
-        title={market.question}
+        // The question lives in a 0G Storage blob keyed by `specRoot`; only the root
+        // is on chain. A heading has to say something, so it says what is true rather
+        // than rendering an empty h1 — and the rules section below carries the full
+        // `<Unavailable>` explanation.
+        title={market.question ?? "Question not readable in this mode"}
         description="Inspect the price, its history, who holds what, and the evidence behind the settlement. Every trade shown here was executed by an agent through the SDK."
         action={
           <div className="flex flex-wrap items-center gap-2">
@@ -149,7 +153,7 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
 
         <aside className="flex min-w-0 flex-col gap-5 xl:sticky xl:top-[84px] xl:self-start">
           <MarketStats market={market} trades={trades} />
-          <Lifecycle market={market} />
+          <Lifecycle market={market} mode={source.mode} />
           {market.status === "Settled" && renderSettlement(receipt, market)}
         </aside>
       </div>

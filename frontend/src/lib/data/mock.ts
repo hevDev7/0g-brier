@@ -1,5 +1,6 @@
 import {WAD, dpm, scaleFor, toWad} from "@0g-delphi/protocol";
 import {
+  CAPABILITIES,
   CapabilityUnavailableError,
   type Candle,
   type Capability,
@@ -15,10 +16,9 @@ import {
   type Trade,
 } from "./types";
 
-const ALL_CAPABILITIES: Capability[] = [
-  "LIST_MARKETS", "MARKET_STATE", "PRICE_HISTORY", "TRADE_TAPE",
-  "AGENT_POSITIONS", "COST_BASIS", "SETTLEMENT_RECEIPT",
-];
+// Every capability, taken from the one canonical list — the fixtures answer all
+// of them, including the MarketSpec text that a real chain keeps in 0G Storage.
+const ALL_CAPABILITIES: readonly Capability[] = CAPABILITIES;
 
 const MUSDC: CollateralInfo = {
   address: "0x9AA0C7DDC6D72BEEb77E4e497b6fbfa4D81A0153",
@@ -200,6 +200,27 @@ export function fixturePositions(m: MarketSummary, trades: Trade[]): Position[] 
   return out.sort((a, b) => (a.shares === b.shares ? 0 : b.shares > a.shares ? 1 : -1));
 }
 
+/**
+ * A deterministic stand-in for an agent's free collateral.
+ *
+ * Derived from the address rather than listed per agent, so a new fixture agent
+ * gets a balance without anyone editing a table, and so the value is stable
+ * across runs — a balance that moved between reloads would make the
+ * leaderboard's ordering meaningless and its rank column a lie.
+ *
+ * The spread is deliberate: identical balances would hide whether the ordering
+ * is doing anything at all.
+ */
+export function fixtureBalance(agent: string, decimals: number): bigint {
+  let acc = 0n;
+  for (const ch of agent.slice(2).toLowerCase()) {
+    const digit = parseInt(ch, 16);
+    acc = (acc * 31n + BigInt(Number.isNaN(digit) ? 0 : digit)) % 1_000_003n;
+  }
+  const units = 250n + (acc * 4_750n) / 1_000_002n;
+  return units * 10n ** BigInt(decimals);
+}
+
 const FIXTURE_RECEIPT: SettlementReceipt = {
   outcome: 1,
   votes: [
@@ -326,6 +347,17 @@ export class MockSource implements DataSource {
       return positions.map((p) => ({...p, entryPriceWad: null}));
     }
     return positions;
+  }
+
+  async getBalance(agent: `0x${string}`, collateral: `0x${string}`): Promise<bigint> {
+    this.require("AGENT_BALANCE");
+    const known = FIXTURE_MARKETS.find(
+      (m) => m.collateral.address.toLowerCase() === collateral.toLowerCase(),
+    );
+    // An unknown token is not a zero balance: the two read identically on screen
+    // and mean completely different things.
+    if (known === undefined) throw new Error(`Collateral ${collateral} not found`);
+    return fixtureBalance(agent, known.collateral.decimals);
   }
 
   async getReceipt(address: `0x${string}`): Promise<SettlementReceipt> {

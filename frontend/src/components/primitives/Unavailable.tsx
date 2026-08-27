@@ -12,7 +12,9 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   PRICE_HISTORY: "Price history",
   TRADE_TAPE: "Trade history",
   AGENT_POSITIONS: "Agent positions",
+  AGENT_BALANCE: "Free collateral",
   COST_BASIS: "Entry price",
+  MARKET_SPEC_BLOB: "Question and rules",
   SETTLEMENT_RECEIPT: "Resolution evidence",
 };
 
@@ -22,10 +24,15 @@ const PROVIDED_BY: Record<Capability, DataMode> = {
   MARKET_STATE: "chain",
   PRICE_HISTORY: "indexer",
   TRADE_TAPE: "indexer",
-  // AGENT_POSITIONS can be read straight from OutcomeShares on chain — unlike
-  // COST_BASIS and SETTLEMENT_RECEIPT, which need event history.
-  AGENT_POSITIONS: "chain",
+  // AGENT_POSITIONS was listed as `chain` here, and in the spec's §2 table, on the
+  // grounds that `OutcomeShares.balanceOfOutcome` is a plain view. That holds for
+  // ONE KNOWN account — but `DataSource.getPositions(market)` returns every agent's
+  // position, and enumerating holders is precisely what a view cannot do. The set
+  // of holders lives in transfer events, so this needs an indexer like the rest.
+  AGENT_POSITIONS: "indexer",
   COST_BASIS: "indexer",
+  // Only `specRoot` is on chain; the text it commits to is a 0G Storage blob.
+  MARKET_SPEC_BLOB: "indexer",
   SETTLEMENT_RECEIPT: "indexer",
 };
 
