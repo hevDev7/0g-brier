@@ -222,7 +222,7 @@ Draft ──approve──▶  Open ──tradingEnd──▶ Closed ──≥k r
 |---|---|---|---|
 | `DPMMath` | cost/price/probability, semua wad, pure | library | — |
 | `Market` | `q`, `poolBalance`, buy/sell/likuiditas/exit, siklus hidup | clone EIP-1167 | **Tidak** (memegang dana) |
-| `OutcomeShares` | ERC-1155 posisi tradable, `id = marketId<<8 \| outcome` | singleton | Tidak |
+| `OutcomeShares` | ERC-1155 posisi tradable, `id = uint160(market)<<8 \| outcome` — market hanya bisa menyentuh id miliknya sendiri | singleton | Tidak |
 | `MarketFactory` | clone + registry + versi implementasi + parameter default | — | UUPS + timelock |
 | `ResolutionModule` | komite, commit–reveal, threshold, dispute, slashing | — | UUPS + timelock |
 | `AgentRegistry` | identitas agent (jalur ERC-7857), operator key, stake, reputasi | ERC-721 → 7857 | UUPS + timelock |
@@ -295,7 +295,10 @@ interface IMarket {
     // ── likuiditas proporsional (netral terhadap probabilitas) ──────────────
     function addLiquidity(uint256 tokensIn, uint256 minSharesOut, address to)
         external returns (uint256[2] memory seedSharesMinted);
-    function removeLiquidity(uint256[2] calldata seedShares, uint256 minTokensOut, address to)
+    /// @param lambdaWad fraksi wad dari q saat ini yang ditarik; penarikan[i] = q[i]*lambdaWad/WAD.
+    ///        Proporsional ⇒ netral terhadap probabilitas. Penarikan tak-proporsional dilarang
+    ///        karena setara perdagangan berarah tanpa fee.
+    function removeLiquidity(uint256 lambdaWad, uint256 minTokensOut, address to)
         external returns (uint256 tokensOut);   // hanya bila Status == Open
 
     // ── siklus hidup ────────────────────────────────────────────────────────
