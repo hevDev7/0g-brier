@@ -43,10 +43,17 @@ This is the table that drives the entire design. The three modes are **not** equ
 | `SETTLEMENT_RECEIPT` | ✓ | ✗ | ✓ | 0G Storage + `resolutions` |
 
 > **The authority for this list is `frontend/src/lib/data/types.ts`, not this table.** As shipped,
-> `Capability` holds seven members: `LIST_MARKETS`, `MARKET_STATE`, `PRICE_HISTORY`,
-> `TRADE_TAPE`, `AGENT_POSITIONS`, `COST_BASIS`, `SETTLEMENT_RECEIPT`. `POSITIONS_CURRENT` was
-> folded into `AGENT_POSITIONS`; `MARKET_SPEC_BLOB` awaits the 0G Storage integration and has no
-> consumer yet; `QUOTE` and `EXECUTE` belong to `agent-kit` and will never appear here.
+> `CAPABILITIES` holds nine members: `LIST_MARKETS`, `MARKET_STATE`, `PRICE_HISTORY`,
+> `TRADE_TAPE`, `AGENT_POSITIONS`, `AGENT_BALANCE`, `COST_BASIS`, `MARKET_SPEC_BLOB`,
+> `SETTLEMENT_RECEIPT`. `POSITIONS_CURRENT` was folded into `AGENT_POSITIONS`; `QUOTE` and
+> `EXECUTE` belong to `agent-kit` and will never appear here.
+>
+> Two of them draw a line worth keeping straight. `AGENT_BALANCE` is `chain`-tier because
+> `IERC20.balanceOf(agent)` is a view call. `AGENT_POSITIONS` is NOT, despite
+> `OutcomeShares.balanceOfOutcome` also being a view: `getPositions(market)` returns EVERY
+> agent's position, and enumerating holders is precisely what a view cannot do — the holder set
+> lives in transfer events. One known agent's numbers need no indexer; discovering which agents
+> exist does.
 
 **There is no `MARKET_STATS` capability, and that is deliberate.** The stats panel combines fields whose sources differ in availability: fee, depth, and the timeline come from `MARKET_STATE` (always present), while volume comes from `TRADE_TAPE` (empty in `chain` mode). Making it a single capability would turn the whole panel `unavailable` merely because volume is unknown — throwing away six facts we have for the sake of one we do not. Availability is evaluated **per row**, not per panel.
 
@@ -249,6 +256,37 @@ It is O(markets) requests, accepted for v1 under risk R1; `IndexerSource` collap
 
 One unreadable market makes the whole book `unavailable` rather than smaller — a partial book
 would understate exposure while looking complete.
+
+### 4.4 `/leaderboard` — agent performance
+
+Added 2026-08-28, outside the v1 route set. Ranks every agent seen in the indexed markets.
+
+| Column | Source | Unknown when |
+|---|---|---|
+| Trades | `TRADE_TAPE` | no tape |
+| Volume | `TRADE_TAPE`, Σ\|tokens\| | no tape |
+| Deployed | `AGENT_POSITIONS` × `MARKET_STATE`, at `dpm.price` | no positions |
+| Free | `AGENT_BALANCE` | no balance |
+| Account value | Free + Deployed | either half unknown |
+| Unrealised | `COST_BASIS` | no cost basis |
+
+**Account value needed a new capability rather than a new label.** `DataSource` could read what
+an agent had DEPLOYED but not the collateral it still held, and calling the first its account
+value would have redefined the term silently. `getBalance(agent, collateral)` takes the token
+address because a balance is a property of a token, not of the system: two markets may settle in
+different tokens, and summing across them yields a number meaning nothing.
+
+**Unrealised covers open positions only**, and the page says so. Profit already taken by selling
+needs sold shares matched to what they cost — an accounting method over a per-agent trade
+history, which arrives with the indexer. Naming the column "PnL" without that qualification
+would overstate what it knows.
+
+**The agent set is the union of holders and traders.** Holders alone silently drops an agent that
+closed everything out, and a ranking that omits whoever exited is not a ranking.
+
+**An unknown figure ranks last, never as zero.** On a ranked table a zero is worse than
+elsewhere: it reads as a claim about the agent rather than about the source, and would sort that
+agent to the bottom as though it were broke.
 
 ## 5. Correctness rules that bind the UI
 
