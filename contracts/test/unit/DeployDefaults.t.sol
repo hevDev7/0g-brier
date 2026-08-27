@@ -39,7 +39,7 @@ contract DeployDefaultsTest is Test {
         assertTrue(config.allowedCollateral(address(usdc)));
     }
 
-    /// @dev Plafon fee adalah janji ke pengguna, bukan preferensi. Kunci membuktikannya.
+    /// @dev The fee ceiling is a promise to users, not a preference. The lock proves it.
     function test_feeCeilingIsThreePercentAndLocked() public {
         vm.expectRevert(
             abi.encodeWithSelector(ConfigRegistry.ParamOutOfBounds.selector, ConfigKeys.FEE_BPS, 301, 0, 300)

@@ -37,9 +37,9 @@ contract MarketLifecycleTest is Fixtures {
         vm.stopPrank();
     }
 
-    /// @dev Jalur transisi murni resolusi, tanpa efek payout: Closed → Proposed → Disputed
-    ///      → Proposed. Status diperiksa setelah TIAP langkah, dan pembatas pemanggil
-    ///      diperiksa untuk `markProposed` maupun `markDisputed`.
+    /// @dev The purely resolution-side transition path, with no payout effects: Closed →
+    ///      Proposed → Disputed → Proposed. The status is checked after EVERY step, and the
+    ///      caller restriction is checked for both `markProposed` and `markDisputed`.
     function test_proposedDisputedRoundTrip() public {
         vm.warp(m.tradingEnd());
         m.close();
@@ -65,9 +65,9 @@ contract MarketLifecycleTest is Fixtures {
         assertEq(uint8(m.status()), uint8(IMarket.Status.Proposed));
     }
 
-    /// @dev `markDisputed` hanya sah dari status `Proposed`. Diperiksa dari tiga status
-    ///      lain: Open (belum pernah ditutup), Closed (ditutup tapi belum diusulkan), dan
-    ///      Failed (status terminal, dicapai lewat `fail()` tanpa perlu market kedua).
+    /// @dev `markDisputed` is valid only from status `Proposed`. Checked from three other
+    ///      statuses: Open (never closed), Closed (closed but not yet proposed), and Failed
+    ///      (a terminal status, reached via `fail()` without needing a second market).
     function test_markDisputedRejectsWrongStatusAndCaller() public {
         vm.prank(resolutionModule);
         vm.expectRevert(Market.BadTransition.selector);
@@ -75,7 +75,7 @@ contract MarketLifecycleTest is Fixtures {
 
         vm.prank(alice);
         vm.expectRevert(Market.NotResolutionModule.selector);
-        m.markDisputed(); // pembatas pemanggil, terlepas dari status
+        m.markDisputed(); // the caller restriction, independent of status
 
         vm.warp(m.tradingEnd());
         m.close();
@@ -98,8 +98,8 @@ contract MarketLifecycleTest is Fixtures {
         m.settle(1);
     }
 
-    /// @dev Payout dipotret sekali saat settle. Kalau tidak, penebus pertama dan
-    ///      terakhir akan menerima kurs berbeda.
+    /// @dev The payout is snapshotted once at settle. Otherwise the first and the last
+    ///      redeemer would receive different rates.
     function test_settleSnapshotsPayoutRate() public {
         vm.warp(m.tradingEnd());
         m.close();
@@ -114,7 +114,7 @@ contract MarketLifecycleTest is Fixtures {
         assertEq(m.payoutPerShareWad(), Math.mulDiv(DPMMath.WAD, pool, q[1]));
     }
 
-    /// @dev Konsekuensi lantai seed: pembagi tidak pernah nol.
+    /// @dev A consequence of the seed floor: the divisor is never zero.
     function test_winningSupplyIsNeverZero() public {
         vm.warp(m.tradingEnd());
         m.close();
@@ -135,7 +135,7 @@ contract MarketLifecycleTest is Fixtures {
 
     function test_anyoneCanFailAfterSettlementDeadline() public {
         vm.expectRevert(Market.BadTransition.selector);
-        m.fail(); // masih Open dan belum lewat deadline
+        m.fail(); // still Open, and the deadline has not passed
         vm.warp(m.settlementDeadline());
         vm.prank(bob);
         m.fail();

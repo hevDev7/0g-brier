@@ -48,8 +48,8 @@ contract ConfigRegistryTest is Test {
         vm.stopPrank();
     }
 
-    /// @dev Sifat terpenting kontrak ini: batas tidak bisa dilonggarkan setelah dipasang.
-    ///      Tanpa ini "batas keras" hanyalah saran, karena pemilik bisa menaikkannya.
+    /// @dev The most important property of this contract: bounds cannot be loosened once set.
+    ///      Without it a "hard bound" is merely advice, because the owner could raise it.
     function test_boundsAreLockedForever() public {
         vm.startPrank(owner);
         config.setBounds(ConfigKeys.FEE_BPS, 0, 300);
@@ -58,8 +58,8 @@ contract ConfigRegistryTest is Test {
         vm.stopPrank();
     }
 
-    /// @dev Batas terbalik (lo > hi) tidak boleh mengunci kunci secara permanen dengan
-    ///      rentang kosong — panggilan yang ditolak tidak boleh menghabiskan kunci sekali-pakai.
+    /// @dev Inverted bounds (lo > hi) must not lock a key permanently into an empty range —
+    ///      a rejected call must not consume the one-shot key.
     function test_setBoundsRejectsInvertedRangeAndLeavesKeyUnlocked() public {
         vm.startPrank(owner);
         vm.expectRevert(abi.encodeWithSelector(ConfigRegistry.BadBounds.selector, 300, 0));

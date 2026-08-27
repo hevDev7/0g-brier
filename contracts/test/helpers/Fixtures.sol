@@ -61,7 +61,7 @@ abstract contract Fixtures is Test {
         config.setAddress(ConfigKeys.OUTCOME_SHARES, address(shares));
 
         marketImpl = new Market();
-        vm.warp(1_800_000_000); // stempel waktu yang stabil dan jauh dari nol
+        vm.warp(1_800_000_000); // a stable timestamp, far away from zero
     }
 
     function _params() internal view returns (IMarket.Params memory p) {
@@ -75,8 +75,8 @@ abstract contract Fixtures is Test {
         p.category = bytes32("crypto");
     }
 
-    /// @dev Mencerminkan persis apa yang akan dilakukan MarketFactory di Task 17:
-    ///      clone → transfer collateral MASUK → initialize.
+    /// @dev Mirrors exactly what MarketFactory does in Task 17:
+    ///      clone → transfer the collateral IN → initialize.
     function _newMarket(uint256 seedTokens) internal returns (Market m) {
         m = Market(Clones.clone(address(marketImpl)));
         registry.set(address(m), true);
@@ -85,32 +85,32 @@ abstract contract Fixtures is Test {
         m.initialize(address(config), address(shares), _params(), seedTokens, DEPOSIT);
     }
 
-    /// @dev `OutcomeShares.setRegistry` adalah kunci sekali-pakai dan `_deployBase` sudah
-    ///      memakainya untuk StubMarketRegistry — instance itu TIDAK akan pernah bisa
-    ///      dialihkan ke MarketFactory sungguhan (`RegistryAlreadySet`). Uji yang memakai
-    ///      factory sungguhan karena itu memulai dari instance yang bersih.
+    /// @dev `OutcomeShares.setRegistry` is a one-shot key and `_deployBase` has already spent
+    ///      it on StubMarketRegistry — that instance can NEVER be redirected to a real
+    ///      MarketFactory (`RegistryAlreadySet`). A test that uses the real factory therefore
+    ///      starts from a clean instance.
     ///
-    ///      Registry sengaja belum dipasang di sini: urutannya harus mengikuti Deploy.s.sol —
-    ///      shares → factory → setRegistry — karena MarketFactory MEMOTRET alamat shares saat
-    ///      `initialize` dan tidak pernah membacanya ulang. Membalik urutannya menghasilkan
-    ///      factory yang menunjuk shares lama sementara uji memeriksa shares baru: market
-    ///      lahir sukses lalu gagal `NotMarket` pada trade pertama.
+    ///      The registry is deliberately left unset here: the order must follow Deploy.s.sol —
+    ///      shares → factory → setRegistry — because MarketFactory SNAPSHOTS the shares address
+    ///      at `initialize` and never re-reads it. Reversing the order yields a factory pointing
+    ///      at the old shares while the test inspects the new one: the market is born
+    ///      successfully and then fails `NotMarket` on the first trade.
     ///
-    ///      Deployer-lah satu-satunya yang boleh memanggil `setRegistry`, jadi instance ini
-    ///      harus di-deploy oleh kontrak uji yang sama dengan pemanggil `_useFactoryAsRegistry`.
+    ///      Only the deployer may call `setRegistry`, so this instance must be deployed by the
+    ///      same test contract that calls `_useFactoryAsRegistry`.
     ///
-    ///      SALING EKSKLUSIF DENGAN `_newMarket`: pasangan ini menimpa `shares` sementara
-    ///      `StubMarketRegistry` masih menunjuk instance pertama, jadi market buatan `_newMarket`
-    ///      terdaftar di registry yang TIDAK dipercaya `shares` yang baru. Uji yang mencampur
-    ///      keduanya akan gagal `NotMarket` pada trade pertama dengan sebab yang sangat tidak
-    ///      kentara. Pilih salah satu per kontrak uji: `_newMarket` (stub) ATAU factory sungguhan.
+    ///      MUTUALLY EXCLUSIVE WITH `_newMarket`: this pair replaces `shares` while
+    ///      `StubMarketRegistry` still points at the first instance, so a market built by
+    ///      `_newMarket` is registered in a registry the NEW `shares` does not trust. A test
+    ///      that mixes the two fails `NotMarket` on the first trade for a deeply unobvious
+    ///      reason. Pick one per test contract: `_newMarket` (stub) OR the real factory.
     function _freshShares() internal {
         shares = new OutcomeShares("");
         config.setAddress(ConfigKeys.OUTCOME_SHARES, address(shares));
     }
 
-    /// @dev Menutup lingkaran dari `_freshShares`: mulai titik ini OutcomeShares hanya
-    ///      mempercayai market yang benar-benar lahir dari factory.
+    /// @dev Closes the loop opened by `_freshShares`: from this point on OutcomeShares trusts
+    ///      only markets genuinely born from the factory.
     function _useFactoryAsRegistry(address factory_) internal {
         shares.setRegistry(factory_);
     }

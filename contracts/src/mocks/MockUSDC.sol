@@ -4,10 +4,10 @@ pragma solidity 0.8.28;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /// @title MockUSDC
-/// @notice Collateral uji 6 desimal untuk 0G-Delphi. HANYA testnet/lokal.
-/// @dev Sengaja 6 desimal, bukan 18: lapisan normalisasi desimal harus dilewati
-///      setiap uji sejak hari pertama, agar bug penskalaan tidak muncul pertama kali
-///      saat berpindah ke stablecoin sungguhan di mainnet.
+/// @notice A 6-decimal test collateral for 0G-Delphi. Testnet/local ONLY.
+/// @dev Deliberately 6 decimals, not 18: every test must cross the decimal
+///      normalization layer from day one, so a scaling bug does not first show up
+///      when moving to a real stablecoin on mainnet.
 contract MockUSDC is ERC20 {
     uint256 public constant FAUCET_AMOUNT = 10_000e6;
     uint256 public constant FAUCET_COOLDOWN = 1 days;
@@ -31,7 +31,7 @@ contract MockUSDC is ERC20 {
         _mint(msg.sender, FAUCET_AMOUNT);
     }
 
-    /// @notice Cetak tanpa batas — hanya untuk penyiapan uji dan seeding demo.
+    /// @notice Unlimited mint — for test setup and demo seeding only.
     function mintTo(address to, uint256 amount) external {
         _mint(to, amount);
     }

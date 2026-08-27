@@ -21,12 +21,12 @@ contract MarketFactoryTest is Fixtures {
         _deployBase();
         curator = vm.addr(curatorPk);
 
-        // Urutan ini mencerminkan Deploy.s.sol dan TIDAK bisa dibalik:
-        //   shares bersih → factory (memotret alamat shares) → shares.setRegistry(factory).
-        // `_deployBase` sudah memakai kunci sekali-pakai `setRegistry` untuk StubMarketRegistry,
-        // jadi instance itu tidak akan pernah bisa dialihkan ke factory sungguhan; `_freshShares`
-        // memulai dari instance kosong. Sebaliknya factory tidak bisa lahir belakangan tanpa
-        // membuat `shares` yang dipotretnya basi — lihat catatan di Fixtures.
+        // This order mirrors Deploy.s.sol and CANNOT be reversed:
+        //   clean shares → factory (snapshots the shares address) → shares.setRegistry(factory).
+        // `_deployBase` has already spent the one-shot `setRegistry` key on StubMarketRegistry,
+        // so that instance can never be redirected to the real factory; `_freshShares` starts
+        // from an empty one. Conversely the factory cannot be born later without making the
+        // `shares` it snapshotted stale — see the note in Fixtures.
         _freshShares();
 
         MarketFactory impl = new MarketFactory();
@@ -47,12 +47,12 @@ contract MarketFactoryTest is Fixtures {
         _fund(creator, 1_000_000e6, address(factory));
     }
 
-    /// @dev MELAKUKAN dua panggilan eksternal ke factory (`MARKET_APPROVAL_TYPEHASH` dan
-    ///      `hashTypedData`). Karena itu tidak pernah boleh dievaluasi sebagai argumen inline
-    ///      dari panggilan yang sudah dipasangi `vm.prank`/`vm.expectRevert`: cheatcode itu
-    ///      mengikat panggilan eksternal BERIKUTNYA secara harfiah, dan yang berikutnya akan
-    ///      menjadi view call di sini, bukan `createMarket`. Setiap uji di bawah menghitung
-    ///      tanda tangannya ke variabel lokal LEBIH DULU.
+    /// @dev MAKES two external calls into the factory (`MARKET_APPROVAL_TYPEHASH` and
+    ///      `hashTypedData`). It must therefore never be evaluated as an inline argument to a
+    ///      call already armed with `vm.prank`/`vm.expectRevert`: those cheatcodes bind to the
+    ///      very NEXT external call, literally, and the next one would be a view call in here
+    ///      rather than `createMarket`. Every test below computes its signature into a local
+    ///      variable FIRST.
     function _sign(IMarket.Params memory p, uint256 nonce) internal view returns (bytes memory) {
         return _signAmounts(p, SEED, DEPOSIT, nonce);
     }
@@ -94,8 +94,8 @@ contract MarketFactoryTest is Fixtures {
         IMarket.Params memory p = _params();
         bytes memory sig = _sign(p, 1);
 
-        // topic1 (alamat market) belum bisa diketahui sebelum clone dibuat; sisanya diperiksa
-        // penuh karena indexer membangun ulang katalog market hanya dari event ini.
+        // topic1 (the market address) cannot be known before the clone exists; everything else is
+        // checked in full, because an indexer rebuilds the market catalogue from this event alone.
         vm.expectEmit(false, true, true, true, address(factory));
         emit MarketFactory.MarketCreated(address(0), creator, p.creatorAgentId, p.specRoot, SEED, p.tier);
         vm.prank(creator);
@@ -109,7 +109,7 @@ contract MarketFactoryTest is Fixtures {
         assertEq(m.probability(0), 5e17);
         assertEq(usdc.balanceOf(addr), SEED + DEPOSIT);
         assertEq(m.creator(), creator);
-        // Market harus menunjuk instance shares yang benar-benar mempercayai factory ini.
+        // The market must point at the shares instance that genuinely trusts this factory.
         assertEq(address(m.shares()), address(shares));
     }
 
@@ -124,10 +124,10 @@ contract MarketFactoryTest is Fixtures {
         m.buy(1, 50e18, type(uint256).max, alice);
         assertEq(shares.balanceOfOutcome(alice, address(m), 1), 50e18);
 
-        // Sisi "ONLY": clone dengan bytecode identik yang TIDAK lewat factory tidak boleh
-        // bisa mencetak apa pun. Otorisasi bergantung pada registry, bukan pada bytecode.
-        // `Clones.clone` adalah CREATE dan pendanaan adalah panggilan eksternal — semuanya
-        // sengaja diselesaikan SEBELUM `vm.expectRevert` dipasang.
+        // The "ONLY" half: a clone with identical bytecode that did NOT come through the factory
+        // must not be able to mint anything. Authorization rests on the registry, not on the
+        // bytecode. `Clones.clone` is a CREATE and the funding is an external call — all of it
+        // deliberately finished BEFORE `vm.expectRevert` is armed.
         Market rogue = Market(Clones.clone(address(marketImpl)));
         usdc.mintTo(address(rogue), SEED + DEPOSIT);
         rogue.initialize(address(config), address(shares), p, SEED, DEPOSIT);
@@ -150,14 +150,14 @@ contract MarketFactoryTest is Fixtures {
         vm.expectRevert(MarketFactory.BadCuratorSignature.selector);
         factory.createMarket(p, SEED, DEPOSIT, 1, forged);
 
-        // Bukti bahwa yang ditolak adalah PENANDA TANGANnya, bukan parameter atau nonce:
-        // payload yang sama persis lolos begitu kurator sungguhan yang menandatangani.
+        // Proof that what was rejected is the SIGNER, not the parameters or the nonce: the exact
+        // same payload passes as soon as the real curator signs it.
         vm.prank(creator);
         factory.createMarket(p, SEED, DEPOSIT, 1, genuine);
         assertEq(factory.marketCount(), 1);
     }
 
-    /// @dev Tanda tangan yang sudah dipakai tidak boleh bisa dipakai ulang.
+    /// @dev A signature that has been used must not be usable again.
     function test_approvalCannotBeReplayed() public {
         IMarket.Params memory p = _params();
         bytes memory sig = _sign(p, 1);
@@ -167,16 +167,16 @@ contract MarketFactoryTest is Fixtures {
         factory.createMarket(p, SEED, DEPOSIT, 1, sig);
         vm.expectRevert(MarketFactory.ApprovalAlreadyUsed.selector);
         factory.createMarket(p, SEED, DEPOSIT, 1, sig);
-        // Bukti bahwa yang menolak adalah PEMAKAIAN ULANGnya, bukan params kembar: approval
-        // baru atas params yang sama persis tetap lolos.
+        // Proof that what was rejected is the REUSE, not duplicate params: a fresh approval over
+        // the exact same params still passes.
         factory.createMarket(p, SEED, DEPOSIT, 2, sigNonceTwo);
         vm.stopPrank();
 
         assertEq(factory.marketCount(), 2);
     }
 
-    /// @dev Mengubah satu bidang saja membuat tanda tangan tidak sah — kurator
-    ///      menyetujui market TERTENTU, bukan memberi izin umum.
+    /// @dev Changing a single field invalidates the signature — the curator approves a
+    ///      PARTICULAR market, not a general permission.
     function test_tamperedParamsRejected() public {
         IMarket.Params memory p = _params();
         bytes memory sig = _sign(p, 1);
@@ -186,8 +186,8 @@ contract MarketFactoryTest is Fixtures {
         vm.expectRevert(MarketFactory.BadCuratorSignature.selector);
         factory.createMarket(p, SEED, DEPOSIT, 1, sig);
 
-        // Bukti bahwa yang ditolak adalah PERUBAHANnya: tanda tangan yang sama lolos
-        // begitu bidang itu dikembalikan.
+        // Proof that what was rejected is the CHANGE: the same signature passes as soon as the
+        // field is put back.
         p.tier = 1;
         vm.prank(creator);
         factory.createMarket(p, SEED, DEPOSIT, 1, sig);
@@ -204,8 +204,8 @@ contract MarketFactoryTest is Fixtures {
         vm.expectRevert(MarketFactory.ProtocolPaused.selector);
         factory.createMarket(p, SEED, DEPOSIT, 1, sig);
 
-        // Bukti bahwa yang menolak adalah PAUSE-nya, bukan tanda tangan: sig yang sama lolos
-        // setelah pemilik menyalakan kembali.
+        // Proof that what rejected it is the PAUSE, not the signature: the same sig passes once
+        // the owner switches things back on.
         config.unpause();
         vm.prank(creator);
         factory.createMarket(p, SEED, DEPOSIT, 1, sig);
@@ -224,9 +224,9 @@ contract MarketFactoryTest is Fixtures {
         assertEq(factory.marketImplementation(), address(next));
     }
 
-    /// @dev Approval kurator BUKAN bearer instrument. Front-runner di sini didanai dan
-    ///      di-approve PENUH — jadi yang menolaknya benar-benar identitas pemanggil, bukan
-    ///      kegagalan transfer — dan approval creator selamat dari percobaan itu.
+    /// @dev A curator approval is NOT a bearer instrument. The front-runner here is funded and
+    ///      FULLY approved — so what rejects them really is the caller's identity, not a failed
+    ///      transfer — and the creator's approval survives the attempt.
     function test_onlyApprovedCreatorMayConsumeApproval() public {
         IMarket.Params memory p = _params();
         bytes memory sig = _sign(p, 1);
@@ -241,12 +241,12 @@ contract MarketFactoryTest is Fixtures {
         assertEq(factory.marketCount(), 1);
     }
 
-    /// @dev Kedalaman awal market (parameter `b` DPM) diturunkan seluruhnya dari seed, jadi
-    ///      approval yang tidak mengikat seed berarti kurator menyetujui pertanyaannya tapi
-    ///      bukan pasarnya. Approval atas SEED tidak boleh bisa dipakai pada MIN_SEED.
+    /// @dev A market's opening depth (the DPM `b` parameter) derives entirely from the seed, so
+    ///      an approval that does not bind the seed means the curator approved the question but
+    ///      not the market. An approval over SEED must not be usable at MIN_SEED.
     function test_seedAndDepositAreBoundBySignature() public {
         IMarket.Params memory p = _params();
-        bytes memory sig = _sign(p, 1); // menandatangani (SEED, DEPOSIT)
+        bytes memory sig = _sign(p, 1); // signs (SEED, DEPOSIT)
         uint256 minSeed = config.params(ConfigKeys.MIN_SEED);
         assertLt(minSeed, SEED);
 
@@ -258,17 +258,17 @@ contract MarketFactoryTest is Fixtures {
         vm.expectRevert(MarketFactory.BadCuratorSignature.selector);
         factory.createMarket(p, SEED, DEPOSIT + 1, 1, sig);
 
-        // Bukti bahwa yang ditolak adalah ANGKAnya: pasangan yang persis ditandatangani lolos.
+        // Proof that what was rejected is the NUMBERS: the exact signed pair passes.
         vm.prank(creator);
         address m = factory.createMarket(p, SEED, DEPOSIT, 1, sig);
         assertEq(usdc.balanceOf(m), SEED + DEPOSIT);
     }
 
-    /// @dev `allowedCollateral` adalah HIMPUNAN, bukan singleton. Dengan dua collateral yang
-    ///      sama-sama diizinkan, approval yang tidak mengikat token akan bisa dipakai
-    ///      meluncurkan spec yang sama dalam token lain — dengan `scale` dan profil ekonomi
-    ///      berbeda. Token kedua di sini SUDAH diizinkan, jadi yang menolak pasti tanda
-    ///      tangannya, bukan allowlist.
+    /// @dev `allowedCollateral` is a SET, not a singleton. With two collaterals both allowed, an
+    ///      approval that does not bind the token could be used to launch the same spec in a
+    ///      different token — with a different `scale` and a different economic profile. The
+    ///      second token here IS already allowed, so what rejects it must be the signature and
+    ///      not the allowlist.
     function test_collateralIsBoundBySignature() public {
         MockUSDC other = new MockUSDC();
         config.setCollateralAllowed(address(other), true);
@@ -290,12 +290,12 @@ contract MarketFactoryTest is Fixtures {
         assertEq(factory.marketCount(), 1);
     }
 
-    /// @dev Collateral di luar allowlist ditolak di FACTORY, bukan baru di Market.initialize.
-    ///      Catatan kejujuran: revert mengembalikan seluruh state, jadi `marketCount()` dan
-    ///      `usedApprovals` di bawah tidak bisa bernilai lain selama jalur ini revert — keduanya
-    ///      dipasang sebagai penjaga regresi seandainya penjaga itu suatu saat diganti menjadi
-    ///      jalur yang TIDAK revert. Yang membuktikan approval-nya utuh adalah baris terakhir:
-    ///      tanda tangan yang SAMA masih bisa dipakai setelah token itu diizinkan.
+    /// @dev Collateral outside the allowlist is rejected at the FACTORY, not only later in
+    ///      Market.initialize. An honest note: a revert rolls back all state, so `marketCount()`
+    ///      and `usedApprovals` below could not hold any other value as long as this path
+    ///      reverts — both are placed as regression guards in case that guard is ever replaced
+    ///      by a path that does NOT revert. What proves the approval is intact is the last line:
+    ///      the SAME signature still works once the token is allowed.
     function test_unlistedCollateralRejectedAndApprovalSurvives() public {
         MockUSDC other = new MockUSDC();
         other.mintTo(creator, 1_000_000e6);
@@ -319,14 +319,15 @@ contract MarketFactoryTest is Fixtures {
         assertEq(other.balanceOf(m), SEED + DEPOSIT);
     }
 
-    /// @dev Membuktikan URUTANnya, bukan sekadar adanya penjaga: collateral adalah alamat TANPA
-    ///      KODE. Kalau `safeTransferFrom` sempat dipanggil, OZ `Address` akan revert
-    ///      `AddressEmptyCode`, bukan `CollateralNotAllowed`. Selector `CollateralNotAllowed()`
-    ///      identik dengan milik `Market` (selector dihitung dari tanda tangan), jadi alamat
-    ///      tanpa kode inilah yang membedakan "diperiksa di factory" dari "diperiksa di Market".
+    /// @dev Proves the ORDER, not merely that a guard exists: the collateral is an address with
+    ///      NO CODE. Had `safeTransferFrom` been reached, OZ `Address` would revert
+    ///      `AddressEmptyCode`, not `CollateralNotAllowed`. The `CollateralNotAllowed()`
+    ///      selector is identical to `Market`'s (selectors are computed from the signature), so
+    ///      it is this codeless address that separates "checked at the factory" from "checked in
+    ///      Market".
     function test_collateralCheckedBeforeTouchingToken() public {
         IMarket.Params memory p = _params();
-        p.collateral = makeAddr("token yang tidak pernah di-deploy");
+        p.collateral = makeAddr("a token that was never deployed");
         bytes memory sig = _sign(p, 1);
 
         vm.prank(creator);
@@ -335,19 +336,19 @@ contract MarketFactoryTest is Fixtures {
         assertEq(factory.marketCount(), 0);
     }
 
-    /// @dev Kedua jalur tulis ke `marketImplementation` — dan dua alamat kolaborator lain —
-    ///      menolak alamat tanpa kode. Lihat `MarketFactory.NotAContract` untuk mengapa alamat
-    ///      tanpa kode berbahaya secara khusus di sini.
+    /// @dev Both write paths to `marketImplementation` — and the two other collaborator
+    ///      addresses — reject codeless addresses. See `MarketFactory.NotAContract` for why a
+    ///      codeless address is specifically dangerous here.
     function test_codelessAddressesRejectedOnEveryWritePath() public {
-        address ghost = makeAddr("belum di-deploy");
+        address ghost = makeAddr("not deployed yet");
         bytes memory expected = abi.encodeWithSelector(MarketFactory.NotAContract.selector, ghost);
 
         vm.expectRevert(expected);
         factory.setMarketImplementation(ghost);
         assertEq(factory.marketImplementation(), address(marketImpl));
 
-        // Proxy tanpa data inisialisasi, supaya `initialize` bisa diikat sebagai panggilan
-        // eksternal tersendiri alih-alih terkubur di dalam CREATE.
+        // A proxy with no initialization data, so `initialize` can be bound as an external call
+        // of its own instead of being buried inside a CREATE.
         MarketFactory raw = MarketFactory(address(new ERC1967Proxy(address(new MarketFactory()), "")));
 
         vm.expectRevert(expected);
@@ -361,16 +362,16 @@ contract MarketFactoryTest is Fixtures {
         assertEq(raw.marketImplementation(), address(marketImpl));
     }
 
-    /// @dev Penjaga terakhir, di titik kloning. `Clones.clone` atas alamat tanpa kode
-    ///      menghasilkan proxy minimal yang HIDUP: `Market(clone).initialize(...)` "berhasil"
-    ///      secara diam (delegatecall ke ketiadaan mengembalikan sukses + returndata kosong,
-    ///      dan initialize tidak punya nilai balik untuk didekode) setelah collateral pengguna
-    ///      terlanjur pindah ke clone yang mati permanen. Kedua setter sudah menutup jalur
-    ///      normal ke keadaan ini, jadi slot ditulis paksa lewat `vm.store` — `assertEq` di
-    ///      bawah memastikan tulisan itu memang mengenai `marketImplementation`, sehingga uji
-    ///      ini tidak bisa lulus karena kebetulan menulis slot yang salah.
+    /// @dev The last guard, at the point of cloning. `Clones.clone` over a codeless address
+    ///      produces a minimal proxy that is LIVE: `Market(clone).initialize(...)` "succeeds"
+    ///      silently (a delegatecall into nothing returns success + empty returndata, and
+    ///      initialize has no return value to decode) after the user's collateral has already
+    ///      moved into a clone that is permanently dead. Both setters already close the normal
+    ///      routes into this state, so the slot is forced through `vm.store` — the `assertEq`
+    ///      below makes sure that write really did land on `marketImplementation`, so this test
+    ///      cannot pass by accidentally writing the wrong slot.
     function test_createMarketRefusesCodelessImplementation() public {
-        address ghost = makeAddr("implementasi hantu");
+        address ghost = makeAddr("ghost implementation");
         vm.store(address(factory), bytes32(uint256(2)), bytes32(uint256(uint160(ghost))));
         assertEq(factory.marketImplementation(), ghost);
 
@@ -383,10 +384,10 @@ contract MarketFactoryTest is Fixtures {
         assertEq(factory.marketCount(), 0);
     }
 
-    /// @dev Domain EIP-712 adalah kontrak antara penanda tangan off-chain (agent Kurator)
-    ///      dan verifikasi on-chain. Digest dihitung ulang di sini dari nol supaya salah
-    ///      ketik pada name/version tidak bisa lolos diam-diam dan mematikan seluruh
-    ///      alur pembuatan market di produksi.
+    /// @dev The EIP-712 domain is the contract between the off-chain signer (the Curator agent)
+    ///      and on-chain verification. The digest is recomputed here from scratch so that a
+    ///      typo in name/version cannot slip through unnoticed and kill the entire
+    ///      market-creation flow in production.
     function test_typedDataDigestMatchesEip712() public view {
         (, string memory name, string memory version, uint256 chainId, address verifying,,) = factory.eip712Domain();
         assertEq(name, "0G-Delphi");
@@ -403,7 +404,7 @@ contract MarketFactoryTest is Fixtures {
                 address(factory)
             )
         );
-        bytes32 structHash = keccak256("struct apa saja");
+        bytes32 structHash = keccak256("any struct at all");
         assertEq(factory.hashTypedData(structHash), keccak256(abi.encodePacked(hex"1901", domainSeparator, structHash)));
     }
 }

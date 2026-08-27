@@ -23,8 +23,8 @@ runs            = 128
 depth           = 64
 fail_on_revert  = false
 
-# Profil rilis: via_ir menyala. CI wajib membangun profil ini agar
-# "kompilasi hanya berhasil tanpa via_ir" tidak pernah lolos diam-diam.
+# Release profile: via_ir on. CI must build this profile so that
+# "it only compiles without via_ir" can never slip through unnoticed.
 [profile.prod]
 via_ir         = true
 optimizer_runs = 20000

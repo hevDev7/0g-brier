@@ -14,25 +14,25 @@ import {OutcomeShares} from "./OutcomeShares.sol";
 import {IMarket} from "../interfaces/IMarket.sol";
 
 /// @title Market
-/// @notice Satu market prediksi biner bermesin DPM. Clone EIP-1167, IMMUTABLE:
-///         kontrak ini memegang dana pengguna dan karena itu tidak pernah upgradeable.
-/// @dev Invarian pusat: `poolWad == DPMMath.costUp(_q)` pada setiap batas transaksi.
-///      Ditegakkan by construction — pool DISETEL ke target, tidak pernah diakumulasi:
+/// @notice A single DPM-driven binary prediction market. An EIP-1167 clone, IMMUTABLE:
+///         this contract holds user funds and is therefore never upgradeable.
+/// @dev The central invariant: `poolWad == DPMMath.costUp(_q)` at every transaction boundary.
+///      Enforced by construction — the pool is SET to a target, never accumulated:
 ///
-///        target      = costUp(qBaru)
-///        biaya beli  = target - poolWad
-///        hasil jual  = poolWad - target
-///        poolWad     = target
+///        target     = costUp(qNew)
+///        buy cost   = target - poolWad
+///        sell take  = poolWad - target
+///        poolWad    = target
 ///
-///      Setiap debu pembulatan karenanya tertinggal DI DALAM pool.
+///      Every speck of rounding dust is therefore left INSIDE the pool.
 contract Market is IMarket, Initializable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    // ── konfigurasi, dipotret saat initialize ────────────────────────────────
+    // ── configuration, snapshotted at initialize ─────────────────────────────
     ConfigRegistry public config;
     OutcomeShares public shares;
     IERC20 public collateral;
-    uint256 public scale; // 10 ** (18 - desimal collateral)
+    uint256 public scale; // 10 ** (18 - collateral decimals)
     address public creator;
     uint256 public creatorAgentId;
     uint64 public tradingEnd;
@@ -41,8 +41,8 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     bytes32 public specRoot;
     bytes32 public category;
 
-    /// @dev Dipotret, bukan dibaca ulang: market yang sudah hidup tidak boleh berubah
-    ///      aturannya di tengah jalan hanya karena tata kelola menyetel ulang parameter.
+    /// @dev Snapshotted, not re-read: a market that is already live must not have its rules
+    ///      change mid-flight just because governance reset a parameter.
     uint16 public feeBps;
     uint256 public minTradeTokens;
     uint16 public creatorFeeShareBps;
@@ -55,8 +55,8 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     mapping(address => uint256[2]) internal _seedShares;
 
     uint256 public poolWad;
-    uint256 public feeAccrued; // satuan token
-    uint256 public settlementDeposit; // satuan token
+    uint256 public feeAccrued; // token units
+    uint256 public settlementDeposit; // token units
 
     Status public status;
     uint8 public winningOutcome;
@@ -124,17 +124,17 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         minTradeTokens = config.params(ConfigKeys.MIN_TRADE_TOKENS);
         creatorFeeShareBps = uint16(config.params(ConfigKeys.CREATOR_FEE_SHARE_BPS));
         resolverFeeShareBps = uint16(config.params(ConfigKeys.RESOLVER_FEE_SHARE_BPS));
-        // Tiap kunci dibatasi individual oleh ConfigRegistry ([0, 10_000] masing-masing),
-        // tapi tak ada pemeriksaan silang di sana — jumlah keduanya bisa > 10_000 walau
-        // keduanya sah sendiri-sendiri. Diperiksa di sini, saat lahir, karena kegagalan di
-        // settle/fail/void (Panic bawaan dari underflow `_distributeFees`) akan membekukan
-        // SETIAP market yang memakai ConfigRegistry ini, bukan cuma satu.
+        // Each key is bounded individually by ConfigRegistry ([0, 10_000] apiece), but there
+        // is no cross-check there — the two can sum to > 10_000 while each is valid on its
+        // own. Checked here, at birth, because a failure at settle/fail/void (a built-in
+        // Panic from the underflow in `_distributeFees`) would freeze EVERY market using
+        // this ConfigRegistry, not just one.
         if (uint256(creatorFeeShareBps) + uint256(resolverFeeShareBps) > 10_000) {
             revert FeeSharesExceedTotal(creatorFeeShareBps, resolverFeeShareBps);
         }
         settlementDeposit = depositTokens;
 
-        // Factory mentransfer collateral MASUK sebelum memanggil initialize.
+        // The factory transfers the collateral IN before calling initialize.
         if (collateral.balanceOf(address(this)) < seedTokens + depositTokens) revert CollateralNotReceived();
 
         uint256 seedWad = seedTokens * scale;
@@ -150,7 +150,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         _seedShares[p.creator][0] = s;
         _seedShares[p.creator][1] = s;
 
-        poolWad = DPMMath.costUp(_q); // ≤ seedWad menurut konstruksi seedShares
+        poolWad = DPMMath.costUp(_q); // ≤ seedWad by construction of seedShares
         status = Status.Open;
 
         emit StatusChanged(Status.Open, Status.Open);
@@ -187,33 +187,33 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         return DPMMath.price(_q, outcome);
     }
 
-    /// @notice Collateral minimum yang harus dipegang kontrak agar tetap solven.
+    /// @notice The minimum collateral this contract must hold to stay solvent.
     function collateralOwed() public view returns (uint256) {
         return Math.ceilDiv(poolWad, scale) + feeAccrued + settlementDeposit;
     }
 
-    // ── penjaga bersama ──────────────────────────────────────────────────────
+    // ── shared guards ────────────────────────────────────────────────────────
 
-    /// @dev Jalur MASUK: dihentikan oleh pause global.
+    /// @dev ENTRY path: halted by the global pause.
     function _requireTradable() internal view {
         if (status != Status.Open) revert NotOpen();
         if (block.timestamp >= tradingEnd) revert TradingEnded();
         if (config.paused()) revert ProtocolPaused();
     }
 
-    /// @dev Jalur KELUAR: sengaja TIDAK memeriksa pause. Pengguna harus selalu bisa keluar.
+    /// @dev EXIT path: deliberately does NOT check the pause. A user must always be able to exit.
     function _requireExitable() internal view {
         if (status != Status.Open) revert NotOpen();
         if (block.timestamp >= tradingEnd) revert TradingEnded();
     }
 
-    // ── beli ─────────────────────────────────────────────────────────────────
+    // ── buy ──────────────────────────────────────────────────────────────────
 
-    /// @dev Satu-satunya tempat rumus harga beli ditulis — dipakai `quoteBuy` DAN `buy` supaya
-    ///      keduanya tak bisa diam-diam berbeda formula (kuotasi yang berbohong soal biaya
-    ///      sungguhan). Murni kalkulasi: guard (`BadOutcome`/`ZeroAmount`) tetap di pemanggil,
-    ///      bukan di sini, karena `outcome` dipakai sebagai indeks array sebelum tervalidasi.
-    ///      `buy` memakai `target` untuk menyetel `poolWad`; `quoteBuy` mengabaikannya.
+    /// @dev The one place the buy price formula is written — used by `quoteBuy` AND `buy` so the
+    ///      two cannot silently diverge (a quote that lies about the real cost). Pure
+    ///      calculation: the guards (`BadOutcome`/`ZeroAmount`) stay in the caller, not here,
+    ///      because `outcome` is used as an array index before it has been validated.
+    ///      `buy` uses `target` to set `poolWad`; `quoteBuy` ignores it.
     function _priceBuy(uint8 outcome, uint256 sharesOut)
         internal
         view
@@ -221,7 +221,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     {
         uint256[2] memory qNew = _q;
         qNew[outcome] += sharesOut;
-        target = DPMMath.costUp(qNew); // revert bila melampaui MAX_Q
+        target = DPMMath.costUp(qNew); // reverts if it exceeds MAX_Q
         costTokens = Math.ceilDiv(target - poolWad, scale);
         fee = (costTokens * feeBps) / 10_000;
         tokensIn = costTokens + fee;
@@ -233,9 +233,9 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         (,, fee, tokensIn) = _priceBuy(outcome, sharesOut);
     }
 
-    /// @notice Taksiran lembar yang didapat untuk `tokensIn` (agent berpikir dalam nominal).
-    /// @dev Dibulatkan ke bawah dan tidak otoritatif — `buy` menghitung ulang biaya
-    ///      sebenarnya, dan pemanggil melindungi diri lewat `maxTokensIn`.
+    /// @notice An estimate of the shares obtained for `tokensIn` (agents think in notional).
+    /// @dev Rounded down and not authoritative — `buy` recomputes the real cost, and the
+    ///      caller protects itself with `maxTokensIn`.
     function quoteBuySpend(uint8 outcome, uint256 tokensIn) public view returns (uint256 sharesOut, uint256 fee) {
         if (outcome > 1) revert BadOutcome();
         fee = (tokensIn * feeBps) / (10_000 + feeBps);
@@ -244,11 +244,11 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         sharesOut = DPMMath.sharesForSpend(_q, outcome, spendWad);
     }
 
-    /// @dev Pemakaian pertama `nonReentrant` di kontrak ini. Aman di atas clone EIP-1167
-    ///      walau constructor yang menyetel `_status = NOT_ENTERED` tidak pernah berjalan:
-    ///      guard OpenZeppelin membandingkan `_status == ENTERED`, bukan `_status == NOT_ENTERED`,
-    ///      jadi slot storage nol bawaan clone sudah berperilaku seperti NOT_ENTERED sejak
-    ///      panggilan pertama yang dijaga.
+    /// @dev The first use of `nonReentrant` in this contract. Safe on top of an EIP-1167 clone
+    ///      even though the constructor that sets `_status = NOT_ENTERED` never runs: the
+    ///      OpenZeppelin guard compares `_status == ENTERED`, not `_status == NOT_ENTERED`, so
+    ///      a clone's default zero storage slot already behaves as NOT_ENTERED from the first
+    ///      guarded call onward.
     function buy(uint8 outcome, uint256 sharesOut, uint256 maxTokensIn, address to)
         external
         nonReentrant
@@ -268,7 +268,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         uint256[2] memory qNew = _q;
         qNew[outcome] += sharesOut;
 
-        // Efek sebelum interaksi: mint ERC-1155 memanggil balik `to`.
+        // Effects before interactions: the ERC-1155 mint calls back into `to`.
         _q = qNew;
         poolWad = target;
         feeAccrued += fee;
@@ -280,26 +280,26 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         emit Trade(msg.sender, to, outcome, int256(sharesOut), tokensIn, fee, qNew, probAfter);
     }
 
-    // ── jual ─────────────────────────────────────────────────────────────────
+    // ── sell ─────────────────────────────────────────────────────────────────
 
-    /// @dev Analog `_priceBuy`: satu-satunya tempat rumus harga jual ditulis — dipakai
-    ///      `quoteSell` DAN `sell` supaya keduanya tak bisa diam-diam berbeda formula. Murni
-    ///      kalkulasi: guard (`BadOutcome`/`ZeroAmount`) tetap di pemanggil, bukan di sini,
-    ///      persis seperti `_priceBuy`, karena `outcome` dipakai sebagai indeks array sebelum
-    ///      tervalidasi. Pemeriksaan lantai benih (`SeedFloorBreached`) JUGA sengaja tetap di
-    ///      pemanggil (`sell`), bukan di sini: `quoteSell` adalah kuotasi, bukan otoritas, jadi
-    ///      boleh menunjukkan angka mentah walau `sharesIn` menembus benih; hanya eksekusi
-    ///      sungguhan yang menolaknya, dan urutan pemeriksaannya penting — lihat komentar di
-    ///      `sell`. `sell` memakai `target` untuk menyetel `poolWad`; `quoteSell` mengabaikannya.
+    /// @dev The analogue of `_priceBuy`: the one place the sell price formula is written — used
+    ///      by `quoteSell` AND `sell` so the two cannot silently diverge. Pure calculation: the
+    ///      guards (`BadOutcome`/`ZeroAmount`) stay in the caller, not here, exactly as in
+    ///      `_priceBuy`, because `outcome` is used as an array index before it has been
+    ///      validated. The seed floor check (`SeedFloorBreached`) ALSO stays deliberately in the
+    ///      caller (`sell`), not here: `quoteSell` is a quote, not the authority, so it may show
+    ///      the raw number even when `sharesIn` cuts into the seed; only real execution rejects
+    ///      it, and the order of the checks matters — see the comment in `sell`. `sell` uses
+    ///      `target` to set `poolWad`; `quoteSell` ignores it.
     function _priceSell(uint8 outcome, uint256 sharesIn)
         internal
         view
         returns (uint256 target, uint256 grossTokens, uint256 fee, uint256 tokensOut)
     {
         uint256[2] memory qNew = _q;
-        qNew[outcome] -= sharesIn; // underflow revert bila melampaui pasokan
+        qNew[outcome] -= sharesIn; // underflow reverts if it exceeds supply
         target = DPMMath.costUp(qNew);
-        grossTokens = (poolWad - target) / scale; // floor: sisa debu tinggal di pool
+        grossTokens = (poolWad - target) / scale; // floor: the leftover dust stays in the pool
         fee = (grossTokens * feeBps) / 10_000;
         tokensOut = grossTokens - fee;
     }
@@ -315,28 +315,28 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         nonReentrant
         returns (uint256 tokensOut)
     {
-        _requireExitable(); // sengaja tanpa pemeriksaan pause
+        _requireExitable(); // deliberately no pause check
         if (outcome > 1) revert BadOutcome();
         if (sharesIn == 0) revert ZeroAmount();
 
         uint256[2] memory qNew = _q;
-        qNew[outcome] -= sharesIn; // underflow revert bila melampaui pasokan
+        qNew[outcome] -= sharesIn; // underflow reverts if it exceeds supply
 
-        // Lantai benih: dicek di sini, SEBELUM memanggil `_priceSell`, bukan di dalamnya —
-        // supaya selalu mendahului pemeriksaan debu/slippage. Urutan ini bukan kosmetik: untuk
-        // outcome yang pasokan tradable-nya kecil atau nol, oversell yang menabrak lantai benih
-        // sering JUGA jatuh di bawah MIN_TRADE_TOKENS (lihat `test_creatorCannotSellSeedShares`),
-        // dan tanpa urutan ini `TradeTooSmall` akan menutupi sebab revert yang sebenarnya.
+        // Seed floor: checked here, BEFORE calling `_priceSell` rather than inside it — so that
+        // it always precedes the dust/slippage checks. This ordering is not cosmetic: for an
+        // outcome whose tradable supply is small or zero, an oversell that hits the seed floor
+        // often ALSO falls below MIN_TRADE_TOKENS (see `test_creatorCannotSellSeedShares`), and
+        // without this ordering `TradeTooSmall` would mask the real cause of the revert.
         //
-        // Bukan sekadar jaring pengaman teoretis — check ini independen dari `shares.burn` di
-        // bawah (ia membaca akunting pool sendiri, `_q` vs `_seedSupply`, bukan saldo ERC-1155),
-        // dan TEREKSEKUSI sungguhan setiap kali `sharesIn` melampaui seluruh pasokan tradable
-        // outcome ini (lihat `test_cannotSellMoreThanOwned`, `test_creatorCannotSellSeedShares`).
-        // Lembar seed memang bukan ERC-1155 hari ini — saldo gabungan seluruh pemegang tak
-        // pernah melebihi `_q[outcome] - _seedSupply[outcome]`, jadi `burn` di bawah AKAN JUGA
-        // menolak oversell sebesar ini seandainya baris ini dihapus — tapi dipertahankan sebagai
-        // pernyataan independen: bila suatu saat lembar seed ikut dicetak sebagai ERC-1155 oleh
-        // perubahan di masa depan, jalur inilah yang tetap menangkapnya, terlepas dari burn.
+        // Not merely a theoretical safety net — this check is independent of the `shares.burn`
+        // below (it reads the pool's own accounting, `_q` vs `_seedSupply`, not ERC-1155
+        // balances), and it really DOES execute whenever `sharesIn` exceeds this outcome's whole
+        // tradable supply (see `test_cannotSellMoreThanOwned`, `test_creatorCannotSellSeedShares`).
+        // Seed shares are indeed not ERC-1155 today — the combined balance of every holder never
+        // exceeds `_q[outcome] - _seedSupply[outcome]`, so the `burn` below WOULD ALSO reject an
+        // oversell of this size were this line removed — but it is kept as an independent
+        // statement: should seed shares one day also be minted as ERC-1155 by a future change,
+        // this is the path that still catches it, regardless of the burn.
         if (qNew[outcome] < _seedSupply[outcome]) revert SeedFloorBreached();
 
         uint256 target;
@@ -346,7 +346,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         if (grossTokens < minTradeTokens) revert TradeTooSmall();
         if (tokensOut < minTokensOut) revert SlippageExceeded(tokensOut, minTokensOut);
 
-        // Efek sebelum interaksi: burn ERC-1155 memanggil balik `msg.sender`.
+        // Effects before interactions: the ERC-1155 burn calls back into `msg.sender`.
         _q = qNew;
         poolWad = target;
         feeAccrued += fee;
@@ -358,10 +358,10 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         emit Trade(msg.sender, to, outcome, -int256(sharesIn), tokensOut, fee, qNew, probAfter);
     }
 
-    // ── likuiditas ───────────────────────────────────────────────────────────
+    // ── liquidity ────────────────────────────────────────────────────────────
 
-    /// @notice Menambah likuiditas secara proporsional. Tanpa fee: ini bukan
-    ///         perdagangan berarah, melainkan penskalaan seluruh market.
+    /// @notice Adds liquidity proportionally. No fee: this is not a directional trade but a
+    ///         scaling of the whole market.
     function addLiquidity(uint256 tokensIn, uint256 minSharesOut, address to)
         external
         nonReentrant
@@ -387,7 +387,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
 
         uint256 target = DPMMath.costUp(qNew);
         uint256 needTokens = Math.ceilDiv(target - poolWad, scale);
-        // Terbukti ≤ tokensIn (lihat rencana Task 14); dipertahankan sebagai penjaga eksplisit.
+        // Proven ≤ tokensIn (see the Task 14 plan); kept as an explicit guard.
         if (needTokens > tokensIn) revert TradeTooSmall();
 
         _q = qNew;
@@ -401,17 +401,17 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         emit LiquidityChanged(to, int256(lambdaWad), needTokens, qNew);
     }
 
-    /// @notice Menarik likuiditas secara proporsional terhadap `q` SAAT INI.
-    /// @param lambdaWad fraksi wad dari q yang ditarik (0 < λ ≤ WAD).
-    /// @dev Penarikan tak-proporsional dilarang: itu akan menjadi perdagangan berarah
-    ///      tanpa fee. Seed creator tidak pernah bisa ditarik — lantai inilah yang
-    ///      menjamin qᵢ > 0 sampai settlement.
+    /// @notice Withdraws liquidity proportionally to the CURRENT `q`.
+    /// @param lambdaWad the wad fraction of q being withdrawn (0 < λ ≤ WAD).
+    /// @dev Non-proportional withdrawal is forbidden: it would amount to a directional trade
+    ///      with no fee. The creator's seed can never be withdrawn — that floor is what
+    ///      guarantees qᵢ > 0 until settlement.
     function removeLiquidity(uint256 lambdaWad, uint256 minTokensOut, address to)
         external
         nonReentrant
         returns (uint256 tokensOut)
     {
-        _requireExitable(); // sengaja tanpa pemeriksaan pause
+        _requireExitable(); // deliberately no pause check
         if (lambdaWad == 0 || lambdaWad > DPMMath.WAD) revert BadLambda();
 
         uint256[2] memory take;
@@ -444,7 +444,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         emit LiquidityChanged(msg.sender, -int256(lambdaWad), tokensOut, qNew);
     }
 
-    // ── siklus hidup ─────────────────────────────────────────────────────────
+    // ── lifecycle ────────────────────────────────────────────────────────────
 
     modifier onlyResolutionModule() {
         if (msg.sender != config.addresses(ConfigKeys.RESOLUTION_MODULE)) revert NotResolutionModule();
@@ -467,8 +467,8 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         _setStatus(Status.Disputed);
     }
 
-    /// @dev Kurs payout DIPOTRET di sini sehingga penebus pertama dan terakhir
-    ///      menerima kurs yang sama. `_q[outcome]` dijamin > 0 oleh lantai seed creator.
+    /// @dev The payout rate is SNAPSHOTTED here so that the first and the last redeemer
+    ///      receive the same rate. `_q[outcome]` is guaranteed > 0 by the creator seed floor.
     function settle(uint8 outcome) external onlyResolutionModule {
         if (status != Status.Closed && status != Status.Proposed && status != Status.Disputed) revert BadTransition();
         if (outcome > 1) revert BadOutcome();
@@ -482,7 +482,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         emit Settled(outcome, payoutPerShareWad);
     }
 
-    /// @notice Tidak ada outcome yang bisa ditetapkan → semua pihak dilikuidasi pada pᵢ.
+    /// @notice No outcome could be established → every party is liquidated at pᵢ.
     function fail() external {
         bool byModule = msg.sender == config.addresses(ConfigKeys.RESOLUTION_MODULE);
         bool pastDeadline = block.timestamp >= settlementDeadline;
@@ -494,8 +494,9 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         _distributeFees(false);
     }
 
-    /// @notice Pembatalan darurat oleh guardian, hanya sebelum market ditutup.
-    ///         Setoran settlement DISITA — inilah yang membuat market abusif mahal.
+    /// @notice Emergency cancellation by the guardian, only before the market closes.
+    ///         The settlement deposit is SLASHED — that is what makes an abusive market
+    ///         expensive.
     function void(bytes32 reason) external {
         if (msg.sender != config.guardian()) revert NotGuardian();
         if (status != Status.Open) revert BadTransition();
@@ -518,7 +519,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         emit StatusChanged(prev, next);
     }
 
-    /// @param slashDeposit true saat void — setoran ke Treasury, bukan ke kas resolver.
+    /// @param slashDeposit true on void — the deposit goes to the Treasury, not the resolver pool.
     function _distributeFees(bool slashDeposit) internal {
         uint256 fees = feeAccrued;
         uint256 deposit = settlementDeposit;
@@ -541,10 +542,10 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         emit FeesDistributed(toCreator, toResolvers, toTreasury);
     }
 
-    // ── keluar ───────────────────────────────────────────────────────────────
+    // ── exit ─────────────────────────────────────────────────────────────────
 
-    /// @notice Menebus lembar sisi menang pada kurs yang dipotret saat settle.
-    /// @dev Lembar sisi kalah — tradable maupun seed — bernilai nol dan dihapus.
+    /// @notice Redeems winning-side shares at the rate snapshotted at settle.
+    /// @dev Losing-side shares — tradable and seed alike — are worth nothing and are cleared.
     function redeem(address to) external nonReentrant returns (uint256 tokensOut) {
         if (status != Status.Settled) revert NotSettled();
 
@@ -568,15 +569,14 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         emit Redeemed(msg.sender, amount, tokensOut);
     }
 
-    /// @notice Market gagal atau dibatalkan: setiap sisi dibayar pᵢ per lembar.
-    /// @dev Menurut identitas Euler Σ pᵢ·qᵢ = C(q), pembayaran ini SEHARUSNYA persis
-    ///      menghabiskan pool — tapi `price()` membagi dengan `cost()` yang dibulatkan ke
-    ///      bawah sementara `poolWad` adalah `costUp()` yang dibulatkan ke atas (lihat catatan
-    ///      di DPMMath.sol), jadi jumlah dua kaki yang MASING-MASING dibulatkan ke bawah bisa
-    ///      melampaui poolWad walau identitas Euler eksak menyamakan keduanya secara real.
-    ///      Tanpa clamp, `poolWad -= payoutWad` bisa underflow dan mengunci dana pengguna
-    ///      permanen — jadi payout selalu dipotong ke sisa pool yang benar-benar ada, bukan
-    ///      diasumsikan selalu pas.
+    /// @notice The market failed or was voided: every side is paid pᵢ per share.
+    /// @dev By the Euler identity Σ pᵢ·qᵢ = C(q), these payouts SHOULD exhaust the pool exactly
+    ///      — but `price()` divides by a `cost()` rounded down while `poolWad` is a `costUp()`
+    ///      rounded up (see the note in DPMMath.sol), so the sum of two legs EACH rounded down
+    ///      can exceed poolWad even though the exact Euler identity equates them over the reals.
+    ///      Without the clamp, `poolWad -= payoutWad` could underflow and lock user funds
+    ///      permanently — so the payout is always trimmed to the pool that actually remains,
+    ///      never assumed to fit.
     function liquidate(address to) external nonReentrant returns (uint256 tokensOut) {
         if (status != Status.Failed && status != Status.Voided) revert NotLiquidatable();
 
@@ -594,15 +594,15 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         }
         if (amounts[0] == 0 && amounts[1] == 0) revert NothingToClaim();
 
-        // Clamp WAJIB, bukan optimisasi defensif: dikonfirmasi konkret pada q kecil (mis.
-        // q=(2,2): dua kaki floor berjumlah 4, poolWad=costUp([2,2])=3) bahwa jumlah dua
-        // kaki yang MASING-MASING dibulatkan ke bawah bisa melampaui poolWad walau identitas
-        // Euler eksak menyamakan keduanya secara real (lihat dev-note di atas). Rezim ini
-        // tak terjangkau lewat MIN_SEED protokol nyata (q awal ~7e20), tapi sebuah revert di
-        // sini berarti dana pengguna terkunci PERMANEN — jadi tidak boleh bergantung pada
-        // "tak terjangkau". Dipotong di sini, SEBELUM `tokensOut` diturunkan, supaya baik
-        // transfer maupun pengurangan pool memakai nilai yang sudah diclamp; kerugian
-        // pembulatan jatuh ke penebus TERAKHIR pada q kecil, bukan membuatnya revert.
+        // The clamp is MANDATORY, not a defensive optimization: confirmed concretely at small q
+        // (e.g. q=(2,2): the two floored legs sum to 4, poolWad=costUp([2,2])=3) that the sum
+        // of two legs EACH rounded down can exceed poolWad even though the exact Euler identity
+        // equates them over the reals (see the dev note above). That regime is unreachable
+        // through a real protocol's MIN_SEED (opening q ~7e20), but a revert here means user
+        // funds are locked PERMANENTLY — so it must not rest on "unreachable". Trimmed here,
+        // BEFORE `tokensOut` is derived, so both the transfer and the pool decrement use the
+        // clamped value; the rounding loss falls on the LAST redeemer at small q rather than
+        // making them revert.
         if (payoutWad > poolWad) payoutWad = poolWad;
 
         tokensOut = payoutWad / scale;
@@ -611,7 +611,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         emit Liquidated(msg.sender, amounts, tokensOut);
     }
 
-    /// @notice Menyapu sisa yang tak pernah diklaim ke Treasury setelah jendela panjang.
+    /// @notice Sweeps whatever was never claimed to the Treasury after a long window.
     function sweepUnclaimed() external {
         if (status != Status.Settled && status != Status.Failed && status != Status.Voided) revert BadTransition();
         if (block.timestamp < resolvedAt + config.params(ConfigKeys.SWEEP_UNCLAIMED_AFTER)) revert TooEarly();

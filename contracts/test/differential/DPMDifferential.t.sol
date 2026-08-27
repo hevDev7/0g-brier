@@ -4,9 +4,9 @@ pragma solidity 0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {DPMMath} from "../../src/math/DPMMath.sol";
 
-/// @notice Menyematkan DPMMath pada cermin TypeScript. Cermin itu sendiri disematkan
-///         pada nilai emas hitung-tangan di packages/protocol/test/dpm.test.ts, sehingga
-///         kedua sisi tidak bisa salah bersama-sama.
+/// @notice Pins DPMMath to the TypeScript mirror. That mirror is itself pinned to the
+///         hand-computed golden values in packages/protocol/test/dpm.test.ts, so the two
+///         sides cannot be wrong together.
 contract DPMDifferentialTest is Test {
     function test_solidityMatchesTypeScriptMirror() public view {
         string memory json = vm.readFile("test/vectors/dpm.json");
@@ -19,18 +19,18 @@ contract DPMDifferentialTest is Test {
         uint256[] memory expProb0 = vm.parseJsonUintArray(json, ".prob0");
         uint256[] memory expSeed = vm.parseJsonUintArray(json, ".seed");
 
-        assertGt(q0.length, 256, "vektor terlalu sedikit; jalankan npm run gen:vectors");
+        assertGt(q0.length, 256, "too few vectors; run npm run gen:vectors");
         assertEq(q1.length, q0.length);
 
-        // Tiga pagar cakupan magnitudo, masing-masing menjaga properti berbeda:
-        //   - maxQ0 dan bothLegsLarge menjamin seluruh 36 pasangan bucket dari skema (b)
-        //     di gen-vectors.ts benar-benar hadir, termasuk (MAX_Q, MAX_Q) di kasus 35 —
-        //     tapi keduanya bisa lolos semata dari baris konstanta itu (nol panggilan
-        //     RNG), jadi TIDAK membuktikan rng128 (a) sungguh dipakai.
-        //   - beyondOldRngCeiling menutup celah itu: menghitung nilai q BUKAN MAX_Q yang
-        //     melampaui batas lama 2^64-1 — properti yang secara struktural hanya
-        //     tercapai lewat rng128, sehingga regresi ke `rng() % modulus` polos
-        //     tertangkap di sini walau dua pagar pertama tetap lolos.
+        // Three magnitude-coverage fences, each guarding a different property:
+        //   - maxQ0 and bothLegsLarge guarantee that all 36 bucket pairs from scheme (b) in
+        //     gen-vectors.ts are genuinely present, including (MAX_Q, MAX_Q) at case 35 —
+        //     but both could pass on that constant line alone (zero RNG calls), so they do
+        //     NOT prove rng128 (a) is actually in use.
+        //   - beyondOldRngCeiling closes that gap: it counts q values that are NOT MAX_Q and
+        //     exceed the old 2^64-1 ceiling — a property structurally reachable only through
+        //     rng128, so a regression to a plain `rng() % modulus` is caught here even while
+        //     the first two fences still pass.
         uint256 maxQ0 = 0;
         bool bothLegsLarge = false;
         uint256 beyondOldRngCeiling = 0;
@@ -45,29 +45,23 @@ contract DPMDifferentialTest is Test {
             if (q0[k] != DPMMath.MAX_Q && q0[k] > type(uint64).max) beyondOldRngCeiling++;
             if (q1[k] != DPMMath.MAX_Q && q1[k] > type(uint64).max) beyondOldRngCeiling++;
 
-            assertEq(DPMMath.cost(q), expCost[k], string.concat("cost tidak cocok pada kasus ", vm.toString(k)));
-            assertEq(DPMMath.costUp(q), expCostUp[k], string.concat("costUp tidak cocok pada kasus ", vm.toString(k)));
-            assertEq(DPMMath.price(q, 0), expPrice0[k], string.concat("price tidak cocok pada kasus ", vm.toString(k)));
+            assertEq(DPMMath.cost(q), expCost[k], string.concat("cost mismatch at case ", vm.toString(k)));
+            assertEq(DPMMath.costUp(q), expCostUp[k], string.concat("costUp mismatch at case ", vm.toString(k)));
+            assertEq(DPMMath.price(q, 0), expPrice0[k], string.concat("price mismatch at case ", vm.toString(k)));
             assertEq(
-                DPMMath.probability(q, 0),
-                expProb0[k],
-                string.concat("probability tidak cocok pada kasus ", vm.toString(k))
+                DPMMath.probability(q, 0), expProb0[k], string.concat("probability mismatch at case ", vm.toString(k))
             );
             assertEq(
-                DPMMath.seedShares(q0[k]),
-                expSeed[k],
-                string.concat("seedShares tidak cocok pada kasus ", vm.toString(k))
+                DPMMath.seedShares(q0[k]), expSeed[k], string.concat("seedShares mismatch at case ", vm.toString(k))
             );
         }
 
-        assertGe(
-            maxQ0, 1e30, "q0 maksimum di bawah 1e30 - cakupan magnitudo menyempit; jalankan ulang npm run gen:vectors"
-        );
-        assertTrue(bothLegsLarge, "tak ada kasus dengan kedua kaki >= 1e30 - jalankan ulang npm run gen:vectors");
+        assertGe(maxQ0, 1e30, "max q0 below 1e30 - magnitude coverage has narrowed; re-run npm run gen:vectors");
+        assertTrue(bothLegsLarge, "no case with both legs >= 1e30 - re-run npm run gen:vectors");
         assertGt(
             beyondOldRngCeiling,
             0,
-            "generator tidak melampaui 2^64 di luar konstanta MAX_Q - rng128 hilang? jalankan npm run gen:vectors"
+            "generator never exceeds 2^64 outside the MAX_Q constant - rng128 missing? run npm run gen:vectors"
         );
     }
 }

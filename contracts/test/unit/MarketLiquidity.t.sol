@@ -16,18 +16,18 @@ contract MarketLiquidityTest is Fixtures {
         _fund(bob, 1_000_000e6, address(m));
     }
 
-    /// @dev Sifat yang menjadikan ini primitif LP, bukan sekadar perdagangan:
-    ///      probabilitas tidak bergerak sama sekali.
+    /// @dev The property that makes this an LP primitive rather than just a trade: the
+    ///      probability does not move at all.
     function test_addLiquidityIsProbabilityNeutral() public {
         vm.prank(alice);
-        m.buy(1, 300e18, type(uint256).max, alice); // buat market tidak seimbang dulu
+        m.buy(1, 300e18, type(uint256).max, alice); // put the market off balance first
         uint256 before = m.probability(1);
 
         vm.prank(bob);
         m.addLiquidity(500e6, 0, bob);
 
         uint256 diff = m.probability(1) > before ? m.probability(1) - before : before - m.probability(1);
-        assertLe(diff, 1e9, "probabilitas bergeser lebih dari debu pembulatan");
+        assertLe(diff, 1e9, "probability moved by more than rounding dust");
     }
 
     function test_addLiquidityDeepensTheMarket() public {
@@ -50,7 +50,7 @@ contract MarketLiquidityTest is Fixtures {
         uint256[2] memory minted = m.addLiquidity(500e6, 0, bob);
         assertGt(minted[0], 0);
         assertEq(m.seedSharesOf(bob)[0], minted[0]);
-        assertEq(shares.balanceOfOutcome(bob, address(m), 0), 0, "lembar seed tidak boleh jadi ERC-1155");
+        assertEq(shares.balanceOfOutcome(bob, address(m), 0), 0, "seed shares must not become ERC-1155");
     }
 
     function test_removeLiquidityReturnsCollateral() public {
@@ -59,14 +59,14 @@ contract MarketLiquidityTest is Fixtures {
         uint256 balBefore = usdc.balanceOf(bob);
 
         vm.prank(bob);
-        uint256 got = m.removeLiquidity(1e17, 0, bob); // 10% dari q saat ini
+        uint256 got = m.removeLiquidity(1e17, 0, bob); // 10% of the current q
         assertGt(got, 0);
         assertEq(usdc.balanceOf(bob) - balBefore, got);
         assertEq(m.poolWad(), DPMMath.costUp(m.qArray()));
     }
 
-    /// @dev Lantai keras. Ini yang menjaga qᵢ > 0 selamanya, dan tanpanya
-    ///      C(q)/q_menang bisa membagi nol saat settle.
+    /// @dev A hard floor. This is what keeps qᵢ > 0 forever; without it C(q)/q_winning could
+    ///      divide by zero at settle.
     function test_creatorCannotWithdrawItsSeed() public {
         vm.prank(creator);
         vm.expectRevert(Market.CreatorSeedFloor.selector);
@@ -85,7 +85,7 @@ contract MarketLiquidityTest is Fixtures {
         m.removeLiquidity(1e18 + 1, 0, bob);
     }
 
-    /// @dev Jalur keluar lagi: penarikan likuiditas tidak boleh diblokir pause.
+    /// @dev An exit path again: withdrawing liquidity must not be blocked by the pause.
     function test_removeLiquiditySucceedsWhilePaused() public {
         vm.prank(bob);
         m.addLiquidity(500e6, 0, bob);
@@ -102,7 +102,7 @@ contract MarketLiquidityTest is Fixtures {
         m.addLiquidity(uint256(amount), 0, bob);
         uint256[2] memory q = m.qArray();
         uint256[2] memory held = m.seedSharesOf(bob);
-        // tarik fraksi terbesar yang masih tercakup posisi sendiri
+        // withdraw the largest fraction still covered by one's own position
         uint256 lambda = Math.min((held[0] * 1e18) / q[0], (held[1] * 1e18) / q[1]);
         if (lambda > 0) m.removeLiquidity(lambda, 0, bob);
         vm.stopPrank();

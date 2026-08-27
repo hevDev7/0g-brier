@@ -12,10 +12,10 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
-/// @dev Collateral 18-desimal HANYA untuk `test_liquidateClampsWhenFlooredLegsExceedPool`:
-///      dengan `scale = 1`, `seedShares` bisa didorong serendah wei tunggal — sesuatu yang
-///      mustahil lewat MockUSDC (6 desimal, `scale = 1e12`, jadi 1 unit token terkecil saja
-///      sudah menghasilkan q ~7e11, jauh di atas rezim q<60 tempat clamp relevan).
+/// @dev An 18-decimal collateral ONLY for `test_liquidateClampsWhenFlooredLegsExceedPool`:
+///      with `scale = 1`, `seedShares` can be pushed as low as a single wei — something
+///      impossible through MockUSDC (6 decimals, `scale = 1e12`, so even one smallest token
+///      unit already yields q ~7e11, far above the q<60 regime where the clamp matters).
 contract Mock18 is ERC20 {
     constructor() ERC20("Mock18", "M18") {}
 
@@ -61,11 +61,11 @@ contract MarketExitTest is Fixtures {
         vm.prank(creator);
         uint256 got = m.redeem(creator);
         assertGt(got, 0);
-        assertEq(m.seedSharesOf(creator)[0], 0, "sisi kalah harus hangus");
+        assertEq(m.seedSharesOf(creator)[0], 0, "the losing side must be forfeited");
         assertEq(m.seedSharesOf(creator)[1], 0);
     }
 
-    /// @dev Persamaan konservasi: total yang ditebus tidak boleh melebihi pool.
+    /// @dev The conservation equation: total redemptions must not exceed the pool.
     function test_totalRedemptionsNeverExceedPool() public {
         _settleAs(1);
         uint256 poolTokens = usdc.balanceOf(address(m));
@@ -79,7 +79,7 @@ contract MarketExitTest is Fixtures {
         assertGe(usdc.balanceOf(address(m)), 0);
     }
 
-    /// @dev Redeem harus berhasil walau protokol dipause.
+    /// @dev Redeem must succeed even while the protocol is paused.
     function test_redeemSucceedsWhilePaused() public {
         _settleAs(1);
         vm.prank(guardian);
@@ -88,7 +88,7 @@ contract MarketExitTest is Fixtures {
         assertGt(m.redeem(alice), 0);
     }
 
-    /// @dev Identitas Euler: likuidasi membayar pᵢ per lembar dan menghabiskan pool.
+    /// @dev The Euler identity: liquidation pays pᵢ per share and exhausts the pool.
     function test_liquidationPaysEverySideAndDrainsPool() public {
         vm.warp(m.settlementDeadline());
         m.fail();
@@ -101,33 +101,33 @@ contract MarketExitTest is Fixtures {
         uint256 c = m.liquidate(creator);
 
         assertGt(a, 0);
-        assertGt(b, 0, "pemegang sisi kalah tetap dapat pengembalian saat market gagal");
+        assertGt(b, 0, "a losing-side holder still gets a refund when the market fails");
         assertGt(c, 0);
-        // NB: brief asli menulis `assertLe(m.poolWad(), 3)` — tebakan yang GAGAL secara
-        // empiris untuk fixture ini (poolWad tersisa = 646, bukan ≤3). Sebabnya bukan bug:
-        // `price()` membagi dengan `cost()` yang dibulatkan ke bawah, dan kesalahan sekecil
-        // itu diperbesar oleh faktor (lembar/WAD) tiap kali dikalikan balik di `liquidate` —
-        // untuk fixture berskala ~1e21 lembar ini, faktor itu membuat debu berorde ratusan
-        // wei-wad, bukan O(1). Batas yang benar bukan konstanta tebakan, melainkan
-        // granularitas token nyata: sisa poolWad harus lebih kecil dari `scale` (1 unit
-        // token terkecil), sehingga ketika dibagi `scale` ia BENAR-BENAR membulat ke 0 token
-        // — dust yang secara ekonomis nol, terlepas dari ukuran perdagangan fixture.
-        assertLt(m.poolWad(), m.scale(), "sisa poolWad harus kurang dari 1 unit token nyata");
+        // NB: the original brief wrote `assertLe(m.poolWad(), 3)` — a guess that FAILS
+        // empirically for this fixture (the poolWad left over is 646, not ≤3). The cause is
+        // not a bug: `price()` divides by a `cost()` rounded down, and an error that small is
+        // magnified by a factor of (shares/WAD) every time it is multiplied back in
+        // `liquidate` — for this fixture's ~1e21-scale share counts, that factor puts the dust
+        // in the hundreds of wei-wad, not O(1). The correct bound is not a guessed constant but
+        // the real token granularity: the leftover poolWad must be smaller than `scale` (one
+        // smallest token unit), so that when divided by `scale` it REALLY does round to 0
+        // tokens — dust that is economically zero, whatever the fixture's trade size.
+        assertLt(m.poolWad(), m.scale(), "leftover poolWad must be under 1 real token unit");
     }
 
-    /// @dev Reproduksi konkret bug yang ditemukan reviewer: pada q kecil, dua kaki yang
-    ///      MASING-MASING dibulatkan ke bawah oleh `price()` bisa berjumlah LEBIH dari
-    ///      `poolWad` (yang dibulatkan ke ATAS via `costUp`) walau identitas Euler eksak
-    ///      menyamakan keduanya secara real. q=(2,2) adalah kasus konkret terkecil: cost
-    ///      floor = ⌊√8⌋ = 2, jadi price0=price1=WAD (1:1), dan payout benih creator
-    ///      2·WAD/WAD + 2·WAD/WAD = 4 — padahal poolWad = costUp([2,2]) = ⌈√8⌉ = 3. Tanpa
-    ///      clamp, `poolWad -= payoutWad` di `liquidate` underflow (Panic 0x11) dan MENGUNCI
-    ///      dana pengguna permanen. Rezim ini tak terjangkau lewat MIN_SEED default (locked
-    ///      ke [1e6, UNBOUNDED] oleh DeployLib pada `config` bawaan Fixtures) maupun lewat
-    ///      MockUSDC (scale=1e12) — jadi test ini membangun ConfigRegistry BARU (MIN_SEED
-    ///      tak pernah di-set, sehingga `params()` baku ke 0 — masih lewat API publik
-    ///      ConfigRegistry, bukan cheat/storage langsung) dan collateral 18-desimal terpisah
-    ///      supaya q sungguhan bisa serendah (2,2).
+    /// @dev A concrete reproduction of the bug the reviewer found: at small q, two legs EACH
+    ///      rounded down by `price()` can sum to MORE than `poolWad` (which is rounded UP via
+    ///      `costUp`) even though the exact Euler identity equates them over the reals.
+    ///      q=(2,2) is the smallest concrete case: floor cost = ⌊√8⌋ = 2, so price0=price1=WAD
+    ///      (1:1), and the creator's seed payout is 2·WAD/WAD + 2·WAD/WAD = 4 — while
+    ///      poolWad = costUp([2,2]) = ⌈√8⌉ = 3. Without the clamp, `poolWad -= payoutWad` in
+    ///      `liquidate` underflows (Panic 0x11) and LOCKS user funds permanently. That regime
+    ///      is unreachable through the default MIN_SEED (locked to [1e6, UNBOUNDED] by
+    ///      DeployLib on the `config` Fixtures provides) or through MockUSDC (scale=1e12) — so
+    ///      this test builds a NEW ConfigRegistry (MIN_SEED is never set, so `params()`
+    ///      defaults to 0 — still through ConfigRegistry's public API, not a cheatcode or
+    ///      direct storage write) and a separate 18-decimal collateral, so that a real q can
+    ///      go as low as (2,2).
     function test_liquidateClampsWhenFlooredLegsExceedPool() public {
         Mock18 tinyToken = new Mock18();
 
@@ -139,8 +139,8 @@ contract MarketExitTest is Fixtures {
                 )
             )
         );
-        // MIN_SEED/MIN_SETTLEMENT_DEPOSIT sengaja TIDAK di-set: `params()` baku ke 0,
-        // jadi `initialize` menerima seedTokens=3, depositTokens=0 apa adanya.
+        // MIN_SEED/MIN_SETTLEMENT_DEPOSIT are deliberately NOT set: `params()` defaults to 0,
+        // so `initialize` accepts seedTokens=3, depositTokens=0 as they are.
         tinyConfig.setCollateralAllowed(address(tinyToken), true);
 
         Market tiny = Market(Clones.clone(address(marketImpl)));
@@ -159,7 +159,7 @@ contract MarketExitTest is Fixtures {
         p.category = bytes32("tiny");
 
         tiny.initialize(address(tinyConfig), address(shares), p, 3, 0);
-        assertEq(tiny.qArray()[0], 2, "seedShares(3) harus menghasilkan q=(2,2)");
+        assertEq(tiny.qArray()[0], 2, "seedShares(3) must yield q=(2,2)");
         assertEq(tiny.qArray()[1], 2);
         assertEq(tiny.poolWad(), 3, "poolWad = costUp([2,2]) = ceil(sqrt(8)) = 3");
 
@@ -172,14 +172,14 @@ contract MarketExitTest is Fixtures {
 
         uint256[2] memory seed = tiny.seedSharesOf(creator);
         uint256 requested = Math.mulDiv(seed[0], liq[0], DPMMath.WAD) + Math.mulDiv(seed[1], liq[1], DPMMath.WAD);
-        assertEq(requested, 4, "2*WAD/WAD + 2*WAD/WAD = 4, sebelum clamp");
-        assertGt(requested, tiny.poolWad(), "prasyarat bug: permintaan floor melebihi pool");
+        assertEq(requested, 4, "2*WAD/WAD + 2*WAD/WAD = 4, before the clamp");
+        assertGt(requested, tiny.poolWad(), "the bug precondition: the floored request exceeds the pool");
 
         vm.prank(creator);
         uint256 got = tiny.liquidate(creator);
 
-        assertEq(got, 3, "diclamp ke poolWad (3), bukan permintaan mentah (4)");
-        assertEq(tiny.poolWad(), 0, "pool habis persis, tak underflow");
+        assertEq(got, 3, "clamped to poolWad (3), not the raw request (4)");
+        assertEq(tiny.poolWad(), 0, "the pool empties exactly, with no underflow");
         assertEq(tinyToken.balanceOf(creator), 3);
     }
 

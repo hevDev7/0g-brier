@@ -17,7 +17,7 @@ contract StubRegistry is IMarketRegistry {
     }
 }
 
-/// @dev Berpura-pura menjadi Market: memanggil mint/burn atas namanya sendiri.
+/// @dev Pretends to be a Market: calls mint/burn under its own name.
 contract FakeMarket {
     OutcomeShares public immutable shares;
 
@@ -64,14 +64,14 @@ contract OutcomeSharesTest is Test {
         assertEq(shares.balanceOfOutcome(alice, address(marketA), 1), 60e18);
     }
 
-    /// @dev Sifat kunci: id market A dan market B tidak pernah bertabrakan, dan
-    ///      market B tidak punya cara menyentuh saldo market A.
+    /// @dev The key property: market A's and market B's ids never collide, and market B has
+    ///      no way to touch market A's balances.
     function test_marketsCannotTouchEachOthersIds() public {
         marketA.mint(alice, 1, 100e18);
         assertEq(shares.balanceOfOutcome(alice, address(marketB), 1), 0);
 
         vm.expectRevert();
-        marketB.burn(alice, 1, 1e18); // membakar id MILIKNYA sendiri, yang saldonya nol
+        marketB.burn(alice, 1, 1e18); // burns ITS OWN id, whose balance is zero
     }
 
     function test_nonMarketCannotMint() public {
@@ -96,11 +96,11 @@ contract OutcomeSharesTest is Test {
         fresh.setRegistry(address(0));
     }
 
-    /// @dev Sifat kunci: unset dan "di-set ke address(0)" berbagi nilai storage yang sama,
-    ///      jadi address(0) harus ditolak eksplisit — jika tidak, guard "sudah pernah di-set"
-    ///      tak bisa membedakan keduanya, dan panggilan address(0) yang lolos diam-diam
-    ///      menghabiskan kunci sekali-pakai. Panggilan yang ditolak TIDAK BOLEH menghabiskan
-    ///      kunci itu: setRegistry yang sah sesudahnya harus tetap berhasil.
+    /// @dev The key property: unset and "set to address(0)" share the same storage value, so
+    ///      address(0) must be rejected explicitly — otherwise the "already set" guard cannot
+    ///      tell the two apart, and an address(0) call that slips through silently consumes
+    ///      the one-shot key. A rejected call MUST NOT consume that key: a legitimate
+    ///      setRegistry afterwards must still succeed.
     function test_zeroRegistryRejectionLeavesOneShotUsable() public {
         OutcomeShares fresh = new OutcomeShares("");
         vm.expectRevert(OutcomeShares.ZeroRegistry.selector);

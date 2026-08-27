@@ -6,10 +6,11 @@ import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/acces
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 /// @title ConfigRegistry
-/// @notice Satu-satunya sumber parameter, alamat, dan status pause protokol.
-/// @dev Batas parameter DIKUNCI saat pertama dipasang: tidak ada fungsi pada implementasi
-///      ini yang bisa melonggarkannya. Satu-satunya jalan di luar batas itu adalah upgrade
-///      tata kelola (spec §13.3) — admin-nya multisig 3/5, dan semua upgrade lewat timelock 48 jam.
+/// @notice The single source of protocol parameters, addresses, and pause state.
+/// @dev Parameter bounds are LOCKED the first time they are set: no function on this
+///      implementation can loosen them. The only route outside those bounds is a
+///      governance upgrade (spec §13.3) — its admin is a 3/5 multisig, and every upgrade
+///      goes through a 48-hour timelock.
 contract ConfigRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     struct Bounds {
         uint128 lo;
@@ -80,7 +81,7 @@ contract ConfigRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeab
         emit GuardianSet(guardian_);
     }
 
-    /// @notice Guardian boleh menghentikan cepat; hanya pemilik yang boleh menyalakan kembali.
+    /// @notice The guardian may halt quickly; only the owner may switch it back on.
     function pause() external {
         if (msg.sender != guardian && msg.sender != owner()) revert NotGuardian();
         paused = true;

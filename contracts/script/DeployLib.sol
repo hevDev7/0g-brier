@@ -5,14 +5,14 @@ import {ConfigRegistry} from "../src/core/ConfigRegistry.sol";
 import {ConfigKeys} from "../src/core/ConfigKeys.sol";
 
 /// @title DeployLib
-/// @notice Nilai bawaan protokol dari §17 spec. Dipisahkan dari skrip broadcast agar
-///         bisa diuji langsung tanpa menyiarkan transaksi.
+/// @notice Protocol defaults from spec §17. Kept separate from the broadcast script so
+///         they can be tested directly without broadcasting a transaction.
 library DeployLib {
     uint128 internal constant UNBOUNDED = type(uint128).max;
 
     function applyDefaults(ConfigRegistry config, address collateral) internal {
-        // Batas dipasang lebih dulu dan terkunci selamanya; nilai menyusul.
-        config.setBounds(ConfigKeys.FEE_BPS, 0, 300); // plafon 3.00%
+        // Bounds are set first and locked forever; the values follow.
+        config.setBounds(ConfigKeys.FEE_BPS, 0, 300); // 3.00% ceiling
         config.setBounds(ConfigKeys.CREATOR_FEE_SHARE_BPS, 0, 10_000);
         config.setBounds(ConfigKeys.RESOLVER_FEE_SHARE_BPS, 0, 10_000);
         config.setBounds(ConfigKeys.MIN_SEED, 1e6, UNBOUNDED);

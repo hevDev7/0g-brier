@@ -21,10 +21,10 @@ contract MarketBuyTest is Fixtures {
         vm.prank(alice);
         m.buy(1, 100e18, type(uint256).max, alice);
         assertGt(m.probability(1), before);
-        // DPMMath.probability membulatkan p0 dan p1 ke bawah secara independen (mulDiv floor).
-        // Untuk q simetris kedua pembagian pas persis (lihat MarketInitTest), tapi begitu q
-        // asimetris — persis kondisi pasca-beli ini — jumlahnya bisa WAD atau WAD-1, tak
-        // pernah lebih. Ini properti DPMMath yang sudah ada sejak Task 6-8, bukan bug `buy`.
+        // DPMMath.probability rounds p0 and p1 down independently (mulDiv floor). For a
+        // symmetric q both divisions land exactly (see MarketInitTest), but once q is
+        // asymmetric — exactly this post-buy condition — the sum can be WAD or WAD-1, never
+        // more. This is a DPMMath property present since Tasks 6-8, not a bug in `buy`.
         uint256 sumProb = m.probability(0) + m.probability(1);
         assertLe(sumProb, 1e18);
         assertGe(sumProb, 1e18 - 1);
@@ -43,7 +43,7 @@ contract MarketBuyTest is Fixtures {
         assertEq(m.feeAccrued(), fee);
     }
 
-    /// @dev Invarian pusat, diperiksa setelah operasi nyata.
+    /// @dev The central invariant, checked after a real operation.
     function test_poolStillEqualsCostUpAfterBuy() public {
         vm.prank(alice);
         m.buy(0, 250e18, type(uint256).max, alice);
@@ -65,8 +65,8 @@ contract MarketBuyTest is Fixtures {
         assertEq(shares.balanceOfOutcome(alice, address(m), 1), 0);
     }
 
-    /// @dev Perdagangan debu ditolak: dengan pembulatan ke atas, pembelian sangat kecil
-    ///      bisa menghasilkan biaya nol token dan memberi lembar gratis.
+    /// @dev Dust trades are rejected: with rounding up, a very small purchase could come to a
+    ///      cost of zero tokens and hand out free shares.
     function test_dustBuyReverts() public {
         vm.prank(alice);
         vm.expectRevert(Market.TradeTooSmall.selector);
@@ -94,39 +94,40 @@ contract MarketBuyTest is Fixtures {
         m.buy(2, 100e18, type(uint256).max, alice);
     }
 
-    /// @dev quoteBuySpend adalah taksiran: biaya sebenarnya tidak boleh melebihi nominal
-    ///      yang diminta pengguna.
+    /// @dev quoteBuySpend is an estimate: the real cost must not exceed the notional the user
+    ///      asked for.
     function testFuzz_quoteBuySpendNeverOverpromises(uint96 spend) public {
         vm.assume(spend >= 1e6 && spend <= 100_000e6);
         (uint256 sharesOut,) = m.quoteBuySpend(1, uint256(spend));
         vm.assume(sharesOut > 0);
         (uint256 realCost,) = m.quoteBuy(1, sharesOut);
-        // quoteBuySpend membalik fee lewat tokensIn·feeBps/(10000+feeBps) (floor), sedangkan
-        // quoteBuy menghitung ulang fee dari costTokens hasil ceilDiv — dua pembulatan yang
-        // independen ini kadang berpadu dan membuat realCost 1 unit token lebih tinggi dari
-        // `spend`. Batas 1 unit ini murni pembulatan pada fungsi VIEW; `buy` sendiri tetap
-        // memakai `maxTokensIn` untuk melindungi pemanggil — kuotasi ini sengaja tidak otoritatif.
+        // quoteBuySpend inverts the fee via tokensIn·feeBps/(10000+feeBps) (floor), whereas
+        // quoteBuy recomputes the fee from a ceilDiv'd costTokens — these two independent
+        // roundings sometimes compound and put realCost one token unit above `spend`. That
+        // one-unit margin is pure rounding on a VIEW function; `buy` itself still uses
+        // `maxTokensIn` to protect the caller — this quote is deliberately not authoritative.
         assertLe(realCost, uint256(spend) + 1);
-        // Sisi bawah sama pentingnya: sharesForSpend mencari lembar TERBESAR yang muat dalam
-        // anggaran, jadi realCost tak boleh jatuh jauh di bawah `spend` — kalau tidak, kuotasi
-        // yang rusak total (mis. 1 wei lembar untuk anggaran $100rb) tetap lulus uji ini. Berlaku
-        // untuk scale > 1 (collateral 6-desimal di fixture ini); pada scale == 1 batasnya T-1.
+        // The lower side matters just as much: sharesForSpend looks for the LARGEST share count
+        // that fits inside the budget, so realCost must not fall far below `spend` — otherwise
+        // a completely broken quote (say 1 wei of shares for a $100k budget) would still pass
+        // this test. Holds for scale > 1 (the 6-decimal collateral in this fixture); at
+        // scale == 1 the bound is T-1.
         assertGe(realCost, uint256(spend));
     }
 
-    /// @dev Membeli dalam dua langkah tidak boleh lebih murah daripada sekali jalan
-    ///      (path independence, dalam batas debu pembulatan).
+    /// @dev Buying in two steps must not be cheaper than buying in one (path independence,
+    ///      within the bounds of rounding dust).
     function testFuzz_buyIsPathIndependent(uint64 partA, uint64 partB) public {
-        // Ambang lama (vm.assume(partA > 1e15 ...)) jauh di bawah MIN_TRADE_TOKENS (1e6 token,
-        // collateral 6-desimal), dan lantai `bound` sebelumnya (2e18+1) terlalu jauh DI ATASNYA:
-        // cari-biner eksak pada rumus sungguhan menunjukkan lembar sekecil 1413506453827668971
-        // dari state benih simetris sudah menyentuh MIN_TRADE_TOKENS. Lantai di bawah ini adalah
-        // satu di atas ambang eksak itu, supaya wilayah [1.4135e18, 2e18] — trade kecil-tapi-sah
-        // tempat debu pembulatan [-1,+2] paling mungkin muncul — ikut tercakup fuzzer, bukan
-        // cuma nilai jauh di atasnya. Di bawah ambang, `buy` sah revert TradeTooSmall (proteksi
-        // debu yang sama seperti test_dustBuyReverts). `bound` memetakan setiap input alih-alih
-        // menolaknya (vm.assume pada ambang setipis ini membuat fuzzer menyerah, "rejected too
-        // many inputs").
+        // The old threshold (vm.assume(partA > 1e15 ...)) sat far below MIN_TRADE_TOKENS (1e6
+        // tokens, 6-decimal collateral), and the previous `bound` floor (2e18+1) sat far ABOVE
+        // it: an exact binary search on the real formula shows that a share count as small as
+        // 1413506453827668971 out of the symmetric seed state already reaches MIN_TRADE_TOKENS.
+        // The floor below is one above that exact threshold, so the region [1.4135e18, 2e18] —
+        // the small-but-valid trades where the [-1,+2] rounding dust is most likely to appear —
+        // is covered by the fuzzer too, not merely values far above it. Below the threshold
+        // `buy` legitimately reverts TradeTooSmall (the same dust protection as
+        // test_dustBuyReverts). `bound` maps every input instead of rejecting it (vm.assume on
+        // a threshold this thin makes the fuzzer give up with "rejected too many inputs").
         partA = uint64(bound(uint256(partA), 1413506453827668972, type(uint64).max));
         partB = uint64(bound(uint256(partB), 1413506453827668972, type(uint64).max));
         uint256 total = uint256(partA) + uint256(partB);
@@ -137,10 +138,10 @@ contract MarketBuyTest is Fixtures {
         uint256 second = m.buy(1, uint256(partB), type(uint256).max, alice);
         vm.stopPrank();
 
-        // costTokens terbelah lewat ceilDiv (condong menambah hingga +1 dibanding sekali jalan)
-        // sedangkan fee terbelah lewat floor (condong mengurangi hingga -1) — keduanya bisa
-        // berpadu. Rentang sebenarnya (first+second)-oneShot ∈ [-1, +2], bukan "tidak pernah
-        // lebih murah dari 0". Ditulis lewat penjumlahan, bukan pengurangan, agar tak underflow.
+        // costTokens splits through ceilDiv (biased upward by as much as +1 against the one-shot
+        // path) while the fee splits through floor (biased downward by as much as -1) — and the
+        // two can compound. The real range of (first+second)-oneShot is [-1, +2], not "never
+        // cheaper than 0". Written as addition rather than subtraction so it cannot underflow.
         assertGe(first + second + 1, oneShot);
         assertLe(first + second, oneShot + 2);
     }

@@ -2,9 +2,9 @@
 pragma solidity 0.8.28;
 
 /// @title ConfigKeys
-/// @notice Kunci kanonik untuk ConfigRegistry. Tidak ada angka ajaib di kontrak lain.
+/// @notice Canonical keys for ConfigRegistry. No magic numbers in any other contract.
 library ConfigKeys {
-    // ── parameter (uint256) ──────────────────────────────────────────────────
+    // ── parameters (uint256) ─────────────────────────────────────────────────
     bytes32 internal constant FEE_BPS = keccak256("FEE_BPS");
     bytes32 internal constant CREATOR_FEE_SHARE_BPS = keccak256("CREATOR_FEE_SHARE_BPS");
     bytes32 internal constant RESOLVER_FEE_SHARE_BPS = keccak256("RESOLVER_FEE_SHARE_BPS");
@@ -13,7 +13,7 @@ library ConfigKeys {
     bytes32 internal constant MIN_TRADE_TOKENS = keccak256("MIN_TRADE_TOKENS");
     bytes32 internal constant SWEEP_UNCLAIMED_AFTER = keccak256("SWEEP_UNCLAIMED_AFTER");
 
-    // ── alamat ───────────────────────────────────────────────────────────────
+    // ── addresses ────────────────────────────────────────────────────────────
     bytes32 internal constant MARKET_FACTORY = keccak256("MARKET_FACTORY");
     bytes32 internal constant OUTCOME_SHARES = keccak256("OUTCOME_SHARES");
     bytes32 internal constant TREASURY = keccak256("TREASURY");

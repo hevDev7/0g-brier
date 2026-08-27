@@ -2,8 +2,8 @@
 pragma solidity 0.8.28;
 
 interface IMarket {
-    /// @dev Closed/Proposed/Disputed adalah keadaan tanpa perdagangan: `q` dibekukan
-    ///      agar payout tidak bisa digeser saat komite sedang menilai.
+    /// @dev Closed/Proposed/Disputed are non-trading states: `q` is frozen so the
+    ///      payout cannot be shifted while the committee is still deliberating.
     enum Status {
         Open,
         Closed,
@@ -21,12 +21,12 @@ interface IMarket {
         uint64 tradingEnd;
         uint64 settlementDeadline;
         uint8 tier; // 0=FAST 1=VERIFIED 2=DETERMINISTIC
-        bytes32 specRoot; // root Merkle 0G Storage untuk MarketSpec
+        bytes32 specRoot; // 0G Storage Merkle root for the MarketSpec
         bytes32 category;
     }
 
-    /// @dev qAfter dan probAfter disertakan supaya indexer bisa merekonstruksi kurva
-    ///      probabilitas tanpa satu pun eth_call historis.
+    /// @dev qAfter and probAfter are included so that an indexer can reconstruct the
+    ///      probability curve without a single historical eth_call.
     event Trade(
         address indexed trader,
         address indexed recipient,

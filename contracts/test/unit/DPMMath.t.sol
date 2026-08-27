@@ -21,8 +21,8 @@ contract DPMMathTest is Test {
         assertEq(DPMMath.costUp(_q(1e18, 0)), 1e18);
     }
 
-    /// @dev Segitiga 3-4-5: satu-satunya kasus di mana √ pasti eksak, sehingga
-    ///      costUp TIDAK boleh menambah 1. Ini yang menangkap ceil yang keliru.
+    /// @dev The 3-4-5 triangle: the one case where √ is certainly exact, so costUp must NOT
+    ///      add 1. This is what catches a mistaken ceil.
     function test_exactSquareRootDoesNotRoundUp() public pure {
         assertEq(DPMMath.cost(_q(3e18, 4e18)), 5e18);
         assertEq(DPMMath.costUp(_q(3e18, 4e18)), 5e18);
@@ -53,19 +53,19 @@ contract DPMMathTest is Test {
         return DPMMath.cost(q);
     }
 
-    /// @dev Homogenitas derajat 1: C(k·q) = k·C(q). Sifat inilah yang membuat
-    ///      penambahan likuiditas proporsional netral terhadap probabilitas (Task 13).
+    /// @dev Homogeneity of degree 1: C(k·q) = k·C(q). This is the property that makes a
+    ///      proportional liquidity addition probability-neutral (Task 13).
     function testFuzz_costIsHomogeneousDegreeOne(uint96 a, uint96 b, uint8 kSmall) public pure {
         uint256 k = uint256(kSmall) + 1;
         uint256[2] memory q = _q(uint256(a), uint256(b));
         uint256[2] memory kq = _q(uint256(a) * k, uint256(b) * k);
         uint256 lhs = DPMMath.cost(kq);
         uint256 rhs = DPMMath.cost(q) * k;
-        // pembulatan floor menumpuk paling banyak k wei
+        // floor rounding accumulates at most k wei
         assertLe(lhs > rhs ? lhs - rhs : rhs - lhs, k);
     }
 
-    /// @dev Monotonisitas: menambah lembar tidak pernah menurunkan biaya pool.
+    /// @dev Monotonicity: adding shares never lowers the pool cost.
     function testFuzz_costIsMonotonic(uint96 a, uint96 b, uint96 delta) public pure {
         uint256[2] memory q = _q(uint256(a), uint256(b));
         uint256[2] memory qMore = _q(uint256(a) + uint256(delta), uint256(b));
@@ -77,8 +77,8 @@ contract DPMMathTest is Test {
         assertEq(DPMMath.price(_q(3e18, 4e18), 1), 8e17);
     }
 
-    /// @dev Sifat penanda DPM: harga marginal BUKAN probabilitas — kuadratnya yang
-    ///      probabilitas, dan kuadratnya berjumlah satu. UI wajib menampilkan pᵢ².
+    /// @dev The signature property of DPM: the marginal price is NOT the probability — its
+    ///      square is, and the squares sum to one. A UI must display pᵢ².
     function test_sumOfSquaredPricesIsOne() public pure {
         uint256[2] memory q = _q(3e18, 4e18);
         uint256 p0 = DPMMath.price(q, 0);
@@ -96,8 +96,8 @@ contract DPMMathTest is Test {
         assertEq(DPMMath.probability(_q(7e30, 7e30), 1), 5e17);
     }
 
-    /// @dev qᵢ² · WAD mencapai 1e84 pada MAX_Q — jauh melampaui uint256. Uji ini gagal
-    ///      bila implementasi memakai perkalian biasa alih-alih mulDiv 512-bit.
+    /// @dev qᵢ² · WAD reaches 1e84 at MAX_Q — far beyond uint256. This test fails if the
+    ///      implementation uses an ordinary multiplication instead of a 512-bit mulDiv.
     function test_probabilityDoesNotOverflowAtMaxQ() public pure {
         assertEq(DPMMath.probability(_q(DPMMath.MAX_Q, DPMMath.MAX_Q), 0), 5e17);
     }
@@ -129,26 +129,25 @@ contract DPMMathTest is Test {
         vm.assume(uint256(a) + uint256(b) > 0);
         uint256[2] memory q = _q(uint256(a), uint256(b));
         uint256 sum = DPMMath.probability(q, 0) + DPMMath.probability(q, 1);
-        assertLe(DPMMath.WAD - sum, 2); // hanya debu floor
+        assertLe(DPMMath.WAD - sum, 2); // floor dust only
         assertLe(sum, DPMMath.WAD);
     }
 
-    /// @dev Euler: Σ pᵢ·qᵢ = C(q). Inilah yang membuat likuidasi menghabiskan pool
-    ///      secara persis saat market gagal (Task 15).
-    /// @dev CATATAN: toleransi di bawah ini diturunkan ulang dari draf brief (yang
-    ///      memakai `assertLe(cost(q) - lhs, 3)` diikuti `assertLe(lhs, cost(q))`).
-    ///      Draf itu underflow: karena `price()` membagi dengan `cost(q)` yang SUDAH
-    ///      dibulatkan ke bawah (bukan akar eksak), lhs bisa melebihi cost(q). Bukti:
-    ///      dari definisi floor, term(i)·C ≤ qᵢ² untuk tiap i (kalikan silang batas
-    ///      floor price() dan floor term()); jumlahkan kedua sisi → lhs·C ≤ Σqᵢ² =
-    ///      S ≤ C²+2C (karena C = ⌊√S⌋) ⇒ lhs ≤ C + 2. Sebaliknya, kekurangan
-    ///      (cost(q) − lhs) TIDAK dibatasi konstanta: eror floor pada price() (< 1
-    ///      pada skala harga) dikalikan qᵢ sebelum dibagi WAD lagi, sehingga ikut
-    ///      berskala dengan qᵢ — dibuktikan cost(q) − lhs ≤ (q₀+q₁)/WAD + 2. Kedua
-    ///      batas ini eksak (tercapai pada mis. q=(2,2) dan q=(64,112); dikonfirmasi
-    ///      lewat pencarian brute-force menyeluruh atas rentang uint96), dan dipakai
-    ///      di sini dengan margin +1. Konstanta "3" tetap seperti draf; arah dan
-    ///      skalanya yang diperbaiki.
+    /// @dev Euler: Σ pᵢ·qᵢ = C(q). This is what makes liquidation exhaust the pool exactly
+    ///      when a market fails (Task 15).
+    /// @dev NOTE: the tolerance below was re-derived from the brief's draft (which used
+    ///      `assertLe(cost(q) - lhs, 3)` followed by `assertLe(lhs, cost(q))`). That draft
+    ///      underflows: because `price()` divides by a `cost(q)` that has ALREADY been rounded
+    ///      down (not an exact root), lhs can exceed cost(q). Proof: from the definition of
+    ///      floor, term(i)·C ≤ qᵢ² for each i (cross-multiply the floor bounds of price() and
+    ///      of term()); sum both sides → lhs·C ≤ Σqᵢ² = S ≤ C²+2C (since C = ⌊√S⌋) ⇒
+    ///      lhs ≤ C + 2. In the other direction the shortfall (cost(q) − lhs) is NOT bounded by
+    ///      a constant: the floor error in price() (< 1 at price scale) is multiplied by qᵢ
+    ///      before being divided by WAD again, so it scales with qᵢ too — proven to be
+    ///      cost(q) − lhs ≤ (q₀+q₁)/WAD + 2. Both bounds are tight (attained at e.g. q=(2,2)
+    ///      and q=(64,112); confirmed by an exhaustive brute-force search over the uint96
+    ///      range), and are used here with a +1 margin. The constant "3" stays as in the draft;
+    ///      what was fixed is its direction and its scaling.
     function testFuzz_eulerIdentity(uint96 a, uint96 b) public pure {
         vm.assume(uint256(a) + uint256(b) > 0);
         uint256[2] memory q = _q(uint256(a), uint256(b));
@@ -162,22 +161,22 @@ contract DPMMathTest is Test {
         }
     }
 
-    /// @dev Bentuk tertutup: x = √(C₁² − q_j²) − qᵢ dengan C₁ = C(q) + spend.
-    ///      Dipilih dua segitiga Pythagoras agar jawabannya bulat dan bisa diperiksa mata:
-    ///      (0,3) biaya 3 → C₁ = 5 → q₀ baru = 4  ⇒ 4 lembar.
+    /// @dev The closed form: x = √(C₁² − q_j²) − qᵢ with C₁ = C(q) + spend.
+    ///      Two Pythagorean triangles were chosen so the answers are whole and checkable by eye:
+    ///      (0,3) costs 3 → C₁ = 5 → new q₀ = 4  ⇒ 4 shares.
     function test_sharesForSpendClosedFormExactCaseA() public pure {
         assertEq(DPMMath.sharesForSpend(_q(0, 3e18), 0, 2e18), 4e18);
     }
 
-    /// @dev (5,12) biaya 13 → C₁ = 15 → q₀ baru = 9 ⇒ 4 lembar.
+    /// @dev (5,12) costs 13 → C₁ = 15 → new q₀ = 9 ⇒ 4 shares.
     function test_sharesForSpendClosedFormExactCaseB() public pure {
         assertEq(DPMMath.sharesForSpend(_q(5e18, 12e18), 0, 2e18), 4e18);
     }
 
-    /// @dev Cerminan Kasus A dengan i=1 alih-alih i=0: (3,0) dibeli pada outcome 1
-    ///      harus memberi hasil yang sama, 4 lembar. Tanpa uji ini, cabang `j = i==0
-    ///      ? 1 : 0` untuk i=1 tidak pernah dieksekusi oleh satu pun dari 22 uji lain —
-    ///      pembalikan indeks q[i]/q[j] akan lolos tanpa terdeteksi.
+    /// @dev A mirror of Case A with i=1 instead of i=0: (3,0) bought on outcome 1 must give the
+    ///      same answer, 4 shares. Without this test the `j = i==0 ? 1 : 0` branch for i=1 is
+    ///      never executed by any of the other 22 tests — a swap of the q[i]/q[j] indices would
+    ///      slip through undetected.
     function test_sharesForSpendClosedFormExactCaseAMirroredForOutcomeOne() public pure {
         assertEq(DPMMath.sharesForSpend(_q(3e18, 0), 1, 2e18), 4e18);
     }
@@ -196,9 +195,8 @@ contract DPMMathTest is Test {
         return DPMMath.sharesForSpend(q, i, s);
     }
 
-    /// @dev Sifat yang benar-benar penting: kuotasi tidak boleh pernah menjanjikan
-    ///      lebih banyak lembar daripada yang dibayar. Biaya sesungguhnya untuk lembar
-    ///      yang dikuotasi harus ≤ spend (tidak pernah melebihi).
+    /// @dev The property that really matters: a quote must never promise more shares than were
+    ///      paid for. The real cost of the quoted shares must be ≤ spend (never above it).
     function testFuzz_sharesForSpendNeverOverpromises(uint96 a, uint96 b, uint96 spend) public pure {
         vm.assume(uint256(a) + uint256(b) > 0);
         vm.assume(spend > 1e12);
@@ -213,17 +211,17 @@ contract DPMMathTest is Test {
         assertEq(DPMMath.seedShares(0), 0);
     }
 
-    /// @dev Sifat yang harus dijamin: biaya pool untuk lembar seed TIDAK PERNAH
-    ///      melebihi collateral yang disetor. Menurunkan q₀ dengan membagi konstanta
-    ///      ⌊√2·1e18⌋ akan MELANGGAR ini — pembagi yang dibulatkan ke bawah menghasilkan
-    ///      hasil bagi yang terlalu besar. Karena itu rumusnya lewat kuadrat.
+    /// @dev The property that must be guaranteed: the pool cost of the seed shares NEVER exceeds
+    ///      the collateral deposited. Deriving q₀ by dividing by a ⌊√2·1e18⌋ constant would
+    ///      BREAK this — a divisor rounded down yields a quotient that is too large. Hence the
+    ///      formula goes through squares instead.
     function testFuzz_seedNeverCostsMoreThanDeposited(uint96 seed) public pure {
         uint256 seedWad = uint256(seed);
         uint256 s = DPMMath.seedShares(seedWad);
         assertLe(DPMMath.costUp(_q(s, s)), seedWad);
     }
 
-    /// @dev ...dan tetap maksimal: satu lembar lagi di kedua sisi sudah melampaui setoran.
+    /// @dev ...and still maximal: one more share on each side already exceeds the deposit.
     function testFuzz_seedIsMaximal(uint96 seed) public pure {
         vm.assume(seed > 0);
         uint256 seedWad = uint256(seed);

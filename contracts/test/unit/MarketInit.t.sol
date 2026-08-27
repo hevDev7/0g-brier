@@ -31,13 +31,13 @@ contract MarketInitTest is Fixtures {
         assertEq(m.creatorSeed()[0], q[0]);
     }
 
-    /// @dev Invarian pusat sistem, diperiksa sejak detik nol.
+    /// @dev The system's central invariant, checked from second zero.
     function test_poolEqualsCostUpAtInit() public {
         Market m = _newMarket(SEED);
         assertEq(m.poolWad(), DPMMath.costUp(m.qArray()));
     }
 
-    /// @dev Pool tidak pernah boleh menuntut lebih banyak collateral daripada yang ada.
+    /// @dev The pool must never claim more collateral than actually exists.
     function test_collateralCoversPoolAndDeposit() public {
         Market m = _newMarket(SEED);
         assertGe(usdc.balanceOf(address(m)), m.collateralOwed());
@@ -49,8 +49,8 @@ contract MarketInitTest is Fixtures {
         assertEq(m.scale(), 1e12);
     }
 
-    /// @dev Market yang sudah hidup KEBAL terhadap perubahan parameter. Fee dan
-    ///      ukuran trade minimum dipotret saat inisialisasi, bukan dibaca tiap trade.
+    /// @dev A live market is IMMUNE to parameter changes. The fee and the minimum trade size
+    ///      are snapshotted at initialization, not read on every trade.
     function test_liveMarketIsImmuneToLaterConfigChanges() public {
         Market m = _newMarket(SEED);
         assertEq(m.feeBps(), 100);
@@ -58,18 +58,19 @@ contract MarketInitTest is Fixtures {
         assertEq(m.feeBps(), 100);
     }
 
-    /// @dev Sama seperti `feeBps`/`minTradeTokens`: bagian fee creator dan resolver juga
-    ///      dipotret saat inisialisasi, bukan dibaca ulang di `_distributeFees`. Tanpa ini,
-    ///      `setParam` yang secara individual sah (masing-masing ≤ 10_000) tapi jumlahnya
-    ///      melampaui 10_000 akan membekukan settle/fail/void SETIAP market yang sudah
-    ///      hidup di bawah ConfigRegistry ini, bukan cuma market baru.
+    /// @dev As with `feeBps`/`minTradeTokens`: the creator and resolver fee shares are also
+    ///      snapshotted at initialization, not re-read in `_distributeFees`. Without this, a
+    ///      `setParam` that is individually valid (each ≤ 10_000) but sums above 10_000 would
+    ///      freeze settle/fail/void on EVERY market already live under this ConfigRegistry,
+    ///      not merely on new ones.
     function test_liveMarketKeepsSnapshottedFeeShares() public {
         Market m = _newMarket(SEED);
         assertEq(m.creatorFeeShareBps(), 4000);
         assertEq(m.resolverFeeShareBps(), 3000);
 
-        // Keduanya individual sah (batas ConfigRegistry masing-masing [0, 10_000]) walau
-        // jumlahnya 12_000 — persis skenario yang membekukan market TANPA potret ini.
+        // Both are individually valid (ConfigRegistry bounds them at [0, 10_000] apiece) even
+        // though they sum to 12_000 — exactly the scenario that freezes a market WITHOUT
+        // this snapshot.
         config.setParam(ConfigKeys.CREATOR_FEE_SHARE_BPS, 6000);
         config.setParam(ConfigKeys.RESOLVER_FEE_SHARE_BPS, 6000);
 
@@ -77,15 +78,15 @@ contract MarketInitTest is Fixtures {
         assertEq(m.resolverFeeShareBps(), 3000);
     }
 
-    /// @dev `vm.expectRevert` mengikat ke panggilan BERIKUTNYA secara harfiah — termasuk
-    ///      CREATE. `_newMarket` melakukan `Clones.clone` (sebuah CREATE) sebelum
-    ///      `initialize`, jadi membungkus seluruh helper akan salah sasaran ke clone
-    ///      yang sukses. Kloning dan pendanaan karena itu dilakukan manual di luar
-    ///      jendela expectRevert, sama seperti `test_deadlinesMustBeOrdered` di bawah.
+    /// @dev `vm.expectRevert` binds to the very NEXT call, literally — including a CREATE.
+    ///      `_newMarket` performs a `Clones.clone` (a CREATE) before `initialize`, so wrapping
+    ///      the whole helper would take aim at the clone, which succeeds. The cloning and
+    ///      funding are therefore done by hand outside the expectRevert window, exactly as in
+    ///      `test_deadlinesMustBeOrdered` below.
     function test_seedBelowMinimumReverts() public {
         Market m = Market(Clones.clone(address(marketImpl)));
         registry.set(address(m), true);
-        uint256 seedTokens = 1e6; // MIN_SEED adalah 100e6
+        uint256 seedTokens = 1e6; // MIN_SEED is 100e6
         usdc.mintTo(address(this), seedTokens + DEPOSIT);
         usdc.transfer(address(m), seedTokens + DEPOSIT);
         vm.expectRevert(Market.SeedTooSmall.selector);
@@ -113,9 +114,9 @@ contract MarketInitTest is Fixtures {
         m.initialize(address(config), address(shares), p, SEED, DEPOSIT);
     }
 
-    /// @dev Ditolak SAAT LAHIR, bukan diam-diam disimpan lalu meledak (Panic underflow)
-    ///      di settle/fail/void pertama. Kloning dan pendanaan tetap di luar jendela
-    ///      expectRevert — sama seperti `test_seedBelowMinimumReverts` di atas.
+    /// @dev Rejected AT BIRTH rather than quietly stored and then exploding (an underflow
+    ///      Panic) at the first settle/fail/void. The cloning and funding stay outside the
+    ///      expectRevert window — exactly as in `test_seedBelowMinimumReverts` above.
     function test_initializeRevertsWhenFeeSharesExceedTotal() public {
         config.setParam(ConfigKeys.CREATOR_FEE_SHARE_BPS, 6000);
         config.setParam(ConfigKeys.RESOLVER_FEE_SHARE_BPS, 6000);

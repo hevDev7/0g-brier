@@ -5,18 +5,18 @@ import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {IMarketRegistry} from "../interfaces/IMarketRegistry.sol";
 
 /// @title OutcomeShares
-/// @notice Posisi outcome tradable untuk seluruh market 0G-Delphi.
-/// @dev Otorisasi bersifat aritmetika, bukan administratif: `id` diturunkan dari
-///      alamat market, dan mint/burn menurunkannya dari `msg.sender`. Sebuah market
-///      karena itu tidak punya representasi untuk id market lain — tidak ada daftar
-///      izin per-market yang bisa salah konfigurasi.
+/// @notice Tradable outcome positions for every 0G-Delphi market.
+/// @dev Authorization here is arithmetic, not administrative: `id` is derived from
+///      the market address, and mint/burn derive it from `msg.sender`. A market
+///      therefore has no way to name another market's id — there is no per-market
+///      permission list that could be misconfigured.
 ///
-///      Lembar seed TIDAK ada di sini. Lembar seed tidak transferable dan dicatat
-///      di dalam Market masing-masing (lihat §6.3 spec).
+///      Seed shares do NOT live here. Seed shares are non-transferable and are
+///      recorded inside each Market (see spec §6.3).
 contract OutcomeShares is ERC1155 {
-    /// @dev Lebar bit outcome dalam skema id: id = uint160(market) << OUTCOME_BITS | outcome.
-    ///      idFor membatasi outcome ke {0,1}, jadi satu byte jauh lebih dari cukup ruang;
-    ///      dipakai di idFor DAN marketOf sehingga keduanya tidak bisa lepas sinkron.
+    /// @dev Width in bits of the outcome in the id scheme: id = uint160(market) << OUTCOME_BITS | outcome.
+    ///      idFor restricts outcome to {0,1}, so one byte is far more room than needed;
+    ///      used in idFor AND marketOf so the two cannot drift out of sync.
     uint256 private constant OUTCOME_BITS = 8;
 
     address public immutable deployer;
@@ -34,13 +34,13 @@ contract OutcomeShares is ERC1155 {
         deployer = msg.sender;
     }
 
-    /// @dev Dipasang sekali setelah MarketFactory di-deploy, lalu tidak bisa diubah.
+    /// @dev Set once after MarketFactory is deployed, and immutable thereafter.
     function setRegistry(address registry_) external {
         if (msg.sender != deployer) revert NotDeployer();
-        // unset dan "di-set ke address(0)" berbagi nilai storage yang sama (0), jadi
-        // address(0) harus ditolak eksplisit di sini — kalau tidak, guard di bawah tidak
-        // bisa membedakan "belum pernah di-set" dari "sudah di-set ke nol", dan panggilan
-        // address(0) yang lolos diam-diam menghabiskan kunci sekali-pakai ini.
+        // unset and "set to address(0)" share the same storage value (0), so address(0)
+        // must be rejected explicitly here — otherwise the guard below cannot tell
+        // "never set" from "set to zero", and an address(0) call that slips through
+        // silently consumes this one-shot key.
         if (registry_ == address(0)) revert ZeroRegistry();
         if (address(registry) != address(0)) revert RegistryAlreadySet();
         registry = IMarketRegistry(registry_);
@@ -53,9 +53,10 @@ contract OutcomeShares is ERC1155 {
     }
 
     function marketOf(uint256 id) public pure returns (address) {
-        // Truncation ke uint160 aman: untuk id hasil idFor(), bit di atas posisi 168 selalu
-        // nol (alamat 160-bit digeser OUTCOME_BITS (8) bit muat dalam 168 bit). Untuk id
-        // sembarang, ini murni decoder pure tanpa jalur keamanan yang bergantung padanya.
+        // Truncation to uint160 is safe: for an id produced by idFor(), every bit above
+        // position 168 is zero (a 160-bit address shifted OUTCOME_BITS (8) bits fits in
+        // 168 bits). For an arbitrary id this is a pure decoder with no security path
+        // depending on it.
         // forge-lint: disable-next-line(unsafe-typecast)
         return address(uint160(id >> OUTCOME_BITS));
     }

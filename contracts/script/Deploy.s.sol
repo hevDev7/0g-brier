@@ -12,8 +12,8 @@ import {Market} from "../src/core/Market.sol";
 import {MarketFactory} from "../src/core/MarketFactory.sol";
 import {DeployLib} from "./DeployLib.sol";
 
-/// @notice Deploy P0+P1: MockUSDC, ConfigRegistry, OutcomeShares, implementasi Market,
-///         dan MarketFactory (keduanya di balik ERC1967Proxy) + parameter bawaan.
+/// @notice Deploys P0+P1: MockUSDC, ConfigRegistry, OutcomeShares, the Market implementation,
+///         and MarketFactory (both behind an ERC1967Proxy) + the default parameters.
 contract Deploy is Script {
     function run() external {
         uint256 pk = vm.envUint("DEPLOYER_KEY");
@@ -29,10 +29,10 @@ contract Deploy is Script {
         );
         DeployLib.applyDefaults(config, address(usdc));
 
-        // Urutannya mengikat: MarketFactory MEMOTRET alamat OutcomeShares saat initialize,
-        // sementara `setRegistry` OutcomeShares butuh alamat factory dan hanya bisa dipanggil
-        // SEKALI seumur hidup oleh deployer-nya. Jadi shares lahir dulu, factory menyusul,
-        // lalu lingkarannya ditutup.
+        // The order binds: MarketFactory SNAPSHOTS the OutcomeShares address at initialize,
+        // while OutcomeShares' `setRegistry` needs the factory address and can be called only
+        // ONCE in its lifetime, by its deployer. So shares is born first, the factory follows,
+        // and then the loop is closed.
         OutcomeShares sharesContract = new OutcomeShares("https://delphi.0g/{id}.json");
         Market marketImpl = new Market();
 
@@ -87,8 +87,8 @@ contract Deploy is Script {
         vm.serializeAddress(contractsKey, "OutcomeShares", outcomeShares);
         vm.serializeAddress(contractsKey, "MarketImplementation", marketImplementation);
         vm.serializeAddress(contractsKey, "MarketFactory", marketFactory);
-        // Alamat implementasi di balik proxy UUPS — persis yang dibutuhkan operasi upgrade,
-        // sejajar dengan ConfigRegistryImpl.
+        // The implementation address behind the UUPS proxy — exactly what an upgrade operation
+        // needs, mirroring ConfigRegistryImpl.
         vm.serializeAddress(contractsKey, "MarketFactoryImpl", marketFactoryImpl);
         string memory contractsJson = vm.serializeAddress(contractsKey, "MockUSDC", usdc);
 

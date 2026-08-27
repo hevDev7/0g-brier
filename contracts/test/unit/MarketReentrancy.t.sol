@@ -23,16 +23,17 @@ contract ReentrantBuyer is IERC1155Receiver {
         market.buy(1, amount, type(uint256).max, address(this));
     }
 
-    /// @dev Dipanggil di tengah `buy`. Panggilan masuk kedua harus ditolak guard.
-    /// @dev `armed` dipadamkan SEBELUM re-entry, dan jumlahnya (10e18) sengaja jauh di atas
-    ///      MIN_TRADE_TOKENS: verifikasi manual (menghapus `nonReentrant` sementara) menunjukkan
-    ///      jumlah 1e18 dari draf awal adalah debu (< MIN_TRADE_TOKENS) dan revert TradeTooSmall
-    ///      terlepas dari guard — vm.expectRevert() tanpa selektor lulus untuk alasan yang SALAH.
-    ///      Tanpa memadamkan `armed`, guard yang hilang malah membuat re-entry berulang tanpa
-    ///      henti sampai kedalaman panggilan EVM habis — revert lain yang juga menutupi guard.
-    ///      Keduanya diperbaiki bersama supaya percobaan re-entry benar-benar hanya satu kali
-    ///      dan, bila guard tak ada, akan SUKSES (bukan revert oleh sebab lain) — baru dengan
-    ///      begitu `vm.expectRevert()` di bawah murni menguji `nonReentrant`.
+    /// @dev Called in the middle of `buy`. The second inbound call must be rejected by the guard.
+    /// @dev `armed` is cleared BEFORE re-entering, and the amount (10e18) is deliberately far
+    ///      above MIN_TRADE_TOKENS: manual verification (temporarily removing `nonReentrant`)
+    ///      showed that the first draft's amount of 1e18 is dust (< MIN_TRADE_TOKENS) and
+    ///      reverts TradeTooSmall regardless of the guard — a vm.expectRevert() with no selector
+    ///      would pass for the WRONG reason. Without clearing `armed`, a missing guard would
+    ///      instead re-enter endlessly until the EVM call depth ran out — another revert that
+    ///      likewise masks the guard. Both are fixed together so that the re-entry attempt is
+    ///      genuinely a single one and, were the guard absent, would SUCCEED (rather than revert
+    ///      for some other reason) — only then does the `vm.expectRevert()` below test
+    ///      `nonReentrant` and nothing else.
     function onERC1155Received(address, address, uint256, uint256, bytes calldata) external returns (bytes4) {
         if (armed) {
             armed = false;
@@ -69,20 +70,20 @@ contract MarketReentrancyTest is Fixtures {
 
     function test_reentrantReceiverCannotReenterBuy() public {
         attacker.setArmed(true);
-        // Selektor spesifik, bukan expectRevert() kosong: yang terakhir lulus untuk revert
-        // APA PUN, termasuk TradeTooSmall yang tak ada hubungannya dengan guard (lihat R25).
-        // Market yang sudah hidup kebal terhadap perubahan parameter (minTradeTokens dipotret
-        // saat initialize — lihat test_liveMarketIsImmuneToLaterConfigChanges), TAPI batas
-        // MIN_TRADE_TOKENS dikunci DeployLib selebar [1, UNBOUNDED]; setParam boleh menaikkan
-        // nilainya kapan saja di dalam rentang itu, dan setUp() di sini membuat market BARU tiap
-        // uji — jadi default DeployLib yang naik di atas 7.330.600 (biaya re-entry 10e18 ini)
-        // langsung terwarisi market baru ini pula. Data revert sampai ke sini utuh: ERC1155Utils
-        // menyebarkan ulang alasan asli tanpa modifikasi.
+        // A specific selector, not a bare expectRevert(): the latter passes for ANY revert,
+        // including a TradeTooSmall that has nothing to do with the guard (see R25). A live
+        // market is immune to parameter changes (minTradeTokens is snapshotted at initialize —
+        // see test_liveMarketIsImmuneToLaterConfigChanges), BUT DeployLib locks the
+        // MIN_TRADE_TOKENS bounds as wide as [1, UNBOUNDED]; setParam may raise the value at any
+        // time within that range, and setUp() here builds a NEW market for every test — so a
+        // DeployLib default raised above 7,330,600 (the cost of this 10e18 re-entry) would be
+        // inherited by this new market immediately as well. The revert data arrives here intact:
+        // ERC1155Utils re-propagates the original reason unmodified.
         vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
         attacker.attack(50e18);
 
-        // Kontrol: penerima yang sama, tanpa serangan, berhasil. Ini membuktikan
-        // revert di atas memang karena reentrancy, bukan sebab lain.
+        // Control: the same receiver, without the attack, succeeds. This proves the revert above
+        // really was reentrancy and not something else.
         attacker.setArmed(false);
         attacker.attack(50e18);
         assertEq(shares.balanceOfOutcome(address(attacker), address(m), 1), 50e18);

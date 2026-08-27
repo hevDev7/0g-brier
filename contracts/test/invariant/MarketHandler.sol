@@ -14,44 +14,45 @@ import {DPMMath} from "../../src/math/DPMMath.sol";
 import {IMarket} from "../../src/interfaces/IMarket.sol";
 
 /// @title MarketHandler
-/// @notice Menjalankan aksi acak TERBATAS terhadap satu Market dan mencatat variabel hantu
-///         untuk pemeriksaan konservasi INV-1..10.
+/// @notice Runs BOUNDED random actions against a single Market and records ghost variables
+///         for the INV-1..10 conservation checks.
 ///
-/// @dev Empat keputusan desain yang membuat suite ini bukan hiasan:
+/// @dev Four design decisions that keep this suite from being decorative:
 ///
-///      1. **Setiap aksi memakai KUOTASI kontrak sendiri sebagai prakondisi.** `quoteBuy`
-///         dan `buy` berbagi `_priceBuy` yang sama (begitu pula `quoteSell`/`sell`), jadi
-///         keduanya tidak bisa berbeda formula. Bila kuotasi lolos, eksekusi WAJIB mendarat.
-///         Aksi yang lolos seluruh prakondisi dihitung di `gatedActions`; yang benar-benar
-///         mendarat di `landedActions`; selisihnya dicatat di `unexpectedReverts`, dan
-///         `invariant_handlerCallsLandAsPredicted` menuntut selisih itu NOL. Handler yang
-///         menghabiskan run-nya untuk revert akan terlihat langsung, bukan lulus diam-diam.
+///      1. **Every action uses the contract's own QUOTE as its precondition.** `quoteBuy` and
+///         `buy` share the same `_priceBuy` (as do `quoteSell`/`sell`), so the two cannot
+///         differ in formula. If the quote passes, execution MUST land. Actions that clear
+///         every precondition are counted in `gatedActions`; those that really land in
+///         `landedActions`; the difference is recorded in `unexpectedReverts`, and
+///         `invariant_handlerCallsLandAsPredicted` demands that difference be ZERO. A handler
+///         that spends its run reverting is visible immediately rather than passing quietly.
 ///
-///      2. **Ukuran diskalakan ke state hidup, bukan konstanta.** Rentang beli/setor tetap
-///         akan jadi debu (selalu `TradeTooSmall`) pada market besar dan guncangan ekstrem
-///         pada market kecil; keduanya berarti run yang tidak mengeksplorasi apa pun.
+///      2. **Sizes scale to the live state, not to constants.** A fixed buy/deposit range
+///         becomes dust (always `TradeTooSmall`) on a large market and an extreme shock on a
+///         small one; either way the run explores nothing.
 ///
-///      3. **Handler TIDAK PERNAH mengassert sendiri.** `foundry.toml` memakai
-///         `fail_on_revert = false`; sebuah `assert` yang gagal di dalam handler akan revert,
-///         lalu DITELAN oleh runner dan run-nya lulus dengan sebab yang salah (diverifikasi
-///         eksperimental sebelum file ini ditulis: 10 panggilan, 10 revert, suite lulus).
-///         Karena itu setiap pelanggaran ditulis ke penghitung hantu (`inv5Violations`,
-///         `inv9Violations`, `inv10Violations`, `pauseLeaks`, `sawArithmeticPanic`) dan
-///         diassert di `MarketInvariants.t.sol` lewat fungsi `invariant_*` — jalur yang
-///         TIDAK bisa ditelan.
+///      3. **The handler NEVER asserts on its own.** `foundry.toml` uses
+///         `fail_on_revert = false`; a failing `assert` inside the handler reverts and is then
+///         SWALLOWED by the runner, and the run passes for the wrong reason (verified
+///         experimentally before this file was written: 10 calls, 10 reverts, suite green).
+///         Every violation is therefore written to a ghost counter (`inv5Violations`,
+///         `inv9Violations`, `inv10Violations`, `pauseLeaks`, `sawArithmeticPanic`) and
+///         asserted in `MarketInvariants.t.sol` through the `invariant_*` functions — a path
+///         that CANNOT be swallowed.
 ///
-///      4. **`creator` bukan trader.** Ia hanya menyetor benih simetris saat `initialize`
-///         dan mengklaim di akhir. INV-7 ("rugi penyedia ≤ 29.30% setoran") hanya berlaku
-///         untuk penyedia SIMETRIS — lihat turunannya di `MarketInvariants.t.sol` — jadi
-///         posisi creator sengaja dijaga tetap persis `(s, s)` supaya invariannya bermakna
-///         alih-alih tercemar oleh perdagangan berarah atau LP yang masuk pada q miring.
+///      4. **`creator` is not a trader.** It only deposits the symmetric seed at `initialize`
+///         and claims at the end. INV-7 ("provider loss ≤ 29.30% of the deposit") holds only
+///         for a SYMMETRIC provider — see the derivation in `MarketInvariants.t.sol` — so the
+///         creator's position is deliberately kept exactly `(s, s)`, keeping the invariant
+///         meaningful instead of polluted by directional trading or by an LP entering on a
+///         skewed q.
 contract MarketHandler is CommonBase, StdCheats, StdUtils {
     uint256 internal constant WAD = DPMMath.WAD;
 
-    /// @dev Selector `Panic(uint256)`. Bukan angka ajaib protokol: ini konstanta ABI Solidity.
+    /// @dev The `Panic(uint256)` selector. Not a protocol magic number: it is a Solidity ABI constant.
     bytes4 internal constant PANIC_SELECTOR = 0x4e487b71;
 
-    /// @dev Cukup membiayai pool sampai batas MAX_Q (≈1.4e33 wad ≈ 1.4e21 unit token).
+    /// @dev Enough to fund the pool up to the MAX_Q limit (≈1.4e33 wad ≈ 1.4e21 token units).
     uint256 internal constant FUNDING = 1e30;
 
     Market public immutable market;
@@ -66,7 +67,7 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
 
     address[3] public traders;
 
-    // ── penghitung aksi yang BENAR-BENAR mendarat ────────────────────────────
+    // ── counters for actions that ACTUALLY landed ────────────────────────────
     uint256 public callsBuy;
     uint256 public callsSell;
     uint256 public callsAddLiquidity;
@@ -88,14 +89,14 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
     uint256 public callsRedeem;
     uint256 public callsLiquidate;
 
-    // ── akuntansi efisiensi handler ──────────────────────────────────────────
+    // ── handler efficiency accounting ────────────────────────────────────────
     uint256 public gatedActions;
     uint256 public landedActions;
     uint256 public unexpectedReverts;
     bytes public lastUnexpectedRevert;
     bool public sawArithmeticPanic;
 
-    // ── hantu konservasi ─────────────────────────────────────────────────────
+    // ── conservation ghosts ──────────────────────────────────────────────────
     uint256 public ghostTokensIn;
     uint256 public ghostTokensOut;
     uint256 public redeemedTokens;
@@ -105,13 +106,13 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
     uint256[2] internal _qAtResolution;
     bool public resolved;
 
-    /// @dev INV-7: yang benar-benar DISETOR creator. Kontrak tidak menyimpannya dalam bentuk
-    ///      ini (hanya lembar benih hasil `seedShares(seedWad)`), jadi dicatat di sini.
+    /// @dev INV-7: what the creator actually DEPOSITED. The contract does not store it in this
+    ///      form (only the seed shares from `seedShares(seedWad)`), so it is recorded here.
     uint256 public creatorDepositTokens;
     uint256 public creatorReturnedTokens;
     bool public creatorHasClaimed;
 
-    // ── penghitung pelanggaran (diassert dari fungsi invariant_) ─────────────
+    // ── violation counters (asserted from the invariant_ functions) ──────────
     uint256 public inv5Violations;
     uint256 public inv9Violations;
     uint256 public inv10Violations;
@@ -146,13 +147,12 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         }
     }
 
-    // ── view untuk kontrak invarian ──────────────────────────────────────────
+    // ── views for the invariant contract ─────────────────────────────────────
 
-    /// @notice Tiga trader ditambah creator. Setiap lembar — tradable maupun benih — yang
-    ///         pernah ada di market ini dipegang salah satu dari keempatnya: handler selalu
-    ///         mengirim `to` ke pemanggilnya sendiri dan tidak pernah mentransfer ERC-1155.
-    ///         Itulah yang membuat "semua posisi bersih" (INV-4) benar-benar berarti
-    ///         "seluruh q sudah dilikuidasi".
+    /// @notice Three traders plus the creator. Every share — tradable or seed — that has ever
+    ///         existed in this market is held by one of those four: the handler always sends
+    ///         `to` to its own caller and never transfers ERC-1155. That is what makes "all
+    ///         positions cleared" (INV-4) genuinely mean "the whole of q has been liquidated".
     function claimants(uint256 i) public view returns (address) {
         uint256 k = i % 4;
         return k == 3 ? creator : traders[k];
@@ -168,7 +168,7 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
             + seed[0] + seed[1];
     }
 
-    /// @notice Benar bila tidak ada satu pun klaimant yang masih memegang apa pun.
+    /// @notice True when not a single claimant still holds anything.
     function allPositionsCleared() external view returns (bool) {
         for (uint256 i = 0; i < 4; ++i) {
             if (positionOf(claimants(i)) != 0) return false;
@@ -176,7 +176,7 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         return true;
     }
 
-    // ── aksi ─────────────────────────────────────────────────────────────────
+    // ── actions ──────────────────────────────────────────────────────────────
 
     function buy(uint256 actorSeed, uint256 outcomeSeed, uint256 amountSeed) external {
         if (!_tradable()) return;
@@ -224,7 +224,7 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         address a = traders[actorSeed % 3];
 
         uint256[2] memory qBefore = market.qArray();
-        // λ dibatasi ≤ WAD di bawah, jadi q paling banyak menjadi 2q — jaga headroom MAX_Q.
+        // λ is capped at ≤ WAD below, so q at most doubles — keep MAX_Q headroom.
         if (qBefore[0] > DPMMath.MAX_Q / 2 || qBefore[1] > DPMMath.MAX_Q / 2) return;
 
         uint256 poolTokens = market.poolWad() / market.scale();
@@ -266,8 +266,8 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         }
     }
 
-    /// @notice INV-5 — beli lalu jual seketika tidak pernah menguntungkan, pada state APA PUN
-    ///         yang dicapai sekuens acak, bukan hanya pada market yang baru lahir.
+    /// @notice INV-5 — buying then immediately selling never profits, in ANY state the random
+    ///         sequence reaches, not merely in a freshly born market.
     function roundTrip(uint256 actorSeed, uint256 outcomeSeed, uint256 amountSeed) external {
         if (!_tradable()) return;
         address a = traders[actorSeed % 3];
@@ -289,8 +289,8 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
             return;
         }
 
-        // Kaki jual boleh saja tidak memenuhi MIN_TRADE_TOKENS setelah harga bergerak; itu
-        // bukan pelanggaran, hanya round-trip yang tak selesai — dan trader jelas TIDAK untung.
+        // The sell leg may fail MIN_TRADE_TOKENS once the price has moved; that is not a
+        // violation, merely an unfinished round-trip — and the trader clearly did NOT profit.
         if (!_sellQuoteClearsMinimum(o, amount)) return;
 
         ++gatedActions;
@@ -328,11 +328,11 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         ++callsPauseToggle;
     }
 
-    /// @notice INV-10 — pause menutup SETIAP jalan masuk dan tidak menutup satu pun jalan keluar.
-    /// @dev Menyalakan pause sendiri bila belum menyala lalu mengembalikan keadaan semula,
-    ///      supaya aksi ini mendarat tanpa bergantung pada `togglePause` yang kebetulan terpilih.
-    ///      Sengaja TIDAK menyentuh `gatedActions`/`landedActions`: pembukuannya sendiri
-    ///      (`inv10Violations`, `pauseLeaks`, `callsPaused*`) yang jadi bukti.
+    /// @notice INV-10 — the pause closes EVERY entrance and closes not one exit.
+    /// @dev Turns the pause on itself when it is off and then restores the original state, so
+    ///      this action lands without depending on `togglePause` happening to be selected.
+    ///      Deliberately does NOT touch `gatedActions`/`landedActions`: its own bookkeeping
+    ///      (`inv10Violations`, `pauseLeaks`, `callsPaused*`) is the evidence.
     function exitWhilePaused(uint256 actorSeed, uint256 kindSeed) external {
         bool wasPaused = config.paused();
         if (!wasPaused) {
@@ -382,8 +382,8 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         }
     }
 
-    /// @dev Digerbang oleh `tradingEnd` supaya resolusi tidak mendarat di panggilan pertama
-    ///      dan membunuh seluruh cakupan perdagangan run itu.
+    /// @dev Gated on `tradingEnd` so that resolution does not land on the very first call and
+    ///      kill the whole trading coverage of that run.
     function resolve(uint256 seed) external {
         if (block.timestamp < market.tradingEnd()) return;
         IMarket.Status s = market.status();
@@ -391,7 +391,7 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
 
         uint256 kind = seed % 3;
         if (kind == 0) {
-            if (s != IMarket.Status.Open) return; // void hanya sah dari Open
+            if (s != IMarket.Status.Open) return; // void is valid only from Open
             ++gatedActions;
             vm.prank(guardian);
             try market.void(bytes32("invariant")) {
@@ -412,7 +412,7 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
                 _recordFailure(err);
             }
         } else {
-            if (s == IMarket.Status.Open) return; // settle butuh Closed/Proposed/Disputed
+            if (s == IMarket.Status.Open) return; // settle needs Closed/Proposed/Disputed
             ++gatedActions;
             vm.prank(resolutionModule);
             try market.settle(uint8((seed >> 8) % 2)) {
@@ -453,7 +453,7 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         }
     }
 
-    // ── internal: gerbang & pembatas ─────────────────────────────────────────
+    // ── internal: gates & bounds ─────────────────────────────────────────────
 
     function _tradable() internal view returns (bool) {
         return market.status() == IMarket.Status.Open && block.timestamp < market.tradingEnd() && !config.paused();
@@ -473,10 +473,10 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         return _bound(seed, lo, hi);
     }
 
-    /// @dev λ_max menjaga `take_i = ⌊q_i·λ/WAD⌋ ≤ held_i` di kedua sisi; λ_min menjaga
-    ///      `take_i ≥ 1` di sisi terkecil (kalau tidak: `TradeTooSmall`). Lantai benih creator
-    ///      tidak pernah tertembus karena `held` milik non-creator selalu ≤ seedSupply − creatorSeed.
-    ///      `hi == 0` berarti tidak ada λ yang sah.
+    /// @dev λ_max keeps `take_i = ⌊q_i·λ/WAD⌋ ≤ held_i` on both sides; λ_min keeps
+    ///      `take_i ≥ 1` on the smaller side (otherwise: `TradeTooSmall`). The creator seed
+    ///      floor is never breached because a non-creator's `held` is always
+    ///      ≤ seedSupply − creatorSeed. `hi == 0` means no valid λ exists.
     function _lambdaRange(uint256[2] memory held) internal view returns (uint256 lo, uint256 hi) {
         uint256[2] memory q = market.qArray();
         hi = Math.min(Math.mulDiv(held[0], WAD, q[0]), Math.mulDiv(held[1], WAD, q[1]));
@@ -491,9 +491,9 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         return _bound(seed, lo, hi);
     }
 
-    /// @dev Perkiraan kasar lembar minimum yang hasil jualnya masih mungkin melewati
-    ///      MIN_TRADE_TOKENS (harga marginal turun selama menjual, karena itu padding 50%).
-    ///      Otoritasnya tetap `quoteSell` lewat `_sellQuoteClearsMinimum`.
+    /// @dev A rough estimate of the smallest share count whose sale might still clear
+    ///      MIN_TRADE_TOKENS (the marginal price falls while selling, hence the 50% padding).
+    ///      The authority remains `quoteSell`, through `_sellQuoteClearsMinimum`.
     function _minSellShares(uint8 o) internal view returns (uint256) {
         uint256 px = market.marginalPrice(o);
         if (px == 0) return 0;
@@ -517,7 +517,7 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         }
     }
 
-    // ── internal: pembukuan ──────────────────────────────────────────────────
+    // ── internal: bookkeeping ────────────────────────────────────────────────
 
     function _snapshotResolution() internal {
         poolWadAtResolution = market.poolWad();
@@ -540,15 +540,15 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         }
     }
 
-    /// @dev INV-9. Turunan batasnya ada di `MarketInvariants.t.sol`
-    ///      (`invariant_INV9_addLiquidityDoesNotMoveProbability`); di sini hanya dipakai.
+    /// @dev INV-9. The derivation of the bound lives in `MarketInvariants.t.sol`
+    ///      (`invariant_INV9_addLiquidityDoesNotMoveProbability`); here it is only applied.
     function _checkInv9(uint256[2] memory qBefore, uint256 p0, uint256 p1) internal {
         uint256 tol = Math.ceilDiv(8 * WAD, qBefore[0] + qBefore[1]) + 2;
         uint256 d0 = _absDiff(market.probability(0), p0);
         uint256 d1 = _absDiff(market.probability(1), p1);
         uint256 d = Math.max(d0, d1);
-        // `>=` supaya batasnya ikut tercatat walau drift-nya selalu 0 — angka pelaporan
-        // "0 dari batas 3" jauh lebih informatif daripada "0 dari batas 0".
+        // `>=` so that the bound is recorded too even when the drift is always 0 — a report of
+        // "0 against a bound of 3" is far more informative than "0 against a bound of 0".
         if (d >= worstInv9Drift) {
             worstInv9Drift = d;
             worstInv9Bound = tol;
@@ -562,12 +562,13 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         if (market.status() != IMarket.Status.Open || block.timestamp >= market.tradingEnd()) return;
         address t = traders[actorSeed % 3];
 
-        // `_requireTradable()` adalah pernyataan PERTAMA di `buy`, dengan urutan
-        // NotOpen → TradingEnded → ProtocolPaused. Dua syarat pertama sudah dipastikan LULUS
-        // di baris atas, jadi satu-satunya revert yang mungkin di sini adalah ProtocolPaused —
-        // bukan `TradeTooSmall`/`SlippageExceeded` yang akan membuat pemeriksaan ini "lulus"
-        // karena alasan yang salah. Sengaja TANPA `vm.expectRevert`: cheatcode itu mengikat ke
-        // panggilan eksternal berikutnya dan kegagalannya akan ditelan `fail_on_revert = false`.
+        // `_requireTradable()` is the FIRST statement in `buy`, in the order
+        // NotOpen → TradingEnded → ProtocolPaused. The first two conditions were already
+        // confirmed to PASS on the line above, so the only revert possible here is
+        // ProtocolPaused — not a `TradeTooSmall`/`SlippageExceeded` that would make this check
+        // "pass" for the wrong reason. Deliberately WITHOUT `vm.expectRevert`: that cheatcode
+        // binds to the next external call, and its failure would be swallowed by
+        // `fail_on_revert = false`.
         vm.prank(t);
         try market.buy(0, 1e18, type(uint256).max, t) returns (uint256) {
             ++pauseLeaks;
@@ -577,9 +578,9 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         }
     }
 
-    /// @dev `kindSeed` menentukan jalan keluar mana yang DICOBA LEBIH DULU saat market masih
-    ///      terbuka. Tanpa ini `_pausedSell` hampir selalu menang (posisi tradable jauh lebih
-    ///      sering ada daripada tidak) dan `removeLiquidity` saat paused tak pernah teruji.
+    /// @dev `kindSeed` decides which exit is TRIED FIRST while the market is still open.
+    ///      Without it `_pausedSell` almost always wins (a tradable position is present far
+    ///      more often than not) and `removeLiquidity` while paused is never exercised.
     function _requireSomeExitWorksWhilePaused(uint256 actorSeed, uint256 kindSeed) internal {
         IMarket.Status s = market.status();
         if (s == IMarket.Status.Open && block.timestamp < market.tradingEnd()) {
@@ -597,9 +598,9 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         }
     }
 
-    /// @dev Setiap jalur keluar di bawah membuktikan keluarnya SUNGGUH terjadi — token
-    ///      benar-benar masuk dompet, atau posisi benar-benar berkurang — bukan sekadar
-    ///      "tidak revert". Panggilan yang revert dicatat sebagai pelanggaran INV-10.
+    /// @dev Each exit path below proves the exit REALLY happened — tokens genuinely arrived in
+    ///      the wallet, or the position genuinely shrank — not merely that it "did not revert".
+    ///      A call that reverts is recorded as an INV-10 violation.
     function _pausedSell(uint256 seed) internal returns (bool) {
         for (uint256 i = 0; i < 3; ++i) {
             address a = traders[(seed % 3 + i) % 3];
@@ -632,7 +633,7 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
             address a = traders[(seed % 3 + i) % 3];
             uint256[2] memory held = market.seedSharesOf(a);
             if (held[0] == 0 || held[1] == 0) continue;
-            (, uint256 lambda) = _lambdaRange(held); // λ terbesar yang sah: tarik semaksimal mungkin
+            (, uint256 lambda) = _lambdaRange(held); // the largest valid λ: withdraw as much as possible
             if (lambda == 0) continue;
 
             vm.prank(a);
@@ -695,7 +696,7 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         return false;
     }
 
-    // ── internal: util ───────────────────────────────────────────────────────
+    // ── internal: utilities ──────────────────────────────────────────────────
 
     function _recordFailure(bytes memory err) internal {
         ++unexpectedReverts;
