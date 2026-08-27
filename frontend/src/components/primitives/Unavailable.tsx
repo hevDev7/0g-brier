@@ -26,7 +26,13 @@ const PROVIDED_BY: Record<Capability, DataMode> = {
  */
 export function Unavailable({capability, mode}: {capability: Capability; mode: DataMode}) {
   return (
-    <div className="rounded-md border border-dashed border-border px-3 py-2 text-[13px] text-text-muted">
+    // role="status" (+ aria-live tersirat "polite"): ini menggantikan tabel/
+    // angka yang pengguna layar biasanya dengar berubah — tanpa ini,
+    // penjelasan "tidak tersedia" hanya terlihat, tak pernah terdengar.
+    <div
+      role="status"
+      className="rounded-md border border-dashed border-border px-3 py-2 text-[13px] text-text-muted"
+    >
       {/* Label dan "tidak tersedia" sengaja satu node teks: getByText hanya
           menggabungkan node teks LANGSUNG suatu elemen (lihat get-node-text.js),
           tidak turun ke elemen anak — jadi frasa yang perlu cocok bersama

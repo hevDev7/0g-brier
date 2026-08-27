@@ -45,6 +45,24 @@ export function formatPayout(payoutWad: bigint): string {
   return `${formatFixed(payoutWad, 18, 2)}×`;
 }
 
+/**
+ * Fee dalam basis poin (1 bps = 0,01%) → tarif persen: 100 → "1.00%".
+ *
+ * Berbeda dari fungsi lain di berkas ini: `feeBps` BUKAN nilai moneter bigint
+ * — ia integer konfigurasi kecil (`MarketDetail.feeBps: number`), jadi
+ * larangan Number()/parseFloat pada berkas ini tidak berlaku di sini; aturan
+ * yang berlaku hanyalah "komponen tidak memformat angka sendiri". Tetap
+ * dihitung lewat pembagian & modulo bilangan bulat, bukan `.toFixed`, supaya
+ * tidak ada pembulatan floating-point sama sekali.
+ */
+export function formatFeeRate(bps: number): string {
+  const whole = Math.trunc(bps / 100);
+  const frac = Math.abs(bps % 100)
+    .toString()
+    .padStart(2, "0");
+  return `${whole}.${frac}%`;
+}
+
 /** Jumlah collateral dalam satuan token terkecil → "1,234.56". */
 export function formatCollateral(amount: bigint, decimals: number): string {
   return formatFixed(amount, decimals, 2);

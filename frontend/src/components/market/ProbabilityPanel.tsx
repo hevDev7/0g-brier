@@ -7,7 +7,10 @@ import {formatProbability} from "@/lib/format";
  */
 export function ProbabilityPanel({q}: {q: readonly [bigint, bigint]}) {
   return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border">
+    <div
+      data-testid="probability-panel"
+      className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border"
+    >
       {([1, 0] as const).map((outcome) => (
         <div key={outcome} className="bg-bg px-4 py-3">
           <div className="text-[11px] uppercase tracking-wide text-text-faint">

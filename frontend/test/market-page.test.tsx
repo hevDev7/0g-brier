@@ -1,4 +1,4 @@
-import {render, screen, waitFor} from "@testing-library/react";
+import {render, screen, waitFor, within} from "@testing-library/react";
 import {describe, expect, it} from "vitest";
 import {MarketView} from "@/app/market/[address]/MarketView";
 import {AppProviders} from "@/hooks/provider";
@@ -23,7 +23,13 @@ describe("MarketView", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", {name: /ETH\/USD/})).toBeInTheDocument(),
     );
-    expect(screen.getByText("59.0%")).toBeInTheDocument();
+    // Sejak fixtureTrades() diperbaiki supaya konvergen ke q pasar, trade
+    // TERBARU di tape juga menunjukkan P(YES) 59.0% — dengan sengaja, bukan
+    // kebetulan (lihat mock-source.test.ts). getByText("59.0%") polos jadi
+    // ambigu karena itu; scope ke panel probabilitas secara spesifik.
+    await waitFor(() =>
+      expect(within(screen.getByTestId("probability-panel")).getByText("59.0%")).toBeInTheDocument(),
+    );
     expect(screen.getByText("1.30×")).toBeInTheDocument();
     expect(screen.getByLabelText(/belanjakan/i)).toBeInTheDocument();
   });

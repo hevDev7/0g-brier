@@ -56,6 +56,17 @@ describe("OrderTicket", () => {
     expect(screen.getByText(/0\.5%/)).toBeInTheDocument();
   });
 
+  /**
+   * "Fee 49.50" saja tak memberitahu trader apakah itu 1% atau 10% tanpa ia
+   * membaginya sendiri — tarifnya harus ikut tampil, bukan cuma nominalnya.
+   */
+  it("menampilkan tarif fee, bukan cuma nominalnya", async () => {
+    const user = userEvent.setup();
+    renderTicket();
+    await user.type(screen.getByLabelText(/belanjakan/i), "100");
+    expect(screen.getByText(/Fee \(1\.00%\)/)).toBeInTheDocument();
+  });
+
   it("bisa berpindah sisi", async () => {
     const user = userEvent.setup();
     renderTicket();

@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
 import {
-  formatCollateral, formatCountdown, formatPayout, formatPricePerShare,
+  formatCollateral, formatCountdown, formatFeeRate, formatPayout, formatPricePerShare,
   formatProbability, formatProbabilityDelta, formatShares, shortAddress,
 } from "@/lib/format";
 
@@ -41,6 +41,16 @@ describe("formatPayout", () => {
   it("2 desimal dengan tanda kali", () => {
     expect(formatPayout(1_301_700_000_000_000_000n)).toBe("1.30×");
     expect(formatPayout(1_562_000_000_000_000_000n)).toBe("1.56×");
+  });
+});
+
+describe("formatFeeRate", () => {
+  it("basis poin ke tarif persen 2 desimal", () => {
+    expect(formatFeeRate(100)).toBe("1.00%");
+    expect(formatFeeRate(1)).toBe("0.01%");
+    expect(formatFeeRate(250)).toBe("2.50%");
+    expect(formatFeeRate(10_000)).toBe("100.00%");
+    expect(formatFeeRate(0)).toBe("0.00%");
   });
 });
 

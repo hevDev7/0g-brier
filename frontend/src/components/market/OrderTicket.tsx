@@ -6,6 +6,7 @@ import {useDataSource} from "@/hooks/provider";
 import {useQuote} from "@/hooks/useQuote";
 import {
   formatCollateral,
+  formatFeeRate,
   formatPayout,
   formatPricePerShare,
   formatProbability,
@@ -88,7 +89,9 @@ export function OrderTicket({market}: {market: MarketDetail}) {
             </span>
           </Row>
           <Row label="Harga rata-rata">{formatPricePerShare(quote.avgPriceWad)}</Row>
-          <Row label="Fee">{formatCollateral(toTokensCeil(quote.feeWad, decimals), decimals)}</Row>
+          <Row label={`Fee (${formatFeeRate(market.feeBps)})`}>
+            {formatCollateral(toTokensCeil(quote.feeWad, decimals), decimals)}
+          </Row>
 
           {/* Dampak harga sebagai TRANSISI: "59.0% → 63.8%" mengatakan apa yang
               dilakukan pembelian ini pada market. Angka delta sendirian tidak. */}

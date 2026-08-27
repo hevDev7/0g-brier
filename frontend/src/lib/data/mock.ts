@@ -9,6 +9,7 @@ import {
   type Interval,
   type MarketDetail,
   type MarketSummary,
+  type Outcome,
   type Trade,
 } from "./types";
 
@@ -83,12 +84,50 @@ export const FIXTURE_MARKETS: MarketDetail[] = [
   }),
 ];
 
+/** Pola sisi pseudo-acak i-dependent: 1 dari 3 trade di sisi NO, sisanya YES. */
+function syntheticOutcome(i: number): Outcome {
+  return (i % 3 === 0 ? 0 : 1) as Outcome;
+}
+
+/** Bobot pseudo-acak i-dependent — proporsi RELATIF, bukan hitungan lembar absolut (lihat fixtureTrades). */
+function syntheticWeight(i: number): bigint {
+  return BigInt(12 + ((i * 37) % 90));
+}
+
 function fixtureTrades(m: MarketDetail): Trade[] {
   const trades: Trade[] = [];
-  let q: readonly [bigint, bigint] = [m.q[0] / 2n, m.q[1] / 2n];
+  const startQ: readonly [bigint, bigint] = [m.q[0] / 2n, m.q[1] / 2n];
+
+  // Bobot di atas dulunya diperlakukan sebagai hitungan LEMBAR ABSOLUT.
+  // Bug: totalnya (414 utk sisi NO, 906 utk sisi YES) sama untuk setiap
+  // market, jadi q sintetis di akhir 24 trade melenceng dari m.q market ini
+  // — trade TERBARU (yang tampil paling atas di tape) menunjukkan
+  // probabilitas yang tak cocok dengan panel probabilitas, yang dihitung
+  // langsung dari m.q.
+  //
+  // Di bawah ini bobot yang sama dipakai sebagai PROPORSI relatif per sisi,
+  // diskalakan lewat distribusi bigint-eksak (bukan .toFixed / floating
+  // point) supaya trade TERAKHIR tiap sisi tepat menutup q ke m.q — trade
+  // tape jadi koheren dengan keadaan market saat ini, tanpa mengubah m.q itu
+  // sendiri (setiap uji probabilitas/payout di suite ini bergantung padanya).
+  const remainingWeight: [bigint, bigint] = [0n, 0n];
   for (let i = 0; i < 24; i++) {
-    const outcome = (i % 3 === 0 ? 0 : 1) as 0 | 1;
-    const shares = BigInt(12 + ((i * 37) % 90)) * WAD;
+    remainingWeight[syntheticOutcome(i)] += syntheticWeight(i);
+  }
+  const remainingAmount: [bigint, bigint] = [m.q[0] - startQ[0], m.q[1] - startQ[1]];
+
+  let q: readonly [bigint, bigint] = startQ;
+  for (let i = 0; i < 24; i++) {
+    const outcome = syntheticOutcome(i);
+    const w = syntheticWeight(i);
+    // Distribusi proporsional bigint-eksak: saat trade TERAKHIR di sisi ini
+    // diproses, remainingWeight[outcome] === w, jadi shares ===
+    // remainingAmount[outcome] persis — sisa pembulatan antar-trade tidak
+    // menumpuk ke mana-mana, ia disapu habis oleh trade penutup itu sendiri.
+    const shares = (remainingAmount[outcome] * w) / remainingWeight[outcome];
+    remainingAmount[outcome] -= shares;
+    remainingWeight[outcome] -= w;
+
     const before = dpm.costUp(q);
     q = outcome === 0 ? [q[0] + shares, q[1]] : [q[0], q[1] + shares];
     const tokens = (dpm.costUp(q) - before) / scaleFor(m.collateral.decimals);
