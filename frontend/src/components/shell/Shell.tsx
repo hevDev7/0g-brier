@@ -34,7 +34,15 @@ export function Shell({children}: {children: React.ReactNode}) {
       </a>
 
       <header className="sticky top-0 z-30 border-b border-border bg-bg/95 backdrop-blur">
-        <div className="relative mx-auto flex h-16 w-full max-w-[1440px] items-center gap-6 px-4 md:px-8">
+        {/*
+          Three tracks from md up, with the outer two at `1fr` each: equal side
+          columns are what actually centres the nav, rather than merely placing
+          it after the brand. `minmax(0,…)` so a long brand or a wide indicator
+          shrinks its own track instead of shoving the middle one off centre.
+          Below md the row is still flex, because there the nav is not in it at
+          all — it drops out of the header as a panel.
+        */}
+        <div className="relative mx-auto flex h-16 w-full max-w-[1440px] items-center gap-4 px-4 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-6 md:px-8">
           <Link href="/" data-testid="link-brand" className="flex shrink-0 items-center gap-3">
             <span className="grid size-8 place-items-center rounded-md bg-accent text-accent-fg">
               <Radio size={16} strokeWidth={2.5} aria-hidden />
@@ -58,7 +66,7 @@ export function Shell({children}: {children: React.ReactNode}) {
             aria-label="Primary"
             className={`${
               navOpen ? "flex" : "hidden"
-            } absolute inset-x-0 top-16 flex-col gap-1 border-b border-border bg-bg-raised p-3 md:static md:flex md:flex-row md:border-0 md:bg-transparent md:p-0`}
+            } absolute inset-x-0 top-16 flex-col gap-1 border-b border-border bg-bg-raised p-3 md:static md:flex md:flex-row md:justify-self-center md:border-0 md:bg-transparent md:p-0`}
           >
             {NAV.map(({href, label, icon: Icon}) => {
               const active = isActive(pathname, href);
@@ -82,8 +90,16 @@ export function Shell({children}: {children: React.ReactNode}) {
             })}
           </nav>
 
-          <div className="ml-auto flex shrink-0 items-center gap-3">
-            <span className="hidden sm:block">
+          <div className="ml-auto flex shrink-0 items-center gap-3 md:ml-0 md:justify-self-end">
+            {/*
+              From lg up only. `mock source · fixture data` is wide enough that
+              at md it either wraps the chip to two lines inside a 64px bar or
+              pushes the controls into the centred nav. The footer carries it
+              below lg, so exactly one indicator is in the accessibility tree at
+              every width — never none, because a reader looking at fixture
+              figures has to be told they are fixtures.
+            */}
+            <span className="hidden lg:block">
               <ModeIndicator />
             </span>
             <ThemeToggle />
@@ -124,7 +140,7 @@ export function Shell({children}: {children: React.ReactNode}) {
             Humans observe here. Every trade is executed by an agent through the SDK, never from
             this page.
           </span>
-          <span className="ml-auto sm:hidden">
+          <span className="ml-auto lg:hidden">
             <ModeIndicator />
           </span>
         </div>

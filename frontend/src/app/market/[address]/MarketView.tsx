@@ -145,9 +145,21 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
               title="Settlement rules"
               icon={ScrollText}
             />
-            <p className="p-4 text-[13px] leading-relaxed text-text-muted md:p-5">
-              {market.rules}
-            </p>
+            {/* Rendering `{market.rules}` unconditionally put a heading over an
+                empty paragraph the moment the rules were null — and a panel that
+                promises a settlement rule and delivers nothing reads as "this
+                market has no rules", not as "this mode cannot read them". Exactly
+                the defect ResolutionEvidence shipped once already; fixtures never
+                show it because a fixture always has rules. */}
+            {market.rules === null ? (
+              <div className="p-4 md:p-5">
+                <Unavailable capability="MARKET_SPEC_BLOB" mode={source.mode} />
+              </div>
+            ) : (
+              <p className="p-4 text-[13px] leading-relaxed text-text-muted md:p-5">
+                {market.rules}
+              </p>
+            )}
           </Panel>
         </div>
 

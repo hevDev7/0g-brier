@@ -96,3 +96,24 @@ describe("MarketView", () => {
     expect(screen.queryByTestId("resolution-evidence")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * A live chain has no MarketSpec blob, so `rules` is null — and the settlement
+ * panel rendered a heading over an empty paragraph, which reads as "this market
+ * has no rules" rather than "this mode cannot read them". No fixture could catch
+ * it: every fixture market has rules. Found by pointing the UI at Galileo.
+ */
+describe("a market whose spec blob cannot be read", () => {
+  it("explains the missing rules instead of showing an empty panel", async () => {
+    const source = new MockSource();
+    const original = source.getMarket.bind(source);
+    source.getMarket = async (address) => ({...(await original(address)), rules: null, question: null});
+
+    renderMarket(source);
+
+    const panel = await screen.findByTestId("settlement-rules");
+    expect(panel).toHaveTextContent(/question and rules not available/i);
+    // The assertion that matters: the panel is not merely empty.
+    expect(panel.textContent?.replace(/\s+/g, " ").trim().length).toBeGreaterThan(30);
+  });
+});

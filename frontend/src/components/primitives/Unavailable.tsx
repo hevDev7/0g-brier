@@ -67,7 +67,11 @@ export function Unavailable({
       <span
         role="status"
         title={`${CAPABILITY_LABELS[capability]} is not available in ${mode} mode — this source keeps no history. Available in ${PROVIDED_BY[capability]} mode.`}
-        className="inline-flex items-center rounded border border-dashed border-border-strong px-1.5 py-0.5 text-[11px] whitespace-nowrap text-text-muted"
+        // `whitespace-nowrap` kept the badge on one line and let it spill into the
+        // next grid column — "Trade history not available" printed straight across
+        // the depth figure beside it. A badge may wrap; overlapping a neighbouring
+        // value is how two unrelated numbers get read as one.
+        className="inline-flex max-w-full items-center rounded border border-dashed border-border-strong px-1.5 py-0.5 text-left text-[11px] text-text-muted"
       >
         {CAPABILITY_LABELS[capability]} not available
       </span>
