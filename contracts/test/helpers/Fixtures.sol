@@ -98,6 +98,12 @@ abstract contract Fixtures is Test {
     ///
     ///      Deployer-lah satu-satunya yang boleh memanggil `setRegistry`, jadi instance ini
     ///      harus di-deploy oleh kontrak uji yang sama dengan pemanggil `_useFactoryAsRegistry`.
+    ///
+    ///      SALING EKSKLUSIF DENGAN `_newMarket`: pasangan ini menimpa `shares` sementara
+    ///      `StubMarketRegistry` masih menunjuk instance pertama, jadi market buatan `_newMarket`
+    ///      terdaftar di registry yang TIDAK dipercaya `shares` yang baru. Uji yang mencampur
+    ///      keduanya akan gagal `NotMarket` pada trade pertama dengan sebab yang sangat tidak
+    ///      kentara. Pilih salah satu per kontrak uji: `_newMarket` (stub) ATAU factory sungguhan.
     function _freshShares() internal {
         shares = new OutcomeShares("");
         config.setAddress(ConfigKeys.OUTCOME_SHARES, address(shares));

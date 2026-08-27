@@ -62,6 +62,7 @@ contract Deploy is Script {
             address(sharesContract),
             address(marketImpl),
             address(factory),
+            address(factoryImpl),
             address(usdc)
         );
 
@@ -77,6 +78,7 @@ contract Deploy is Script {
         address outcomeShares,
         address marketImplementation,
         address marketFactory,
+        address marketFactoryImpl,
         address usdc
     ) internal {
         string memory contractsKey = "contracts";
@@ -85,6 +87,9 @@ contract Deploy is Script {
         vm.serializeAddress(contractsKey, "OutcomeShares", outcomeShares);
         vm.serializeAddress(contractsKey, "MarketImplementation", marketImplementation);
         vm.serializeAddress(contractsKey, "MarketFactory", marketFactory);
+        // Alamat implementasi di balik proxy UUPS — persis yang dibutuhkan operasi upgrade,
+        // sejajar dengan ConfigRegistryImpl.
+        vm.serializeAddress(contractsKey, "MarketFactoryImpl", marketFactoryImpl);
         string memory contractsJson = vm.serializeAddress(contractsKey, "MockUSDC", usdc);
 
         string memory root = "manifest";
