@@ -1,4 +1,4 @@
-.PHONY: build test fmt fmt-check prod invariant vectors demo clean
+.PHONY: build test fmt fmt-check prod invariant vectors demo clean fe fe-build
 
 build:      ; cd contracts && forge build
 prod:       ; cd contracts && FOUNDRY_PROFILE=prod forge build
@@ -9,3 +9,5 @@ invariant:  ; cd contracts && FOUNDRY_PROFILE=ci forge test --match-path 'test/i
 vectors:    ; npm run gen:vectors
 demo:       ; bash scripts/demo-local.sh
 clean:      ; cd contracts && forge clean
+fe:       ; npm run dev -w @0g-delphi/frontend
+fe-build: ; npm run build -w @0g-delphi/frontend && npx tsc --noEmit -p frontend

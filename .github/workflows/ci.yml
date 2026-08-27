@@ -31,3 +31,7 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm test --workspaces --if-present
+      - name: typecheck frontend
+        run: npx tsc --noEmit -p frontend
+      - name: build frontend
+        run: npm run build -w @0g-delphi/frontend

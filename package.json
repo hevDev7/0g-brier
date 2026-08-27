@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Agent-native binary prediction market di 0G Chain — DPM pricing, komite resolver ber-TEE.",
-  "workspaces": ["packages/*"],
+  "workspaces": ["packages/*", "frontend"],
   "engines": { "node": ">=22" },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
