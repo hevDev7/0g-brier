@@ -58,6 +58,25 @@ contract MarketInitTest is Fixtures {
         assertEq(m.feeBps(), 100);
     }
 
+    /// @dev Sama seperti `feeBps`/`minTradeTokens`: bagian fee creator dan resolver juga
+    ///      dipotret saat inisialisasi, bukan dibaca ulang di `_distributeFees`. Tanpa ini,
+    ///      `setParam` yang secara individual sah (masing-masing ≤ 10_000) tapi jumlahnya
+    ///      melampaui 10_000 akan membekukan settle/fail/void SETIAP market yang sudah
+    ///      hidup di bawah ConfigRegistry ini, bukan cuma market baru.
+    function test_liveMarketKeepsSnapshottedFeeShares() public {
+        Market m = _newMarket(SEED);
+        assertEq(m.creatorFeeShareBps(), 4000);
+        assertEq(m.resolverFeeShareBps(), 3000);
+
+        // Keduanya individual sah (batas ConfigRegistry masing-masing [0, 10_000]) walau
+        // jumlahnya 12_000 — persis skenario yang membekukan market TANPA potret ini.
+        config.setParam(ConfigKeys.CREATOR_FEE_SHARE_BPS, 6000);
+        config.setParam(ConfigKeys.RESOLVER_FEE_SHARE_BPS, 6000);
+
+        assertEq(m.creatorFeeShareBps(), 4000);
+        assertEq(m.resolverFeeShareBps(), 3000);
+    }
+
     /// @dev `vm.expectRevert` mengikat ke panggilan BERIKUTNYA secara harfiah — termasuk
     ///      CREATE. `_newMarket` melakukan `Clones.clone` (sebuah CREATE) sebelum
     ///      `initialize`, jadi membungkus seluruh helper akan salah sasaran ke clone
@@ -92,6 +111,21 @@ contract MarketInitTest is Fixtures {
         usdc.transfer(address(m), SEED + DEPOSIT);
         vm.expectRevert(Market.BadDeadlines.selector);
         m.initialize(address(config), address(shares), p, SEED, DEPOSIT);
+    }
+
+    /// @dev Ditolak SAAT LAHIR, bukan diam-diam disimpan lalu meledak (Panic underflow)
+    ///      di settle/fail/void pertama. Kloning dan pendanaan tetap di luar jendela
+    ///      expectRevert — sama seperti `test_seedBelowMinimumReverts` di atas.
+    function test_initializeRevertsWhenFeeSharesExceedTotal() public {
+        config.setParam(ConfigKeys.CREATOR_FEE_SHARE_BPS, 6000);
+        config.setParam(ConfigKeys.RESOLVER_FEE_SHARE_BPS, 6000);
+
+        Market m = Market(Clones.clone(address(marketImpl)));
+        registry.set(address(m), true);
+        usdc.mintTo(address(this), SEED + DEPOSIT);
+        usdc.transfer(address(m), SEED + DEPOSIT);
+        vm.expectRevert(abi.encodeWithSelector(Market.FeeSharesExceedTotal.selector, 6000, 6000));
+        m.initialize(address(config), address(shares), _params(), SEED, DEPOSIT);
     }
 
     function test_cannotInitializeTwice() public {

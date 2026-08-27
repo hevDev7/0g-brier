@@ -45,6 +45,8 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     ///      aturannya di tengah jalan hanya karena tata kelola menyetel ulang parameter.
     uint16 public feeBps;
     uint256 public minTradeTokens;
+    uint16 public creatorFeeShareBps;
+    uint16 public resolverFeeShareBps;
 
     // ── state ────────────────────────────────────────────────────────────────
     uint256[2] internal _q;
@@ -68,6 +70,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     error DepositTooSmall();
     error BadDeadlines();
     error CollateralNotReceived();
+    error FeeSharesExceedTotal(uint256 creator, uint256 resolver);
     error BadOutcome();
     error ZeroAmount();
     error NotOpen();
@@ -115,6 +118,16 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
 
         feeBps = uint16(config.params(ConfigKeys.FEE_BPS));
         minTradeTokens = config.params(ConfigKeys.MIN_TRADE_TOKENS);
+        creatorFeeShareBps = uint16(config.params(ConfigKeys.CREATOR_FEE_SHARE_BPS));
+        resolverFeeShareBps = uint16(config.params(ConfigKeys.RESOLVER_FEE_SHARE_BPS));
+        // Tiap kunci dibatasi individual oleh ConfigRegistry ([0, 10_000] masing-masing),
+        // tapi tak ada pemeriksaan silang di sana — jumlah keduanya bisa > 10_000 walau
+        // keduanya sah sendiri-sendiri. Diperiksa di sini, saat lahir, karena kegagalan di
+        // settle/fail/void (Panic bawaan dari underflow `_distributeFees`) akan membekukan
+        // SETIAP market yang memakai ConfigRegistry ini, bukan cuma satu.
+        if (uint256(creatorFeeShareBps) + uint256(resolverFeeShareBps) > 10_000) {
+            revert FeeSharesExceedTotal(creatorFeeShareBps, resolverFeeShareBps);
+        }
         settlementDeposit = depositTokens;
 
         // Factory mentransfer collateral MASUK sebelum memanggil initialize.
@@ -513,8 +526,8 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         address resolverPool = config.addresses(ConfigKeys.RESOLUTION_MODULE);
         if (resolverPool == address(0)) resolverPool = treasuryAddr;
 
-        uint256 toCreator = (fees * config.params(ConfigKeys.CREATOR_FEE_SHARE_BPS)) / 10_000;
-        uint256 resolverFee = (fees * config.params(ConfigKeys.RESOLVER_FEE_SHARE_BPS)) / 10_000;
+        uint256 toCreator = (fees * creatorFeeShareBps) / 10_000;
+        uint256 resolverFee = (fees * resolverFeeShareBps) / 10_000;
         uint256 toResolvers = slashDeposit ? resolverFee : resolverFee + deposit;
         uint256 toTreasury = fees - toCreator - resolverFee + (slashDeposit ? deposit : 0);
 

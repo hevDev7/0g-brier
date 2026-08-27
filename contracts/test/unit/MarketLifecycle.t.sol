@@ -37,6 +37,59 @@ contract MarketLifecycleTest is Fixtures {
         vm.stopPrank();
     }
 
+    /// @dev Jalur transisi murni resolusi, tanpa efek payout: Closed → Proposed → Disputed
+    ///      → Proposed. Status diperiksa setelah TIAP langkah, dan pembatas pemanggil
+    ///      diperiksa untuk `markProposed` maupun `markDisputed`.
+    function test_proposedDisputedRoundTrip() public {
+        vm.warp(m.tradingEnd());
+        m.close();
+
+        vm.prank(alice);
+        vm.expectRevert(Market.NotResolutionModule.selector);
+        m.markProposed();
+
+        vm.prank(resolutionModule);
+        m.markProposed();
+        assertEq(uint8(m.status()), uint8(IMarket.Status.Proposed));
+
+        vm.prank(alice);
+        vm.expectRevert(Market.NotResolutionModule.selector);
+        m.markDisputed();
+
+        vm.prank(resolutionModule);
+        m.markDisputed();
+        assertEq(uint8(m.status()), uint8(IMarket.Status.Disputed));
+
+        vm.prank(resolutionModule);
+        m.markProposed();
+        assertEq(uint8(m.status()), uint8(IMarket.Status.Proposed));
+    }
+
+    /// @dev `markDisputed` hanya sah dari status `Proposed`. Diperiksa dari tiga status
+    ///      lain: Open (belum pernah ditutup), Closed (ditutup tapi belum diusulkan), dan
+    ///      Failed (status terminal, dicapai lewat `fail()` tanpa perlu market kedua).
+    function test_markDisputedRejectsWrongStatusAndCaller() public {
+        vm.prank(resolutionModule);
+        vm.expectRevert(Market.BadTransition.selector);
+        m.markDisputed(); // Open
+
+        vm.prank(alice);
+        vm.expectRevert(Market.NotResolutionModule.selector);
+        m.markDisputed(); // pembatas pemanggil, terlepas dari status
+
+        vm.warp(m.tradingEnd());
+        m.close();
+        vm.prank(resolutionModule);
+        vm.expectRevert(Market.BadTransition.selector);
+        m.markDisputed(); // Closed
+
+        vm.warp(m.settlementDeadline());
+        m.fail();
+        vm.prank(resolutionModule);
+        vm.expectRevert(Market.BadTransition.selector);
+        m.markDisputed(); // Failed (terminal)
+    }
+
     function test_onlyResolutionModuleCanSettle() public {
         vm.warp(m.tradingEnd());
         m.close();
