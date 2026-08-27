@@ -14,11 +14,17 @@ import {IMarketRegistry} from "../interfaces/IMarketRegistry.sol";
 ///      Lembar seed TIDAK ada di sini. Lembar seed tidak transferable dan dicatat
 ///      di dalam Market masing-masing (lihat §6.3 spec).
 contract OutcomeShares is ERC1155 {
+    /// @dev Lebar bit outcome dalam skema id: id = uint160(market) << OUTCOME_BITS | outcome.
+    ///      idFor membatasi outcome ke {0,1}, jadi satu byte jauh lebih dari cukup ruang;
+    ///      dipakai di idFor DAN marketOf sehingga keduanya tidak bisa lepas sinkron.
+    uint256 private constant OUTCOME_BITS = 8;
+
     address public immutable deployer;
     IMarketRegistry public registry;
 
     error NotMarket();
     error RegistryAlreadySet();
+    error ZeroRegistry();
     error NotDeployer();
     error BadOutcome();
 
@@ -31,6 +37,11 @@ contract OutcomeShares is ERC1155 {
     /// @dev Dipasang sekali setelah MarketFactory di-deploy, lalu tidak bisa diubah.
     function setRegistry(address registry_) external {
         if (msg.sender != deployer) revert NotDeployer();
+        // unset dan "di-set ke address(0)" berbagi nilai storage yang sama (0), jadi
+        // address(0) harus ditolak eksplisit di sini — kalau tidak, guard di bawah tidak
+        // bisa membedakan "belum pernah di-set" dari "sudah di-set ke nol", dan panggilan
+        // address(0) yang lolos diam-diam menghabiskan kunci sekali-pakai ini.
+        if (registry_ == address(0)) revert ZeroRegistry();
         if (address(registry) != address(0)) revert RegistryAlreadySet();
         registry = IMarketRegistry(registry_);
         emit RegistrySet(registry_);
@@ -38,15 +49,15 @@ contract OutcomeShares is ERC1155 {
 
     function idFor(address market, uint8 outcome) public pure returns (uint256) {
         if (outcome > 1) revert BadOutcome();
-        return (uint256(uint160(market)) << 8) | uint256(outcome);
+        return (uint256(uint160(market)) << OUTCOME_BITS) | uint256(outcome);
     }
 
     function marketOf(uint256 id) public pure returns (address) {
         // Truncation ke uint160 aman: untuk id hasil idFor(), bit di atas posisi 168 selalu
-        // nol (alamat 160-bit digeser 8 bit muat dalam 168 bit). Untuk id sembarang, ini
-        // murni decoder pure tanpa jalur keamanan yang bergantung padanya.
+        // nol (alamat 160-bit digeser OUTCOME_BITS (8) bit muat dalam 168 bit). Untuk id
+        // sembarang, ini murni decoder pure tanpa jalur keamanan yang bergantung padanya.
         // forge-lint: disable-next-line(unsafe-typecast)
-        return address(uint160(id >> 8));
+        return address(uint160(id >> OUTCOME_BITS));
     }
 
     function balanceOfOutcome(address account, address market, uint8 outcome) external view returns (uint256) {

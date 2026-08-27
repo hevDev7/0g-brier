@@ -90,6 +90,26 @@ contract OutcomeSharesTest is Test {
         shares.setRegistry(address(0xBEEF));
     }
 
+    function test_setRegistryRejectsZeroAddress() public {
+        OutcomeShares fresh = new OutcomeShares("");
+        vm.expectRevert(OutcomeShares.ZeroRegistry.selector);
+        fresh.setRegistry(address(0));
+    }
+
+    /// @dev Sifat kunci: unset dan "di-set ke address(0)" berbagi nilai storage yang sama,
+    ///      jadi address(0) harus ditolak eksplisit — jika tidak, guard "sudah pernah di-set"
+    ///      tak bisa membedakan keduanya, dan panggilan address(0) yang lolos diam-diam
+    ///      menghabiskan kunci sekali-pakai. Panggilan yang ditolak TIDAK BOLEH menghabiskan
+    ///      kunci itu: setRegistry yang sah sesudahnya harus tetap berhasil.
+    function test_zeroRegistryRejectionLeavesOneShotUsable() public {
+        OutcomeShares fresh = new OutcomeShares("");
+        vm.expectRevert(OutcomeShares.ZeroRegistry.selector);
+        fresh.setRegistry(address(0));
+
+        fresh.setRegistry(address(registry));
+        assertEq(address(fresh.registry()), address(registry));
+    }
+
     function test_onlyDeployerCanSetRegistry() public {
         OutcomeShares fresh = new OutcomeShares("");
         vm.prank(alice);
