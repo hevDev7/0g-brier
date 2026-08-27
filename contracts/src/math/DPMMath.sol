@@ -57,4 +57,31 @@ library DPMMath {
         if (s == 0) return 0;
         return Math.mulDiv(q[i] * q[i], WAD, s);
     }
+
+    error InsufficientSpend();
+
+    /// @notice Lembar outcome `i` yang diperoleh bila `spendWad` masuk ke pool.
+    /// @param spendWad bagian yang masuk pool — sudah bersih dari fee.
+    /// @dev Untuk n = 2 tidak perlu iterasi Newton. Kita mencari x sehingga
+    ///        √((qᵢ+x)² + q_j²) = C(q) + spend = C₁
+    ///      yang menghasilkan bentuk tertutup
+    ///        x = √(C₁² − q_j²) − qᵢ
+    ///      Basis memakai costUp (sama dengan poolWad milik Market) dan hasil akhir
+    ///      dibulatkan ke bawah, sehingga kuotasi tidak pernah melebih-lebihkan.
+    ///      Ini KUOTASI, bukan otoritas: `Market.buy` menghitung ulang biaya sebenarnya
+    ///      dan pemanggil melindungi diri lewat `maxTokensIn`.
+    function sharesForSpend(uint256[2] memory q, uint8 i, uint256 spendWad) internal pure returns (uint256) {
+        if (i > 1) revert BadOutcome();
+        if (spendWad == 0) revert InsufficientSpend();
+
+        uint256 j = i == 0 ? 1 : 0;
+        uint256 c1 = costUp(q) + spendWad;
+        if (c1 > MAX_Q) revert QOverflow();
+
+        // c1 > C(q) ≥ q[j], jadi pengurangan di bawah tidak pernah underflow.
+        uint256 inner = c1 * c1 - q[j] * q[j];
+        uint256 newQi = Math.sqrt(inner, Math.Rounding.Floor);
+        if (newQi <= q[i]) revert InsufficientSpend();
+        return newQi - q[i];
+    }
 }

@@ -152,4 +152,38 @@ contract DPMMathTest is Test {
             assertLe(c - lhs, (q[0] + q[1]) / DPMMath.WAD + 3);
         }
     }
+
+    /// @dev Bentuk tertutup: x = √(C₁² − q_j²) − qᵢ dengan C₁ = C(q) + spend.
+    ///      Dipilih dua segitiga Pythagoras agar jawabannya bulat dan bisa diperiksa mata:
+    ///      (0,3) biaya 3 → C₁ = 5 → q₀ baru = 4  ⇒ 4 lembar.
+    function test_sharesForSpendClosedFormExactCaseA() public pure {
+        assertEq(DPMMath.sharesForSpend(_q(0, 3e18), 0, 2e18), 4e18);
+    }
+
+    /// @dev (5,12) biaya 13 → C₁ = 15 → q₀ baru = 9 ⇒ 4 lembar.
+    function test_sharesForSpendClosedFormExactCaseB() public pure {
+        assertEq(DPMMath.sharesForSpend(_q(5e18, 12e18), 0, 2e18), 4e18);
+    }
+
+    function test_zeroSpendReverts() public {
+        vm.expectRevert(DPMMath.InsufficientSpend.selector);
+        this.callSharesForSpend(_q(3e18, 4e18), 0, 0);
+    }
+
+    function callSharesForSpend(uint256[2] memory q, uint8 i, uint256 s) external pure returns (uint256) {
+        return DPMMath.sharesForSpend(q, i, s);
+    }
+
+    /// @dev Sifat yang benar-benar penting: kuotasi tidak boleh pernah menjanjikan
+    ///      lebih banyak lembar daripada yang dibayar. Biaya sesungguhnya untuk lembar
+    ///      yang dikuotasi harus ≤ spend (tidak pernah melebihi).
+    function testFuzz_sharesForSpendNeverOverpromises(uint96 a, uint96 b, uint96 spend) public pure {
+        vm.assume(uint256(a) + uint256(b) > 0);
+        vm.assume(spend > 1e12);
+        uint256[2] memory q = _q(uint256(a), uint256(b));
+        uint256 shares = DPMMath.sharesForSpend(q, 0, uint256(spend));
+        uint256[2] memory qAfter = _q(uint256(a) + shares, uint256(b));
+        uint256 realCost = DPMMath.costUp(qAfter) - DPMMath.costUp(q);
+        assertLe(realCost, uint256(spend));
+    }
 }
