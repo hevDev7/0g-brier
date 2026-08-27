@@ -116,6 +116,15 @@ contract DPMMathTest is Test {
         return DPMMath.price(q, i);
     }
 
+    function test_probabilityBadOutcomeReverts() public {
+        vm.expectRevert(DPMMath.BadOutcome.selector);
+        this.callProbability(_q(1e18, 1e18), 2);
+    }
+
+    function callProbability(uint256[2] memory q, uint8 i) external pure returns (uint256) {
+        return DPMMath.probability(q, i);
+    }
+
     function testFuzz_probabilitiesSumToOne(uint96 a, uint96 b) public pure {
         vm.assume(uint256(a) + uint256(b) > 0);
         uint256[2] memory q = _q(uint256(a), uint256(b));
@@ -163,6 +172,19 @@ contract DPMMathTest is Test {
     /// @dev (5,12) biaya 13 → C₁ = 15 → q₀ baru = 9 ⇒ 4 lembar.
     function test_sharesForSpendClosedFormExactCaseB() public pure {
         assertEq(DPMMath.sharesForSpend(_q(5e18, 12e18), 0, 2e18), 4e18);
+    }
+
+    /// @dev Cerminan Kasus A dengan i=1 alih-alih i=0: (3,0) dibeli pada outcome 1
+    ///      harus memberi hasil yang sama, 4 lembar. Tanpa uji ini, cabang `j = i==0
+    ///      ? 1 : 0` untuk i=1 tidak pernah dieksekusi oleh satu pun dari 22 uji lain —
+    ///      pembalikan indeks q[i]/q[j] akan lolos tanpa terdeteksi.
+    function test_sharesForSpendClosedFormExactCaseAMirroredForOutcomeOne() public pure {
+        assertEq(DPMMath.sharesForSpend(_q(3e18, 0), 1, 2e18), 4e18);
+    }
+
+    function test_sharesForSpendBadOutcomeReverts() public {
+        vm.expectRevert(DPMMath.BadOutcome.selector);
+        this.callSharesForSpend(_q(3e18, 4e18), 2, 2e18);
     }
 
     function test_zeroSpendReverts() public {

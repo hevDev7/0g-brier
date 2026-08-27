@@ -11,7 +11,9 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 ///
 ///      Sifat yang dijamin pustaka ini:
 ///        • Σ pᵢ² = WAD           → pᵢ² adalah distribusi probabilitas yang sah
-///        • Σ pᵢ·qᵢ = C(q)        → likuidasi menghabiskan pool secara persis (Euler)
+///        • Σ pᵢ·qᵢ ≈ C(q), bisa melampaui poolWad ≤2 wei karena price() membagi
+///          dengan cost() yang sudah dibulatkan ke bawah → likuidasi WAJIB clamp
+///          payout total ke poolWad, bukan mengasumsikan Euler eksak
 ///        • C(k·q) = k·C(q)       → penambahan likuiditas proporsional netral terhadap harga
 library DPMMath {
     uint256 internal constant WAD = 1e18;
