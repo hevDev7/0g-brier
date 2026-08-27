@@ -2,7 +2,7 @@
   "name": "0g-delphi",
   "version": "0.1.0",
   "private": true,
-  "description": "Agent-native binary prediction market di 0G Chain — DPM pricing, komite resolver ber-TEE.",
+  "description": "Agent-native binary prediction market on 0G Chain — DPM pricing, a TEE-backed resolver committee.",
   "workspaces": ["packages/*", "frontend"],
   "engines": { "node": ">=22" },
   "scripts": {
