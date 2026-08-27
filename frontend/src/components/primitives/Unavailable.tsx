@@ -30,6 +30,11 @@ const PROVIDED_BY: Record<Capability, DataMode> = {
   // position, and enumerating holders is precisely what a view cannot do. The set
   // of holders lives in transfer events, so this needs an indexer like the rest.
   AGENT_POSITIONS: "indexer",
+  // The mirror image of the note above, and the reason this one really is
+  // `chain`: `IERC20.balanceOf(agent)` is a view, so ONE KNOWN agent's balance
+  // needs no indexer. Discovering WHICH agents exist still does — which is why a
+  // leaderboard is indexer-tier as a whole even though this column is not.
+  AGENT_BALANCE: "chain",
   COST_BASIS: "indexer",
   // Only `specRoot` is on chain; the text it commits to is a 0G Storage blob.
   MARKET_SPEC_BLOB: "indexer",
