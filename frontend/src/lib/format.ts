@@ -92,3 +92,25 @@ export function formatCountdown(secondsRemaining: number): string {
   if (hours > 0) return `${hours}j ${minutes}m`;
   return `${minutes}m`;
 }
+
+/**
+ * Waktu absolut, zona lokal pembaca. Dipakai untuk garis waktu siklus hidup.
+ *
+ * Tidak ada penanganan tepi khusus di sini dengan sengaja: 0 adalah timestamp
+ * Unix yang sah (epoch 1 Jan 1970) dan dirender apa adanya, persis seperti
+ * formatCollateral(0n, ...) merender "0.00", bukan disembunyikan — "belum
+ * diketahui" adalah urusan Query.status, bukan sesuatu yang boleh disimpulkan
+ * fungsi ini dari sebuah nilai numerik. Tanggal jauh di masa depan (mis. tahun
+ * 9999, dipakai settlementDeadline yang sangat longgar) juga terformat tanpa
+ * overflow: Date menampung hingga sekitar tahun 275760, jauh melampaui domain
+ * timestamp market mana pun di sini.
+ */
+export function formatTimestamp(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toLocaleString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
