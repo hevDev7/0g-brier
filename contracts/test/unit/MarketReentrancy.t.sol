@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Fixtures} from "../helpers/Fixtures.sol";
 import {Market} from "../../src/core/Market.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC1155Receiver} from "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
@@ -68,7 +69,16 @@ contract MarketReentrancyTest is Fixtures {
 
     function test_reentrantReceiverCannotReenterBuy() public {
         attacker.setArmed(true);
-        vm.expectRevert(); // ReentrancyGuardReentrantCall menggelembung dari panggilan dalam
+        // Selektor spesifik, bukan expectRevert() kosong: yang terakhir lulus untuk revert
+        // APA PUN, termasuk TradeTooSmall yang tak ada hubungannya dengan guard (lihat R25).
+        // Market yang sudah hidup kebal terhadap perubahan parameter (minTradeTokens dipotret
+        // saat initialize — lihat test_liveMarketIsImmuneToLaterConfigChanges), TAPI batas
+        // MIN_TRADE_TOKENS dikunci DeployLib selebar [1, UNBOUNDED]; setParam boleh menaikkan
+        // nilainya kapan saja di dalam rentang itu, dan setUp() di sini membuat market BARU tiap
+        // uji — jadi default DeployLib yang naik di atas 7.330.600 (biaya re-entry 10e18 ini)
+        // langsung terwarisi market baru ini pula. Data revert sampai ke sini utuh: ERC1155Utils
+        // menyebarkan ulang alasan asli tanpa modifikasi.
+        vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
         attacker.attack(50e18);
 
         // Kontrol: penerima yang sama, tanpa serangan, berhasil. Ini membuktikan
@@ -83,7 +93,7 @@ contract MarketReentrancyTest is Fixtures {
         uint256 poolBefore = m.poolWad();
 
         attacker.setArmed(true);
-        vm.expectRevert();
+        vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
         attacker.attack(50e18);
 
         assertEq(m.qArray()[1], qBefore[1]);

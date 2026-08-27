@@ -185,14 +185,28 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
 
     // ── beli ─────────────────────────────────────────────────────────────────
 
+    /// @dev Satu-satunya tempat rumus harga beli ditulis — dipakai `quoteBuy` DAN `buy` supaya
+    ///      keduanya tak bisa diam-diam berbeda formula (kuotasi yang berbohong soal biaya
+    ///      sungguhan). Murni kalkulasi: guard (`BadOutcome`/`ZeroAmount`) tetap di pemanggil,
+    ///      bukan di sini, karena `outcome` dipakai sebagai indeks array sebelum tervalidasi.
+    ///      `buy` memakai `target` untuk menyetel `poolWad`; `quoteBuy` mengabaikannya.
+    function _priceBuy(uint8 outcome, uint256 sharesOut)
+        internal
+        view
+        returns (uint256 target, uint256 costTokens, uint256 fee, uint256 tokensIn)
+    {
+        uint256[2] memory qNew = _q;
+        qNew[outcome] += sharesOut;
+        target = DPMMath.costUp(qNew); // revert bila melampaui MAX_Q
+        costTokens = Math.ceilDiv(target - poolWad, scale);
+        fee = (costTokens * feeBps) / 10_000;
+        tokensIn = costTokens + fee;
+    }
+
     function quoteBuy(uint8 outcome, uint256 sharesOut) public view returns (uint256 tokensIn, uint256 fee) {
         if (outcome > 1) revert BadOutcome();
         if (sharesOut == 0) revert ZeroAmount();
-        uint256[2] memory qNew = _q;
-        qNew[outcome] += sharesOut;
-        uint256 costTokens = Math.ceilDiv(DPMMath.costUp(qNew) - poolWad, scale);
-        fee = (costTokens * feeBps) / 10_000;
-        tokensIn = costTokens + fee;
+        (,, fee, tokensIn) = _priceBuy(outcome, sharesOut);
     }
 
     /// @notice Taksiran lembar yang didapat untuk `tokensIn` (agent berpikir dalam nominal).
@@ -220,16 +234,15 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         if (outcome > 1) revert BadOutcome();
         if (sharesOut == 0) revert ZeroAmount();
 
+        uint256 target;
+        uint256 costTokens;
+        uint256 fee;
+        (target, costTokens, fee, tokensIn) = _priceBuy(outcome, sharesOut);
+        if (costTokens < minTradeTokens) revert TradeTooSmall();
+        if (tokensIn > maxTokensIn) revert SlippageExceeded(tokensIn, maxTokensIn);
+
         uint256[2] memory qNew = _q;
         qNew[outcome] += sharesOut;
-
-        uint256 target = DPMMath.costUp(qNew); // revert bila melampaui MAX_Q
-        uint256 costTokens = Math.ceilDiv(target - poolWad, scale);
-        if (costTokens < minTradeTokens) revert TradeTooSmall();
-
-        uint256 fee = (costTokens * feeBps) / 10_000;
-        tokensIn = costTokens + fee;
-        if (tokensIn > maxTokensIn) revert SlippageExceeded(tokensIn, maxTokensIn);
 
         // Efek sebelum interaksi: mint ERC-1155 memanggil balik `to`.
         _q = qNew;

@@ -107,20 +107,28 @@ contract MarketBuyTest is Fixtures {
         // `spend`. Batas 1 unit ini murni pembulatan pada fungsi VIEW; `buy` sendiri tetap
         // memakai `maxTokensIn` untuk melindungi pemanggil — kuotasi ini sengaja tidak otoritatif.
         assertLe(realCost, uint256(spend) + 1);
+        // Sisi bawah sama pentingnya: sharesForSpend mencari lembar TERBESAR yang muat dalam
+        // anggaran, jadi realCost tak boleh jatuh jauh di bawah `spend` — kalau tidak, kuotasi
+        // yang rusak total (mis. 1 wei lembar untuk anggaran $100rb) tetap lulus uji ini. Berlaku
+        // untuk scale > 1 (collateral 6-desimal di fixture ini); pada scale == 1 batasnya T-1.
+        assertGe(realCost, uint256(spend));
     }
 
     /// @dev Membeli dalam dua langkah tidak boleh lebih murah daripada sekali jalan
     ///      (path independence, dalam batas debu pembulatan).
     function testFuzz_buyIsPathIndependent(uint64 partA, uint64 partB) public {
         // Ambang lama (vm.assume(partA > 1e15 ...)) jauh di bawah MIN_TRADE_TOKENS (1e6 token,
-        // collateral 6-desimal): dari state benih simetris, sebuah pembelian butuh ~1.41e18
-        // lembar agar biayanya menyentuh 1e6 token, jadi hampir semua nilai fuzz kecil membuat
-        // `buy` revert TradeTooSmall secara sah (proteksi debu yang sama seperti
-        // test_dustBuyReverts) — vm.assume lalu menolak begitu banyak input sehingga fuzzer
-        // menyerah ("rejected too many inputs"). `bound` memetakan setiap input alih-alih
-        // menolaknya, jadi jendela [2e18+1, uint64.max] tetap terjaga tanpa membuang run.
-        partA = uint64(bound(uint256(partA), 2e18 + 1, type(uint64).max));
-        partB = uint64(bound(uint256(partB), 2e18 + 1, type(uint64).max));
+        // collateral 6-desimal), dan lantai `bound` sebelumnya (2e18+1) terlalu jauh DI ATASNYA:
+        // cari-biner eksak pada rumus sungguhan menunjukkan lembar sekecil 1413506453827668971
+        // dari state benih simetris sudah menyentuh MIN_TRADE_TOKENS. Lantai di bawah ini adalah
+        // satu di atas ambang eksak itu, supaya wilayah [1.4135e18, 2e18] — trade kecil-tapi-sah
+        // tempat debu pembulatan [-1,+2] paling mungkin muncul — ikut tercakup fuzzer, bukan
+        // cuma nilai jauh di atasnya. Di bawah ambang, `buy` sah revert TradeTooSmall (proteksi
+        // debu yang sama seperti test_dustBuyReverts). `bound` memetakan setiap input alih-alih
+        // menolaknya (vm.assume pada ambang setipis ini membuat fuzzer menyerah, "rejected too
+        // many inputs").
+        partA = uint64(bound(uint256(partA), 1413506453827668972, type(uint64).max));
+        partB = uint64(bound(uint256(partB), 1413506453827668972, type(uint64).max));
         uint256 total = uint256(partA) + uint256(partB);
         (uint256 oneShot,) = m.quoteBuy(1, total);
 
