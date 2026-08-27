@@ -18,22 +18,22 @@ function pick<T extends string>(env: Env, key: string, allowed: readonly T[], fa
   const raw = env[key];
   if (raw === undefined || raw === '') return fallback;
   if ((allowed as readonly string[]).includes(raw)) return raw as T;
-  throw new Error(`${key}="${raw}" tidak dikenal; yang diizinkan: ${allowed.join(', ')}`);
+  throw new Error(`${key}="${raw}" is not recognized; allowed: ${allowed.join(', ')}`);
 }
 
-/** Membaca ketiga saklar mode dan menegakkan kombinasi yang tidak boleh terjadi.
- *  Pemeriksaan silang di bawah ada supaya konfigurasi berbahaya gagal saat start,
- *  bukan saat sudah menyentuh dana sungguhan. */
+/** Reads the three mode switches and enforces combinations that must not occur.
+ *  The cross-checks below exist so a dangerous configuration fails at startup,
+ *  not after it has already touched real funds. */
 export function loadModes(env: Env = process.env): Modes {
   const chain = pick(env, 'CHAIN_MODE', CHAIN_MODES, 'anvil');
   const storage = pick(env, 'STORAGE_MODE', STORAGE_MODES, 'memory');
   const inference = pick(env, 'INFERENCE_MODE', INFERENCE_MODES, 'stub');
 
   if (chain === 'mainnet' && inference === 'stub') {
-    throw new Error('INFERENCE_MODE=stub dilarang saat CHAIN_MODE=mainnet: settlement tersimulasi tidak boleh menyentuh dana nyata');
+    throw new Error('INFERENCE_MODE=stub is forbidden when CHAIN_MODE=mainnet: simulated settlement must not touch real funds');
   }
   if (chain !== 'anvil' && storage === 'memory') {
-    throw new Error(`STORAGE_MODE=memory hanya untuk CHAIN_MODE=anvil; specRoot/receiptRoot harus dapat diambil ulang di ${chain}`);
+    throw new Error(`STORAGE_MODE=memory is only for CHAIN_MODE=anvil; specRoot/receiptRoot must be re-fetchable on ${chain}`);
   }
   return { chain, storage, inference };
 }

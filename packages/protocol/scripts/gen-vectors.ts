@@ -5,8 +5,8 @@ import { cost, costUp, price, probability, seedShares, MAX_Q, type Q } from '../
 const OUT = join(process.cwd(), '../../contracts/test/vectors/dpm.json');
 const COUNT = 512;
 
-/** xorshift64 deterministik — vektor harus identik di setiap mesin dan setiap kali,
- *  supaya `gen:vectors` yang dijalankan ulang di CI tidak menghasilkan diff. */
+/** Deterministic xorshift64 — the vectors must be identical on every machine and every
+ *  run, so that `gen:vectors` re-run in CI does not produce a diff. */
 function makeRng(seed: bigint): () => bigint {
   const MASK = (1n << 64n) - 1n;
   let s = seed;
@@ -18,18 +18,19 @@ function makeRng(seed: bigint): () => bigint {
   };
 }
 
-/** Komposisi dua tarikan 64-bit menjadi nilai 128-bit. rng() sendiri terbatas pada
- *  [0, 2^64) ≈ 1.845e19 — lebih kecil dari modulus bucket "besar" (1e24) dan
- *  "dekat-MAX_Q" (1e33), sehingga `rng() % modulus` untuk keduanya jadi no-op tanpa ini
- *  (modulus > ruang nilai berarti operasi modulo tidak pernah memotong apa pun).
- *  Temporer eksplisit (hi, lo) supaya urutan pemanggilan rng() tidak ambigu bagi pembaca. */
+/** Composes two 64-bit draws into a 128-bit value. rng() alone is limited to
+ *  [0, 2^64) ≈ 1.845e19 — smaller than the modulus of the "large" bucket (1e24)
+ *  and the "near-MAX_Q" bucket (1e33), so `rng() % modulus` for both would become
+ *  a no-op without this (modulus > value space means the modulo operation never
+ *  cuts anything off). Explicit temporaries (hi, lo) so the order of rng() calls
+ *  is not ambiguous to the reader. */
 function rng128(rng: () => bigint): bigint {
   const hi = rng();
   const lo = rng();
   return (hi << 64n) | lo;
 }
 
-/** Sebaran lintas magnitudo: nol, debu, skala wad, besar, dan tepat di MAX_Q. */
+/** Spread across magnitudes: zero, dust, wad scale, large, and exactly at MAX_Q. */
 function sample(rng: () => bigint, bucket: number): bigint {
   switch (bucket % 6) {
     case 0: return 0n;
@@ -52,10 +53,10 @@ const seed: string[] = [];
 
 const hex = (v: bigint) => `0x${v.toString(16)}`;
 
-/** Kasus 0..35 menjangkau eksplisit seluruh 36 pasangan bucket (termasuk (MAX_Q, MAX_Q),
- *  yang skema offset-3 di bawah TIDAK PERNAH bisa capai — bucket i selalu berpasangan
- *  dengan bucket (i+3)%6, jadi kedua kaki tak pernah sama-sama di tier tertinggi).
- *  Kasus 36.. memakai skema offset-3 semula untuk sisa sampel acak. */
+/** Cases 0..35 explicitly cover all 36 bucket pairs (including (MAX_Q, MAX_Q),
+ *  which the offset-3 scheme below can NEVER reach — bucket i is always paired
+ *  with bucket (i+3)%6, so the two legs are never both in the highest tier).
+ *  Cases 36.. use the original offset-3 scheme for the remaining random samples. */
 for (let k = 0; k < COUNT; k++) {
   const bucketA = k < 36 ? Math.floor(k / 6) : k % 6;
   const bucketB = k < 36 ? k % 6 : k + 3;
@@ -73,4 +74,4 @@ for (let k = 0; k < COUNT; k++) {
 
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, `${JSON.stringify({ q0, q1, cost: cst, costUp: cstUp, price0, prob0, seed }, null, 2)}\n`);
-console.log(`menulis ${COUNT} vektor ke ${OUT}`);
+console.log(`wrote ${COUNT} vectors to ${OUT}`);

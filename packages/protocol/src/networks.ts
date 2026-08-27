@@ -9,7 +9,7 @@ export interface NetworkConfig {
 
 type Env = Record<string, string | undefined>;
 
-/** Fakta diverifikasi 2026-08-27 — lihat §3.1 spec. */
+/** Facts verified 2026-08-27 — see spec §3.1. */
 export function networkFor(mode: ChainMode, env: Env = process.env): NetworkConfig {
   switch (mode) {
     case 'anvil':

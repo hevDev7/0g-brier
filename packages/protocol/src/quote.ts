@@ -2,28 +2,29 @@ import { WAD } from './units';
 import { price, probability, sharesForSpend, type Outcome, type Q } from './dpm';
 
 /**
- * Mesin kuotasi: apa yang didapat sebuah anggaran, dan apa yang dilakukannya
- * pada market. Murni — tanpa React, tanpa RPC, tanpa state — supaya satu
- * implementasi yang sama melayani UI manusia dan `@0g-delphi/agent-kit`.
+ * Quote engine: what a budget gets, and what it does to the market. Pure —
+ * no React, no RPC, no state — so the same implementation serves the human
+ * UI and `@0g-delphi/agent-kit`.
  *
- * Ini implementasi RUJUKAN, bukan otoritas: sebelum mengirim transaksi,
- * pemanggil memanggil `quoteBuySpend`/`quoteBuy` di rantai dan angka itulah
- * yang ditandatangani. Modul ini mencerminkan `Market.quoteBuySpend` — inversi
- * fee yang sama, `DPMMath.sharesForSpend` yang sama lewat cermin di `dpm.ts` —
- * dengan satu perbedaan yang disengaja: di sini semuanya wad, sedangkan
- * kontrak membalik fee dalam satuan token lalu menaikkannya ke wad. Konversi
- * desimal hanya terjadi di batas token, tidak pernah di tengah perhitungan.
+ * This is a REFERENCE implementation, not the authority: before sending a
+ * transaction, the caller calls `quoteBuySpend`/`quoteBuy` on-chain, and that
+ * number is what gets signed. This module mirrors `Market.quoteBuySpend` —
+ * the same fee inversion, the same `DPMMath.sharesForSpend` via the mirror
+ * in `dpm.ts` — with one deliberate difference: here everything is wad,
+ * whereas the contract inverts the fee in token units and then scales it up
+ * to wad. Decimal conversion happens only at the token boundary, never in
+ * the middle of a calculation.
  */
 export interface QuotePreview {
-  /** Lembar outcome yang diterima, wad. */
+  /** Outcome shares received, wad. */
   sharesOut: bigint;
-  /** Bagian anggaran yang benar-benar masuk pool, wad. */
+  /** Portion of the budget that actually enters the pool, wad. */
   poolInWad: bigint;
-  /** Bagian anggaran yang jadi fee, wad. */
+  /** Portion of the budget that becomes the fee, wad. */
   feeWad: bigint;
-  /** Anggaran kotor: selalu `poolInWad + feeWad`. */
+  /** Gross budget: always `poolInWad + feeWad`. */
   totalWad: bigint;
-  /** Harga rata-rata yang dibayar per lembar, wad. Selalu di atas harga marginal awal. */
+  /** Average price paid per share, wad. Always above the initial marginal price. */
   avgPriceWad: bigint;
   probBeforeWad: bigint;
   probAfterWad: bigint;
@@ -34,12 +35,12 @@ export interface QuotePreview {
 const MAX_FEE_BPS = 10_000;
 
 /**
- * Payout per lembar menang = 1/p_i, dalam wad.
+ * Payout per winning share = 1/p_i, in wad.
  *
- * BUKAN 1/P_i. Keduanya menghasilkan angka yang terlihat masuk akal, dan
- * memakai yang salah melebih-lebihkan payout sekitar 30% pada skew biasa —
- * persis arah yang merugikan siapa pun yang mempercayainya. Draf pertama spec
- * proyek ini sendiri melakukan kesalahan itu.
+ * NOT 1/P_i. Both produce numbers that look plausible, and using the wrong
+ * one overstates the payout by around 30% at typical skew — exactly the
+ * direction that hurts anyone who trusts it. This project's own first spec
+ * draft made that mistake.
  */
 export function payoutPerShareWad(q: Q, outcome: Outcome): bigint {
   const p = price(q, outcome);
@@ -47,31 +48,31 @@ export function payoutPerShareWad(q: Q, outcome: Outcome): bigint {
   return (WAD * WAD) / p;
 }
 
-/** Keadaan q setelah `shares` lembar `outcome` dicetak. */
+/** State of q after `shares` shares of `outcome` are minted. */
 export function qAfterBuy(q: Q, outcome: Outcome, shares: bigint): Q {
   return outcome === 0 ? [q[0] + shares, q[1]] : [q[0], q[1] + shares];
 }
 
 /**
- * Fee yang terkandung DI DALAM anggaran kotor `grossWad`.
+ * The fee contained WITHIN the gross budget `grossWad`.
  *
- * Penyebutnya `10_000 + feeBps`, bukan `10_000`, dan itu bukan detail: kontrak
- * mengenakan fee di ATAS biaya pool (`fee = costTokens * feeBps / 10_000`, lihat
- * `Market._priceBuy`), jadi membaliknya dari anggaran kotor harus memakai
- * penyebut yang sudah memuat fee itu sendiri. Memakai `10_000` menyisakan
- * sebagian anggaran menganggur — kuotasinya menjanjikan lembar lebih sedikit
- * daripada yang sebenarnya dibeli anggaran itu.
+ * The denominator is `10_000 + feeBps`, not `10_000`, and that is not a
+ * detail: the contract charges the fee ON TOP OF the pool cost
+ * (`fee = costTokens * feeBps / 10_000`, see `Market._priceBuy`), so
+ * inverting it from the gross budget must use a denominator that already
+ * accounts for the fee itself. Using `10_000` leaves part of the budget
+ * idle — the quote promises fewer shares than that budget actually buys.
  */
 export function feeFromGross(grossWad: bigint, feeBps: number): bigint {
   if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > MAX_FEE_BPS) {
-    throw new RangeError(`feeBps tidak didukung: ${feeBps} (harus bilangan bulat 0..${MAX_FEE_BPS})`);
+    throw new RangeError(`unsupported feeBps: ${feeBps} (must be an integer 0..${MAX_FEE_BPS})`);
   }
   if (grossWad <= 0n) return 0n;
   const bps = BigInt(feeBps);
   return (grossWad * bps) / (10_000n + bps);
 }
 
-/** Pratinjau saat tak ada yang dibeli: keadaan market sekarang, transisi rata. */
+/** Preview when nothing is bought: current market state, flat transition. */
 function still(q: Q, outcome: Outcome): QuotePreview {
   const prob = probability(q, outcome);
   const payout = payoutPerShareWad(q, outcome);
@@ -89,14 +90,14 @@ function still(q: Q, outcome: Outcome): QuotePreview {
 }
 
 /**
- * Pratinjau pembelian `spendWad` (anggaran KOTOR, sudah termasuk fee).
+ * Preview of buying `spendWad` (GROSS budget, fee already included).
  *
- * Belanja nol dan market yang menolak pembelian (mis. `q` di batas MAX_Q, yang
- * membuat `sharesForSpend` melempar) menghasilkan pratinjau kosong — dengan
- * probabilitas dan payout SAAT INI tetap terisi, bukan nol. Pratinjau adalah
- * pembacaan, bukan transaksi: ia tidak boleh meruntuhkan layar atau proses
- * agent yang memanggilnya, dan tidak boleh membuat market terbaca berharga nol
- * hanya karena tak ada yang dibelanjakan.
+ * Zero spend and a market that rejects the purchase (e.g. `q` at the MAX_Q
+ * limit, which makes `sharesForSpend` throw) produce an empty preview — with
+ * the CURRENT probability and payout still populated, not zero. A preview is
+ * a read, not a transaction: it must not crash the screen or agent process
+ * that calls it, and must not make the market read as worthless just
+ * because nothing was spent.
  */
 export function quoteBuy(input: {
   q: Q;
