@@ -32,9 +32,17 @@ if [[ -f "$ROOT/.env" ]]; then
 fi
 
 RPC="${RPC:-${ZERO_G_TESTNET_RPC:-http://127.0.0.1:8545}}"
+# Wallets export a key with and without the prefix, and both are the same key —
+# `cast` accepts either. `forge`'s `vm.envUint` does not: without `0x` it parses
+# the string as DECIMAL, so an all-digit key would silently become a different
+# one rather than fail. Normalise here, once, before anything reads it.
+if [[ "${DEPLOYER_KEY:-}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+  DEPLOYER_KEY="0x${DEPLOYER_KEY}"; export DEPLOYER_KEY
+fi
 [[ "${DEPLOYER_KEY:-}" =~ ^0x[0-9a-fA-F]{64}$ ]] \
   || { echo "✗ DEPLOYER_KEY must be a 0x-prefixed 32-byte hex key — fill it in $ROOT/.env" >&2; exit 1; }
 CURATOR_KEY="${CURATOR_KEY:-$DEPLOYER_KEY}"
+if [[ "$CURATOR_KEY" =~ ^[0-9a-fA-F]{64}$ ]]; then CURATOR_KEY="0x${CURATOR_KEY}"; fi
 
 # The trading window has to be short enough to sit through. On anvil we move the
 # clock; on a real chain there is nothing to do but wait, so keep it small.

@@ -37,6 +37,13 @@ die() { echo "✗ $1" >&2; exit 1; }
 command -v forge >/dev/null || die "forge not on PATH"
 command -v cast  >/dev/null || die "cast not on PATH"
 
+# Wallets export a key with and without the prefix, and both are the same key —
+# `cast` accepts either. `forge`'s `vm.envUint` does not: without `0x` it parses
+# the string as DECIMAL, so an all-digit key would silently become a different
+# one rather than fail. Normalise here, once, before anything reads it.
+if [[ "${DEPLOYER_KEY:-}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+  DEPLOYER_KEY="0x${DEPLOYER_KEY}"; export DEPLOYER_KEY
+fi
 # Shape-checked, not merely non-empty: a `DEPLOYER_KEY=0x` left over from the
 # template is non-empty and would sail past a `-n` test, then fail further down
 # inside `cast` with "Failed to decode private key", which names neither the
