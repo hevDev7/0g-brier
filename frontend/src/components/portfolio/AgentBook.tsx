@@ -10,6 +10,7 @@ import {Unavailable} from "@/components/primitives/Unavailable";
 import {usePositionsByMarket} from "@/hooks/useMarketRows";
 import {useMarkets} from "@/hooks/useMarkets";
 import {agentBook, holdingStatus, type BookRow} from "@/lib/agent-book";
+import {collect} from "@/lib/collect";
 import {statusTone} from "@/lib/market-rows";
 import {formatCollateral, formatPricePerShare, formatShares} from "@/lib/format";
 import type {MarketSummary} from "@/lib/data/types";
@@ -45,25 +46,24 @@ function Book({agent, markets}: {agent: string; markets: MarketSummary[]}): Reac
 
   // A partial book would understate an agent's exposure while looking like the
   // whole of it, so one unreadable market makes the book unknowable rather than
-  // smaller — the same rule as the aggregate volume tile on the market list.
-  const missing = positions.find((p) => p.status === "unavailable");
-  if (missing?.status === "unavailable") {
-    return <Unavailable capability={missing.capability} mode={missing.mode} />;
-  }
-  const failed = positions.find((p) => p.status === "error");
-  if (failed?.status === "error") {
-    return <ErrorNote error={failed.error} what="this agent's positions" />;
-  }
-  if (positions.length === 0 || positions.some((p) => p.status !== "ready")) {
-    return (
-      <Panel>
-        <SkeletonRows rows={4} cols={6} />
-      </Panel>
-    );
+  // smaller. `collect` is where that rule lives now, shared with the leaderboard.
+  const collected = collect(positions);
+  switch (collected.kind) {
+    case "unavailable":
+      return <Unavailable capability={collected.capability} mode={collected.mode} />;
+    case "error":
+      return <ErrorNote error={collected.error} what="this agent's positions" />;
+    case "loading":
+      return (
+        <Panel>
+          <SkeletonRows rows={4} cols={6} />
+        </Panel>
+      );
+    case "ready":
+      break;
   }
 
-  const lists = positions.map((p) => (p.status === "ready" ? p.data : []));
-  const rows = agentBook(markets, lists, agent);
+  const rows = agentBook(markets, collected.data, agent);
 
   return (
     <div className="flex flex-col gap-5">

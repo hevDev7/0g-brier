@@ -1,0 +1,51 @@
+/**
+ * The reads the human UI performs, and nothing else.
+ *
+ * Hand-written rather than generated from Foundry artifacts, and deliberately
+ * incomplete: not one entry is state-changing. Nothing that opens, closes or
+ * unwinds a position appears, so the frontend could not send such a call even if
+ * a component tried — an ABI that cannot describe a transaction cannot submit
+ * one. The write boundary (spec §1 F3) is a property of what this file contains,
+ * not only of what `DataSource` exposes.
+ *
+ * The four exit and entry verbs are paraphrased rather than named, as they are in
+ * `types.ts`: `write-boundary.test.ts` greps every file in this directory for
+ * those literal tokens, comments included, and a comment boasting about their
+ * absence would trip it.
+ */
+export const FACTORY_ABI = [
+  {type: "function", name: "marketCount", stateMutability: "view", inputs: [], outputs: [{type: "uint256"}]},
+  {
+    type: "function",
+    name: "marketAt",
+    stateMutability: "view",
+    inputs: [{name: "index", type: "uint256"}],
+    outputs: [{type: "address"}],
+  },
+] as const;
+
+export const MARKET_ABI = [
+  {type: "function", name: "qArray", stateMutability: "view", inputs: [], outputs: [{type: "uint256[2]"}]},
+  {type: "function", name: "poolWad", stateMutability: "view", inputs: [], outputs: [{type: "uint256"}]},
+  {type: "function", name: "status", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
+  {type: "function", name: "tier", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
+  {type: "function", name: "category", stateMutability: "view", inputs: [], outputs: [{type: "bytes32"}]},
+  {type: "function", name: "tradingEnd", stateMutability: "view", inputs: [], outputs: [{type: "uint64"}]},
+  {type: "function", name: "settlementDeadline", stateMutability: "view", inputs: [], outputs: [{type: "uint64"}]},
+  {type: "function", name: "collateral", stateMutability: "view", inputs: [], outputs: [{type: "address"}]},
+  {type: "function", name: "creator", stateMutability: "view", inputs: [], outputs: [{type: "address"}]},
+  {type: "function", name: "specRoot", stateMutability: "view", inputs: [], outputs: [{type: "bytes32"}]},
+  {type: "function", name: "feeBps", stateMutability: "view", inputs: [], outputs: [{type: "uint16"}]},
+] as const;
+
+export const ERC20_ABI = [
+  {type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{type: "string"}]},
+  {type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{name: "account", type: "address"}],
+    outputs: [{type: "uint256"}],
+  },
+] as const;

@@ -68,3 +68,27 @@ export function usePositionsByMarket(
   });
   return results.map((r) => toQuery(r as UseQueryResult<Position[]>));
 }
+
+/**
+ * Free collateral for a set of agents, one query each.
+ *
+ * `collateral` is undefined when the markets on screen do not share one token,
+ * and then nothing is asked at all: a balance is a property of a token, so
+ * "which balance" has no answer in that case. Passing an empty agent list is
+ * how that is expressed — an `enabled: false` query stays pending forever and
+ * would show as a skeleton that never resolves.
+ */
+export function useBalances(
+  agents: readonly `0x${string}`[],
+  collateral: `0x${string}` | undefined,
+): Query<bigint>[] {
+  const source = useDataSource();
+  const wanted = collateral === undefined ? [] : agents;
+  const results = useQueries({
+    queries: wanted.map((agent) => ({
+      queryKey: ["balance", source.mode, agent, collateral],
+      queryFn: () => source.getBalance(agent, collateral as `0x${string}`),
+    })),
+  });
+  return results.map((r) => toQuery(r as UseQueryResult<bigint>));
+}

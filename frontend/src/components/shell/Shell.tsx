@@ -3,12 +3,13 @@
 import {useState} from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
-import {BookOpen, LineChart, Menu, Radio, X} from "lucide-react";
+import {BookOpen, LineChart, Menu, Radio, Trophy, X} from "lucide-react";
 import {ModeIndicator} from "./ModeIndicator";
 import {ThemeToggle} from "./ThemeToggle";
 
 const NAV = [
   {href: "/", label: "Markets", icon: LineChart},
+  {href: "/leaderboard", label: "Leaderboard", icon: Trophy},
   {href: "/portfolio", label: "Portfolio", icon: BookOpen},
 ] as const;
 
