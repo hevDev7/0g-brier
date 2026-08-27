@@ -1,4 +1,5 @@
-import {WAD, dpm, scaleFor, toWad} from "@0g-delphi/protocol";
+import {WAD, dpm, scaleFor} from "@0g-delphi/protocol";
+import {candlesFrom, positionsFrom} from "./derive";
 import {
   CAPABILITIES,
   CapabilityUnavailableError,
@@ -28,20 +29,6 @@ const MUSDC: CollateralInfo = {
 
 const HOUR = 3_600;
 
-/**
- * Bucket width per interval. A `Record<Interval, number>` rather than a ternary
- * chain on purpose: the chain ended in a bare `: 5 * 60`, which quietly made
- * `"1m"` a five-minute bucket — the two finest intervals returned identical
- * candles and nothing said so. A Record makes TypeScript demand an entry when a
- * new interval is added, instead of letting it fall into whatever the last
- * branch happened to be.
- */
-const BUCKET_SECONDS: Record<Interval, number> = {
-  "1m": 60,
-  "5m": 5 * 60,
-  "1h": HOUR,
-  "1d": 24 * HOUR,
-};
 const NOW = 1_790_000_000;
 
 /** poolWad is derived, never typed — a fixture must not break a chain invariant. */
@@ -177,27 +164,7 @@ function fixtureTrades(m: MarketDetail): Trade[] {
  * 73.1% while the market was priced at 59.0%.
  */
 export function fixturePositions(m: MarketSummary, trades: Trade[]): Position[] {
-  const acc = new Map<string, {shares: bigint; tokens: bigint}>();
-  for (const t of trades) {
-    if (t.sharesDelta <= 0n) continue; // only purchases form an entry price
-    const key = `${t.trader}:${t.outcome}`;
-    const cur = acc.get(key) ?? {shares: 0n, tokens: 0n};
-    acc.set(key, {shares: cur.shares + t.sharesDelta, tokens: cur.tokens + t.tokens});
-  }
-  const out: Position[] = [];
-  for (const [key, v] of acc) {
-    const [agent, outcomeStr] = key.split(":");
-    if (v.shares === 0n) continue;
-    out.push({
-      agent: agent as `0x${string}`,
-      outcome: Number(outcomeStr) as Outcome,
-      shares: v.shares,
-      // tokens is already in token units; scale it up to wad before dividing so the
-      // result is a price per share in wad, not a fraction truncated to zero.
-      entryPriceWad: (toWad(v.tokens, m.collateral.decimals) * WAD) / v.shares,
-    });
-  }
-  return out.sort((a, b) => (a.shares === b.shares ? 0 : b.shares > a.shares ? 1 : -1));
+  return positionsFrom(trades, m.collateral.decimals);
 }
 
 /**
@@ -304,36 +271,7 @@ export class MockSource implements DataSource {
 
   async getCandles(address: `0x${string}`, interval: Interval): Promise<Candle[]> {
     this.require("PRICE_HISTORY");
-    // fixtureTrades() is newest-first; reverse into ascending time order so the
-    // first trade processed per bucket really is the earliest one.
-    const trades = [...fixtureTrades(this.find(address))].reverse();
-    const step = BUCKET_SECONDS[interval];
-
-    // Group trades into buckets by bucketStart — ONE candle per bucket, not one
-    // candle per trade. open/close come from the first/last trade within that
-    // bucket; high/low from the bucket's range.
-    const buckets = new Map<number, Candle>();
-    for (const t of trades) {
-      const bucketStart = t.timestamp - (t.timestamp % step);
-      const candle = buckets.get(bucketStart);
-      if (candle === undefined) {
-        buckets.set(bucketStart, {
-          bucketStart,
-          open: t.probAfterWad,
-          high: t.probAfterWad,
-          low: t.probAfterWad,
-          close: t.probAfterWad,
-          volume: t.tokens,
-        });
-      } else {
-        if (t.probAfterWad > candle.high) candle.high = t.probAfterWad;
-        if (t.probAfterWad < candle.low) candle.low = t.probAfterWad;
-        candle.close = t.probAfterWad;
-        candle.volume += t.tokens;
-      }
-    }
-
-    return [...buckets.values()].sort((a, b) => a.bucketStart - b.bucketStart);
+    return candlesFrom(fixtureTrades(this.find(address)), interval);
   }
 
   async getPositions(address: `0x${string}`): Promise<Position[]> {

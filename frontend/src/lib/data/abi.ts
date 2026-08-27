@@ -49,3 +49,40 @@ export const ERC20_ABI = [
     outputs: [{type: "uint256"}],
   },
 ] as const;
+
+/**
+ * The two events history is rebuilt from.
+ *
+ * `Trade` carries `probAfter` because the contract puts it there on purpose — its
+ * NatSpec says so — "so that an indexer can reconstruct the probability curve
+ * without a single historical eth_call". That one field is why a price chart
+ * needs no archive node and no state replay: the curve is already in the log.
+ */
+export const TRADE_EVENT = {
+  type: "event",
+  name: "Trade",
+  inputs: [
+    {name: "trader", type: "address", indexed: true},
+    {name: "recipient", type: "address", indexed: true},
+    {name: "outcome", type: "uint8", indexed: true},
+    {name: "sharesDelta", type: "int256", indexed: false},
+    {name: "tokens", type: "uint256", indexed: false},
+    {name: "fee", type: "uint256", indexed: false},
+    {name: "qAfter", type: "uint256[2]", indexed: false},
+    {name: "probAfter", type: "uint256", indexed: false},
+  ],
+} as const;
+
+/** Its block is the only place a market's creation time exists. */
+export const MARKET_CREATED_EVENT = {
+  type: "event",
+  name: "MarketCreated",
+  inputs: [
+    {name: "market", type: "address", indexed: true},
+    {name: "creator", type: "address", indexed: true},
+    {name: "creatorAgentId", type: "uint256", indexed: true},
+    {name: "specRoot", type: "bytes32", indexed: false},
+    {name: "seed", type: "uint256", indexed: false},
+    {name: "tier", type: "uint8", indexed: false},
+  ],
+} as const;

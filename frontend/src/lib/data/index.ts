@@ -1,4 +1,5 @@
 import {ChainSource} from "./chain";
+import {LogSource} from "./logs";
 import {MockSource} from "./mock";
 import type {DataMode, DataSource} from "./types";
 
@@ -18,6 +19,7 @@ function chainConfig() {
   const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL;
   const chainId = process.env.NEXT_PUBLIC_CHAIN_ID;
   const factory = process.env.NEXT_PUBLIC_MARKET_FACTORY;
+  const fromBlock = process.env.NEXT_PUBLIC_FROM_BLOCK;
 
   const missing = [
     rpcUrl ? null : "NEXT_PUBLIC_RPC_URL",
@@ -37,7 +39,15 @@ function chainConfig() {
   if (!Number.isInteger(id) || id <= 0) {
     throw new Error(`NEXT_PUBLIC_CHAIN_ID is not a chain id: ${chainId}`);
   }
-  return {rpcUrl: rpcUrl!, chainId: id, factory: factory as `0x${string}`};
+  return {
+    rpcUrl: rpcUrl!,
+    chainId: id,
+    factory: factory as `0x${string}`,
+    // Absent means "from the beginning". Defensible only because a missing lower
+    // bound scans wider than necessary, whereas a wrong one drops the events
+    // below it and shows a market as having no history at all.
+    fromBlock: fromBlock ? BigInt(fromBlock) : 0n,
+  };
 }
 
 export function getDataSource(): DataSource {
@@ -48,7 +58,9 @@ export function getDataSource(): DataSource {
     case "chain":
       return new ChainSource(chainConfig());
     case "indexer":
-      throw new Error('DATA_MODE=indexer is not implemented yet; F2 supports "mock" and "chain"');
+      // Decorates `chain` rather than replacing it: state still comes from
+      // eth_call, and only history is added. See LogSource.
+      return new LogSource(chainConfig());
   }
 }
 

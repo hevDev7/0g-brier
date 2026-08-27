@@ -47,3 +47,37 @@ describe("ProbabilityChart", () => {
     expect(screen.getByText(/no history yet/i)).toBeInTheDocument();
   });
 });
+
+/**
+ * The wedge. On the first live Galileo market — whose entire life was four
+ * minutes — every trade landed in one bucket, so the chart had a single point.
+ * `seriesPath` renders that as a bare `M x,y`, invisible as a stroke, but the AREA
+ * path closes it down to the baseline and fills a triangle. The reader saw P(YES)
+ * sliding from 57% to zero; it had actually gone 66.98% → 62.20% and never left
+ * the bucket.
+ *
+ * No fixture could produce it: the fixtures are 24 hourly trades, which is 24
+ * buckets at every interval the UI offers.
+ */
+describe("a single observation bucket", () => {
+  const one = [{bucketStart: 1_787_868_000, open: 669_800_000_000_000_000n,
+    high: 669_800_000_000_000_000n, low: 622_000_000_000_000_000n,
+    close: 622_000_000_000_000_000n, volume: 312_460_000n}];
+
+  it("states the value instead of plotting a trend that never happened", () => {
+    const {container} = render(<ProbabilityChart candles={one} />);
+    expect(screen.getByTestId("probability-chart")).toHaveTextContent("62.2%");
+    expect(screen.getByTestId("probability-chart")).toHaveTextContent(/one observation bucket/i);
+    // Targeted at the chart's own marks, not at "any svg": the panel header
+    // carries a lucide icon, so a blanket `querySelector("svg")` would pass or
+    // fail for reasons that have nothing to do with the chart.
+    expect(container.querySelector("[data-series]")).toBeNull();
+    expect(container.querySelector("[data-area]")).toBeNull();
+  });
+
+  it("still draws once there are two buckets to draw between", () => {
+    const two = [one[0]!, {...one[0]!, bucketStart: one[0]!.bucketStart + 3600}];
+    const {container} = render(<ProbabilityChart candles={two} />);
+    expect(container.querySelector('path[data-series="yes"]')).not.toBeNull();
+  });
+});

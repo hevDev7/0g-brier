@@ -1,5 +1,6 @@
 import {TrendingUp} from "lucide-react";
 import {Panel, PanelHeader} from "@/components/primitives/Panel";
+import {formatProbability} from "@/lib/format";
 import {areaPath, seriesPath, xTicks, yTicks, type Box} from "@/lib/chart";
 import type {Candle} from "@/lib/data/types";
 
@@ -19,6 +20,33 @@ export function ProbabilityChart({candles}: {candles: Candle[]}) {
         <p className="px-4 py-10 text-center text-[13px] text-text-muted">
           No history yet for this market.
         </p>
+      </Panel>
+    );
+  }
+
+  /**
+   * A single bucket is not a curve, and drawing one is worse than drawing
+   * nothing. `seriesPath` collapses one point to a bare `M x,y`, which is
+   * invisible as a stroke — but the area path closes that point down to the
+   * baseline, and the result is a filled wedge sloping to zero. On the first live
+   * market, whose whole life was four minutes, that wedge showed P(YES) falling
+   * from 57% to 0% when it had in fact gone 66.98% → 62.20% inside one bucket.
+   *
+   * So the value is stated instead of plotted. The reader learns the same fact
+   * without being shown a trend that never happened.
+   */
+  if (candles.length === 1) {
+    const only = candles[0]!;
+    return (
+      <Panel testId="probability-chart">
+        <PanelHeader eyebrow="Observation history" title="P(YES) over time" icon={TrendingUp} />
+        <div className="px-4 py-8 text-center md:px-5">
+          <p className="font-mono text-[24px] leading-none text-text">{formatProbability(only.close)}</p>
+          <p className="mt-2 text-[13px] leading-relaxed text-text-muted">
+            One observation bucket so far — every trade in this market landed inside the same
+            interval, so there is no movement to plot yet.
+          </p>
+        </div>
       </Panel>
     );
   }

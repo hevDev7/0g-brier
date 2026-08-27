@@ -78,6 +78,15 @@ export class ChainSource implements DataSource {
     "AGENT_BALANCE",
   ]);
 
+  /**
+   * Exposed so `LogSource` can decorate this source rather than build a second
+   * client beside it — two clients would mean two views of "latest" and a chart
+   * that could disagree with the panel above it about which block it is on.
+   */
+  get publicClient(): PublicClient {
+    return this.client;
+  }
+
   private readonly client: PublicClient;
   private readonly factory: `0x${string}`;
   /** Token metadata never changes, and a market list would otherwise re-read it once per row. */
