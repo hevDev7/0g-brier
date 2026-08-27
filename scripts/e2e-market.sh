@@ -10,6 +10,19 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# ── .env ─────────────────────────────────────────────────────────────────────
+# Loaded from the repo root so a private key never has to be typed on a command
+# line, where it would land in shell history — and, if this session is driven by
+# an agent, in a transcript. `.env` is gitignored; `.env.example` is the template.
+if [[ -f "$ROOT/.env" ]]; then
+  perms="$(stat -c '%a' "$ROOT/.env" 2>/dev/null || echo '')"
+  if [[ -n "$perms" && "${perms:1}" != "00" ]]; then
+    echo "⚠  $ROOT/.env is mode $perms — it holds a private key. chmod 600 it."
+  fi
+  set -a; . "$ROOT/.env"; set +a
+fi
+
 RPC="${RPC:-${ZERO_G_TESTNET_RPC:-http://127.0.0.1:8545}}"
 [[ -n "${DEPLOYER_KEY:-}" ]] || { echo "✗ DEPLOYER_KEY is unset" >&2; exit 1; }
 CURATOR_KEY="${CURATOR_KEY:-$DEPLOYER_KEY}"
