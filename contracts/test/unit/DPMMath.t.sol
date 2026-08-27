@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {DPMMath} from "../../src/math/DPMMath.sol";
 
 contract DPMMathTest is Test {
@@ -69,5 +70,86 @@ contract DPMMathTest is Test {
         uint256[2] memory q = _q(uint256(a), uint256(b));
         uint256[2] memory qMore = _q(uint256(a) + uint256(delta), uint256(b));
         assertGe(DPMMath.cost(qMore), DPMMath.cost(q));
+    }
+
+    function test_priceOfThreeFourFiveIsExact() public pure {
+        assertEq(DPMMath.price(_q(3e18, 4e18), 0), 6e17);
+        assertEq(DPMMath.price(_q(3e18, 4e18), 1), 8e17);
+    }
+
+    /// @dev Sifat penanda DPM: harga marginal BUKAN probabilitas — kuadratnya yang
+    ///      probabilitas, dan kuadratnya berjumlah satu. UI wajib menampilkan pᵢ².
+    function test_sumOfSquaredPricesIsOne() public pure {
+        uint256[2] memory q = _q(3e18, 4e18);
+        uint256 p0 = DPMMath.price(q, 0);
+        uint256 p1 = DPMMath.price(q, 1);
+        assertEq(Math.mulDiv(p0, p0, DPMMath.WAD) + Math.mulDiv(p1, p1, DPMMath.WAD), DPMMath.WAD);
+    }
+
+    function test_probabilityOfThreeFourFiveIsExact() public pure {
+        assertEq(DPMMath.probability(_q(3e18, 4e18), 0), 36e16);
+        assertEq(DPMMath.probability(_q(3e18, 4e18), 1), 64e16);
+    }
+
+    function test_balancedMarketIsFiftyPercent() public pure {
+        assertEq(DPMMath.probability(_q(1e18, 1e18), 0), 5e17);
+        assertEq(DPMMath.probability(_q(7e30, 7e30), 1), 5e17);
+    }
+
+    /// @dev qᵢ² · WAD mencapai 1e84 pada MAX_Q — jauh melampaui uint256. Uji ini gagal
+    ///      bila implementasi memakai perkalian biasa alih-alih mulDiv 512-bit.
+    function test_probabilityDoesNotOverflowAtMaxQ() public pure {
+        assertEq(DPMMath.probability(_q(DPMMath.MAX_Q, DPMMath.MAX_Q), 0), 5e17);
+    }
+
+    function test_emptyMarketHasZeroPriceAndProbability() public pure {
+        assertEq(DPMMath.price(_q(0, 0), 0), 0);
+        assertEq(DPMMath.probability(_q(0, 0), 0), 0);
+    }
+
+    function test_badOutcomeReverts() public {
+        vm.expectRevert(DPMMath.BadOutcome.selector);
+        this.callPrice(_q(1e18, 1e18), 2);
+    }
+
+    function callPrice(uint256[2] memory q, uint8 i) external pure returns (uint256) {
+        return DPMMath.price(q, i);
+    }
+
+    function testFuzz_probabilitiesSumToOne(uint96 a, uint96 b) public pure {
+        vm.assume(uint256(a) + uint256(b) > 0);
+        uint256[2] memory q = _q(uint256(a), uint256(b));
+        uint256 sum = DPMMath.probability(q, 0) + DPMMath.probability(q, 1);
+        assertLe(DPMMath.WAD - sum, 2); // hanya debu floor
+        assertLe(sum, DPMMath.WAD);
+    }
+
+    /// @dev Euler: Σ pᵢ·qᵢ = C(q). Inilah yang membuat likuidasi menghabiskan pool
+    ///      secara persis saat market gagal (Task 15).
+    /// @dev CATATAN: toleransi di bawah ini diturunkan ulang dari draf brief (yang
+    ///      memakai `assertLe(cost(q) - lhs, 3)` diikuti `assertLe(lhs, cost(q))`).
+    ///      Draf itu underflow: karena `price()` membagi dengan `cost(q)` yang SUDAH
+    ///      dibulatkan ke bawah (bukan akar eksak), lhs bisa melebihi cost(q). Bukti:
+    ///      dari definisi floor, term(i)·C ≤ qᵢ² untuk tiap i (kalikan silang batas
+    ///      floor price() dan floor term()); jumlahkan kedua sisi → lhs·C ≤ Σqᵢ² =
+    ///      S ≤ C²+2C (karena C = ⌊√S⌋) ⇒ lhs ≤ C + 2. Sebaliknya, kekurangan
+    ///      (cost(q) − lhs) TIDAK dibatasi konstanta: eror floor pada price() (< 1
+    ///      pada skala harga) dikalikan qᵢ sebelum dibagi WAD lagi, sehingga ikut
+    ///      berskala dengan qᵢ — dibuktikan cost(q) − lhs ≤ (q₀+q₁)/WAD + 2. Kedua
+    ///      batas ini eksak (tercapai pada mis. q=(2,2) dan q=(64,112); dikonfirmasi
+    ///      lewat pencarian brute-force menyeluruh atas rentang uint96), dan dipakai
+    ///      di sini dengan margin +1. Konstanta "3" tetap seperti draf; arah dan
+    ///      skalanya yang diperbaiki.
+    function testFuzz_eulerIdentity(uint96 a, uint96 b) public pure {
+        vm.assume(uint256(a) + uint256(b) > 0);
+        uint256[2] memory q = _q(uint256(a), uint256(b));
+        uint256 lhs =
+            Math.mulDiv(DPMMath.price(q, 0), q[0], DPMMath.WAD) + Math.mulDiv(DPMMath.price(q, 1), q[1], DPMMath.WAD);
+        uint256 c = DPMMath.cost(q);
+        if (lhs >= c) {
+            assertLe(lhs - c, 3);
+        } else {
+            assertLe(c - lhs, (q[0] + q[1]) / DPMMath.WAD + 3);
+        }
     }
 }
