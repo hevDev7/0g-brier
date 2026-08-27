@@ -76,6 +76,9 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     error TradeTooSmall();
     error SlippageExceeded(uint256 actual, uint256 limit);
     error SeedFloorBreached();
+    error BadLambda();
+    error InsufficientSeedShares();
+    error CreatorSeedFloor();
 
     constructor() {
         _disableInitializers();
@@ -332,5 +335,91 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
 
         uint256 probAfter = DPMMath.probability(qNew, outcome);
         emit Trade(msg.sender, to, outcome, -int256(sharesIn), tokensOut, fee, qNew, probAfter);
+    }
+
+    // ── likuiditas ───────────────────────────────────────────────────────────
+
+    /// @notice Menambah likuiditas secara proporsional. Tanpa fee: ini bukan
+    ///         perdagangan berarah, melainkan penskalaan seluruh market.
+    function addLiquidity(uint256 tokensIn, uint256 minSharesOut, address to)
+        external
+        nonReentrant
+        returns (uint256[2] memory minted)
+    {
+        _requireTradable();
+        if (tokensIn == 0) revert ZeroAmount();
+
+        uint256 amountWad = tokensIn * scale;
+        uint256 lambdaWad = Math.mulDiv(amountWad, DPMMath.WAD, poolWad);
+        if (lambdaWad == 0) revert TradeTooSmall();
+
+        minted[0] = Math.mulDiv(_q[0], lambdaWad, DPMMath.WAD);
+        minted[1] = Math.mulDiv(_q[1], lambdaWad, DPMMath.WAD);
+        if (minted[0] == 0 || minted[1] == 0) revert TradeTooSmall();
+
+        uint256 smaller = Math.min(minted[0], minted[1]);
+        if (smaller < minSharesOut) revert SlippageExceeded(smaller, minSharesOut);
+
+        uint256[2] memory qNew;
+        qNew[0] = _q[0] + minted[0];
+        qNew[1] = _q[1] + minted[1];
+
+        uint256 target = DPMMath.costUp(qNew);
+        uint256 needTokens = Math.ceilDiv(target - poolWad, scale);
+        // Terbukti ≤ tokensIn (lihat rencana Task 14); dipertahankan sebagai penjaga eksplisit.
+        if (needTokens > tokensIn) revert TradeTooSmall();
+
+        _q = qNew;
+        _seedSupply[0] += minted[0];
+        _seedSupply[1] += minted[1];
+        _seedShares[to][0] += minted[0];
+        _seedShares[to][1] += minted[1];
+        poolWad = target;
+
+        collateral.safeTransferFrom(msg.sender, address(this), needTokens);
+        emit LiquidityChanged(to, int256(lambdaWad), needTokens, qNew);
+    }
+
+    /// @notice Menarik likuiditas secara proporsional terhadap `q` SAAT INI.
+    /// @param lambdaWad fraksi wad dari q yang ditarik (0 < λ ≤ WAD).
+    /// @dev Penarikan tak-proporsional dilarang: itu akan menjadi perdagangan berarah
+    ///      tanpa fee. Seed creator tidak pernah bisa ditarik — lantai inilah yang
+    ///      menjamin qᵢ > 0 sampai settlement.
+    function removeLiquidity(uint256 lambdaWad, uint256 minTokensOut, address to)
+        external
+        nonReentrant
+        returns (uint256 tokensOut)
+    {
+        _requireExitable(); // sengaja tanpa pemeriksaan pause
+        if (lambdaWad == 0 || lambdaWad > DPMMath.WAD) revert BadLambda();
+
+        uint256[2] memory take;
+        take[0] = Math.mulDiv(_q[0], lambdaWad, DPMMath.WAD);
+        take[1] = Math.mulDiv(_q[1], lambdaWad, DPMMath.WAD);
+        if (take[0] == 0 || take[1] == 0) revert TradeTooSmall();
+
+        uint256[2] memory held = _seedShares[msg.sender];
+        if (held[0] < take[0] || held[1] < take[1]) revert InsufficientSeedShares();
+        if (_seedSupply[0] - take[0] < _creatorSeed[0] || _seedSupply[1] - take[1] < _creatorSeed[1]) {
+            revert CreatorSeedFloor();
+        }
+
+        uint256[2] memory qNew;
+        qNew[0] = _q[0] - take[0];
+        qNew[1] = _q[1] - take[1];
+
+        uint256 target = DPMMath.costUp(qNew);
+        tokensOut = (poolWad - target) / scale;
+        if (tokensOut < minTokensOut) revert SlippageExceeded(tokensOut, minTokensOut);
+
+        _q = qNew;
+        _seedSupply[0] -= take[0];
+        _seedSupply[1] -= take[1];
+        _seedShares[msg.sender][0] -= take[0];
+        _seedShares[msg.sender][1] -= take[1];
+        poolWad = target;
+
+        collateral.safeTransfer(to, tokensOut);
+        emit LiquidityChanged(msg.sender, -int256(lambdaWad), tokensOut, qNew);
     }
 }
