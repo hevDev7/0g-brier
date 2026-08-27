@@ -10,6 +10,37 @@ import {ConfigKeys} from "../src/core/ConfigKeys.sol";
 library DeployLib {
     uint128 internal constant UNBOUNDED = type(uint128).max;
 
+    /// @dev The local anvil chain. The only chain where an unset operational address may fall
+    ///      back to the deployer's own key.
+    uint256 internal constant LOCAL_CHAIN_ID = 31337;
+
+    error TreasuryUnset(uint256 chainId);
+    error CuratorSignerUnset(uint256 chainId);
+
+    /// @notice Resolves TREASURY and CURATOR_SIGNER, refusing to invent them off-chain.
+    ///
+    /// @dev The deploy script used to point both at the deployer unconditionally, while
+    ///      writing `deployments/<chainId>.json` for whatever chain it happened to be run
+    ///      against. On anvil that is a convenience; on Galileo or mainnet it silently makes
+    ///      one EOA the protocol treasury AND the only key that can approve a market — the two
+    ///      addresses a real deployment most needs to be deliberate about, set by accident.
+    ///
+    ///      Pure, and takes the chain id as an argument, so the policy can be tested directly
+    ///      rather than only observed by running the script against a chain.
+    function resolveOperationalAddresses(uint256 chainId, address treasury, address curatorSigner, address deployer)
+        internal
+        pure
+        returns (address, address)
+    {
+        if (chainId == LOCAL_CHAIN_ID) {
+            return
+                (treasury == address(0) ? deployer : treasury, curatorSigner == address(0) ? deployer : curatorSigner);
+        }
+        if (treasury == address(0)) revert TreasuryUnset(chainId);
+        if (curatorSigner == address(0)) revert CuratorSignerUnset(chainId);
+        return (treasury, curatorSigner);
+    }
+
     function applyDefaults(ConfigRegistry config, address collateral) internal {
         // Bounds are set first and locked forever; the values follow.
         config.setBounds(ConfigKeys.FEE_BPS, 0, 300); // 3.00% ceiling

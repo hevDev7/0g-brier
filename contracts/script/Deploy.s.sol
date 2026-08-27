@@ -19,6 +19,19 @@ contract Deploy is Script {
         uint256 pk = vm.envUint("DEPLOYER_KEY");
         address deployer = vm.addr(pk);
 
+        // Resolved BEFORE broadcasting, so a misconfigured non-local deployment fails without
+        // having sent a single transaction. See `DeployLib.resolveOperationalAddresses`.
+        (address treasury, address curatorSigner) = DeployLib.resolveOperationalAddresses(
+            block.chainid, vm.envOr("TREASURY", address(0)), vm.envOr("CURATOR_SIGNER", address(0)), deployer
+        );
+
+        // A LOWER BOUND on the deployment block, not the block itself: a forge script sends its
+        // broadcast after the body has run, so nothing here can observe the block the contracts
+        // actually land in. Lower is the safe direction — an indexer that backfills from too
+        // early only wastes time, whereas one that starts too late misses events permanently.
+        // On a fresh anvil this is 0, which is a correct if uninformative lower bound.
+        uint256 fromBlock = block.number;
+
         vm.startBroadcast(pk);
 
         MockUSDC usdc = new MockUSDC();
@@ -51,8 +64,8 @@ contract Deploy is Script {
         sharesContract.setRegistry(address(factory));
         config.setAddress(ConfigKeys.MARKET_FACTORY, address(factory));
         config.setAddress(ConfigKeys.OUTCOME_SHARES, address(sharesContract));
-        config.setAddress(ConfigKeys.TREASURY, deployer);
-        config.setAddress(ConfigKeys.CURATOR_SIGNER, deployer);
+        config.setAddress(ConfigKeys.TREASURY, treasury);
+        config.setAddress(ConfigKeys.CURATOR_SIGNER, curatorSigner);
 
         vm.stopBroadcast();
 
@@ -63,13 +76,16 @@ contract Deploy is Script {
             address(marketImpl),
             address(factory),
             address(factoryImpl),
-            address(usdc)
+            address(usdc),
+            fromBlock
         );
 
         console2.log("ConfigRegistry (proxy):", address(config));
         console2.log("OutcomeShares:         ", address(sharesContract));
         console2.log("MarketFactory (proxy): ", address(factory));
         console2.log("MockUSDC:              ", address(usdc));
+        console2.log("Treasury:              ", treasury);
+        console2.log("Curator signer:        ", curatorSigner);
     }
 
     function _writeManifest(
@@ -79,7 +95,8 @@ contract Deploy is Script {
         address marketImplementation,
         address marketFactory,
         address marketFactoryImpl,
-        address usdc
+        address usdc,
+        uint256 fromBlock
     ) internal {
         string memory contractsKey = "contracts";
         vm.serializeAddress(contractsKey, "ConfigRegistry", configProxy);
@@ -94,7 +111,7 @@ contract Deploy is Script {
 
         string memory root = "manifest";
         vm.serializeUint(root, "chainId", block.chainid);
-        vm.serializeUint(root, "deploymentBlock", block.number);
+        vm.serializeUint(root, "deploymentBlock", fromBlock);
         vm.serializeUint(root, "deployedAt", block.timestamp);
         string memory out = vm.serializeString(root, "contracts", contractsJson);
 

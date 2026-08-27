@@ -49,6 +49,69 @@ contract DeployDefaultsTest is Test {
         config.setBounds(ConfigKeys.FEE_BPS, 0, 10_000);
     }
 
+    // ── operational addresses: the two a real deployment must be deliberate about ──
+    //
+    // The script used to set both TREASURY and CURATOR_SIGNER to the deployer with no chain
+    // guard at all, while happily writing `deployments/<chainId>.json` for any chain it was
+    // pointed at. That makes one EOA the protocol treasury AND the only key that can approve a
+    // market — by accident, on a chain where it matters.
+
+    address internal constant DEPLOYER = address(0xD1);
+    address internal constant TREASURY = address(0x7);
+    address internal constant CURATOR = address(0xC);
+    uint256 internal constant GALILEO = 16602;
+
+    function test_localChainMayFallBackToTheDeployer() public pure {
+        (address treasury, address curator) =
+            DeployLib.resolveOperationalAddresses(31337, address(0), address(0), DEPLOYER);
+        assertEq(treasury, DEPLOYER);
+        assertEq(curator, DEPLOYER);
+    }
+
+    /// @dev Even locally, an address that WAS supplied wins over the fallback — otherwise the
+    ///      convenience would quietly override a deliberate choice.
+    function test_localChainStillPrefersSuppliedAddresses() public pure {
+        (address treasury, address curator) = DeployLib.resolveOperationalAddresses(31337, TREASURY, CURATOR, DEPLOYER);
+        assertEq(treasury, TREASURY);
+        assertEq(curator, CURATOR);
+    }
+
+    function test_nonLocalChainRefusesAnUnsetTreasury() public {
+        vm.expectRevert(abi.encodeWithSelector(DeployLib.TreasuryUnset.selector, GALILEO));
+        this.callResolve(GALILEO, address(0), CURATOR, DEPLOYER);
+    }
+
+    function test_nonLocalChainRefusesAnUnsetCuratorSigner() public {
+        vm.expectRevert(abi.encodeWithSelector(DeployLib.CuratorSignerUnset.selector, GALILEO));
+        this.callResolve(GALILEO, TREASURY, address(0), DEPLOYER);
+    }
+
+    function test_nonLocalChainAcceptsBothWhenSupplied() public view {
+        (address treasury, address curator) =
+            DeployLib.resolveOperationalAddresses(GALILEO, TREASURY, CURATOR, DEPLOYER);
+        assertEq(treasury, TREASURY);
+        assertEq(curator, CURATOR);
+    }
+
+    /// @dev Mainnet is not special-cased anywhere in the policy, and that is the point: the
+    ///      fallback is allowed on exactly one chain id and every other chain — named,
+    ///      unnamed, or not yet invented — goes through the same refusal.
+    function test_mainnetGetsNoSpecialTreatment() public {
+        vm.expectRevert(abi.encodeWithSelector(DeployLib.TreasuryUnset.selector, uint256(16661)));
+        this.callResolve(16661, address(0), CURATOR, DEPLOYER);
+    }
+
+    /// @dev An external wrapper so `vm.expectRevert` binds to a real external call. A direct
+    ///      internal library call is inlined, and the cheatcode would bind to whatever
+    ///      external call happened next instead.
+    function callResolve(uint256 chainId, address treasury, address curator, address deployer)
+        external
+        pure
+        returns (address, address)
+    {
+        return DeployLib.resolveOperationalAddresses(chainId, treasury, curator, deployer);
+    }
+
     function test_feeSharesSumToOneHundredPercent() public view {
         uint256 creator = config.params(ConfigKeys.CREATOR_FEE_SHARE_BPS);
         uint256 resolver = config.params(ConfigKeys.RESOLVER_FEE_SHARE_BPS);

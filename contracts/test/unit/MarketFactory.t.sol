@@ -11,6 +11,63 @@ import {OutcomeShares} from "../../src/core/OutcomeShares.sol";
 import {IMarket} from "../../src/interfaces/IMarket.sol";
 import {ConfigKeys} from "../../src/core/ConfigKeys.sol";
 import {MockUSDC} from "../../src/mocks/MockUSDC.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+
+/// @dev A collateral token that re-enters `MarketFactory.createMarket` from inside its own
+///      `transferFrom` — the one external call `createMarket` makes after it has already
+///      written `usedApprovals`, `isMarket` and `_markets`.
+///
+///      It records the re-entry's revert data rather than letting it bubble, so the test can
+///      assert WHICH guard stopped it. It disarms before re-entering: an armed re-entry with
+///      no guard would recurse until the EVM call depth ran out, and "it reverted" would then
+///      prove nothing about `nonReentrant`.
+contract ReentrantCollateral is ERC20 {
+    MarketFactory public factory;
+    IMarket.Params internal _params;
+    uint256 internal _seed;
+    uint256 internal _deposit;
+    uint256 internal _nonce;
+    bytes internal _sig;
+    bool public armed;
+    bytes public lastRevert;
+    bool public reentryReturned;
+
+    constructor() ERC20("Reentrant", "RE") {}
+
+    function mintTo(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function arm(
+        MarketFactory factory_,
+        IMarket.Params calldata p,
+        uint256 seedTokens,
+        uint256 depositTokens,
+        uint256 nonce,
+        bytes calldata sig
+    ) external {
+        factory = factory_;
+        _params = p;
+        _seed = seedTokens;
+        _deposit = depositTokens;
+        _nonce = nonce;
+        _sig = sig;
+        armed = true;
+    }
+
+    function transferFrom(address from, address to, uint256 value) public override returns (bool) {
+        if (armed) {
+            armed = false;
+            try factory.createMarket(_params, _seed, _deposit, _nonce, _sig) returns (address) {
+                reentryReturned = true;
+            } catch (bytes memory err) {
+                lastRevert = err;
+            }
+        }
+        return super.transferFrom(from, to, value);
+    }
+}
 
 contract MarketFactoryTest is Fixtures {
     MarketFactory internal factory;
@@ -308,7 +365,7 @@ contract MarketFactoryTest is Fixtures {
         bytes32 digest = factory.hashTypedData(_structHash(p, SEED, DEPOSIT, 1));
 
         vm.prank(creator);
-        vm.expectRevert(MarketFactory.CollateralNotAllowed.selector);
+        vm.expectRevert(MarketFactory.CollateralNotAllowlisted.selector);
         factory.createMarket(p, SEED, DEPOSIT, 1, sig);
         assertEq(factory.marketCount(), 0);
         assertFalse(factory.usedApprovals(digest));
@@ -331,7 +388,7 @@ contract MarketFactoryTest is Fixtures {
         bytes memory sig = _sign(p, 1);
 
         vm.prank(creator);
-        vm.expectRevert(MarketFactory.CollateralNotAllowed.selector);
+        vm.expectRevert(MarketFactory.CollateralNotAllowlisted.selector);
         factory.createMarket(p, SEED, DEPOSIT, 1, sig);
         assertEq(factory.marketCount(), 0);
     }
@@ -406,5 +463,65 @@ contract MarketFactoryTest is Fixtures {
         );
         bytes32 structHash = keccak256("any struct at all");
         assertEq(factory.hashTypedData(structHash), keccak256(abi.encodePacked(hex"1901", domainSeparator, structHash)));
+    }
+
+    /// @dev The two errors used to be indistinguishable. `MarketFactory` and `Market` each
+    ///      declared `CollateralNotAllowed()`, and a Solidity error selector is derived from
+    ///      the signature alone — so both were 0x00413389, and a test asserting the factory
+    ///      rejected a market would have passed just as happily had `Market.initialize`
+    ///      rejected it one external call later. The ordering is the whole point of
+    ///      `test_collateralCheckedBeforeTouchingToken`, so the two must not collide.
+    function test_factoryAndMarketCollateralErrorsAreDistinguishable() public pure {
+        assertTrue(
+            MarketFactory.CollateralNotAllowlisted.selector != Market.CollateralNotAllowed.selector,
+            "the factory and the market must be tellable apart on the wire"
+        );
+    }
+
+    /// @dev `createMarket` writes `usedApprovals`, `isMarket` and `_markets`, and only then
+    ///      calls out — to `safeTransferFrom` on a token address the caller chose, and to
+    ///      `Market.initialize`. The Task 17 reviewer traced the re-entry paths and found none
+    ///      live, which made this fragile rather than broken. `nonReentrant` closes it; this
+    ///      test is what shows the modifier is load-bearing rather than decorative.
+    ///
+    ///      The inner call is made FULLY VALID — its own curator signature, its own nonce, its
+    ///      own funded creator — so that without the guard it would genuinely succeed. If the
+    ///      inner call could only ever have failed for some other reason, the test would prove
+    ///      nothing about reentrancy.
+    function test_createMarketRejectsReentryFromTheCollateralToken() public {
+        ReentrantCollateral evil = new ReentrantCollateral();
+        config.setCollateralAllowed(address(evil), true);
+
+        IMarket.Params memory outer = _params();
+        outer.collateral = address(evil);
+        bytes memory outerSig = _sign(outer, 1);
+
+        // The re-entrant call arrives with the TOKEN as msg.sender, so the market it tries to
+        // create must name the token as its creator — otherwise `NotCreator` would stop it
+        // before the guard ever ran, and the guard would go untested.
+        IMarket.Params memory inner = _params();
+        inner.collateral = address(evil);
+        inner.creator = address(evil);
+        bytes memory innerSig = _signAmounts(inner, SEED, DEPOSIT, 2);
+
+        evil.mintTo(creator, 1_000_000e18);
+        evil.mintTo(address(evil), 1_000_000e18);
+        vm.prank(creator);
+        evil.approve(address(factory), type(uint256).max);
+        vm.prank(address(evil));
+        evil.approve(address(factory), type(uint256).max);
+
+        evil.arm(factory, inner, SEED, DEPOSIT, 2, innerSig);
+
+        vm.prank(creator);
+        factory.createMarket(outer, SEED, DEPOSIT, 1, outerSig);
+
+        assertFalse(evil.reentryReturned(), "the re-entrant createMarket must not have returned a market");
+        assertEq(
+            bytes4(evil.lastRevert()),
+            ReentrancyGuardUpgradeable.ReentrancyGuardReentrantCall.selector,
+            "the re-entry must be stopped by the reentrancy guard, not by something incidental"
+        );
+        assertEq(factory.marketCount(), 1, "exactly one market exists");
     }
 }

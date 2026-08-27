@@ -1,5 +1,15 @@
 export interface DeploymentManifest {
   chainId: number;
+  /**
+   * A LOWER BOUND on the block the contracts were deployed in, not the block itself.
+   *
+   * A forge script broadcasts after its body has run, so nothing inside it can observe the
+   * block the transactions land in; the script records the block it saw beforehand. Lower is
+   * the safe direction for the P3 indexer: backfilling from too early only costs time, while
+   * starting too late misses events permanently. On a fresh anvil this is legitimately 0.
+   *
+   * Consumers must treat it as "start scanning here", never as "the deployment happened here".
+   */
   deploymentBlock: number;
   deployedAt: number;
   contracts: Record<string, `0x${string}`>;

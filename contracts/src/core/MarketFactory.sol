@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -25,7 +26,14 @@ import {IMarketRegistry} from "../interfaces/IMarketRegistry.sol";
 ///      This contract is upgradeable (UUPS) because it is a coordinator, not a vault: it
 ///      never holds user funds — collateral flows straight from the creator to the clone.
 ///      Market itself is deliberately NOT upgradeable.
-contract MarketFactory is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, EIP712Upgradeable, IMarketRegistry {
+contract MarketFactory is
+    Initializable,
+    Ownable2StepUpgradeable,
+    UUPSUpgradeable,
+    ReentrancyGuardUpgradeable,
+    EIP712Upgradeable,
+    IMarketRegistry
+{
     using SafeERC20 for IERC20;
 
     /// @dev The curator approves a COMPLETE market, not part of one: the whole identity of the
@@ -60,7 +68,13 @@ contract MarketFactory is Initializable, Ownable2StepUpgradeable, UUPSUpgradeabl
     error ProtocolPaused();
     error ZeroAddress();
     error NotCreator();
-    error CollateralNotAllowed();
+    /// @dev Deliberately NOT named `CollateralNotAllowed`: `Market` declares an error by
+    ///      that name too, and a selector is computed from the signature alone, so the two
+    ///      were indistinguishable on the wire (both 0x00413389). A test asserting the factory
+    ///      rejected a market would have passed just as happily if `Market.initialize` had
+    ///      rejected it instead — which is exactly the ordering `test_collateralCheckedBefore\
+    ///      TouchingToken` exists to pin down.
+    error CollateralNotAllowlisted();
     /// @dev An address with no code. Not mere tidiness: `Clones.clone` over a codeless address
     ///      produces a minimal proxy that is LIVE, and its `delegatecall` returns success with
     ///      empty returndata. `Market(market).initialize(...)` has no return value, so
@@ -91,6 +105,7 @@ contract MarketFactory is Initializable, Ownable2StepUpgradeable, UUPSUpgradeabl
         __Ownable_init(owner_);
         __Ownable2Step_init();
         __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
         __EIP712_init("0G-Delphi", "1");
         config = ConfigRegistry(config_);
         shares = OutcomeShares(shares_);
@@ -150,7 +165,7 @@ contract MarketFactory is Initializable, Ownable2StepUpgradeable, UUPSUpgradeabl
         uint256 depositTokens,
         uint256 nonce,
         bytes calldata curatorSig
-    ) external returns (address market) {
+    ) external nonReentrant returns (address market) {
         if (config.paused()) revert ProtocolPaused();
         // A curator approval is not a bearer instrument: only the approved creator may use it.
         // Without this, anyone watching the mempool could replay the exact approved payload,
@@ -163,7 +178,7 @@ contract MarketFactory is Initializable, Ownable2StepUpgradeable, UUPSUpgradeabl
         // `safeTransferFrom` on an address of the caller's choosing while `usedApprovals`,
         // `isMarket`, and `_markets` have already been written. The cost is one SLOAD; the
         // return is zero arbitrary calls.
-        if (!config.allowedCollateral(p.collateral)) revert CollateralNotAllowed();
+        if (!config.allowedCollateral(p.collateral)) revert CollateralNotAllowlisted();
 
         bytes32 digest = _approvalDigest(p, seedTokens, depositTokens, nonce);
         if (usedApprovals[digest]) revert ApprovalAlreadyUsed();
