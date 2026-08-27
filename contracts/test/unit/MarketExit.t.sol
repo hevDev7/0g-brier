@@ -11,6 +11,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {InvariantBounds} from "../helpers/InvariantBounds.sol";
 
 /// @dev An 18-decimal collateral ONLY for `test_liquidateClampsWhenFlooredLegsExceedPool`:
 ///      with `scale = 1`, `seedShares` can be pushed as low as a single wei — something
@@ -76,7 +77,9 @@ contract MarketExitTest is Fixtures {
         uint256 c = m.redeem(creator);
 
         assertLe(a + c, poolTokens);
-        assertGe(usdc.balanceOf(address(m)), 0);
+        // What the balance must actually satisfy is solvency, not `>= 0` (vacuous for a
+        // uint256): whatever is left still has to cover what the pool still owes.
+        assertGe(usdc.balanceOf(address(m)), m.collateralOwed());
     }
 
     /// @dev Redeem must succeed even while the protocol is paused.
@@ -103,16 +106,18 @@ contract MarketExitTest is Fixtures {
         assertGt(a, 0);
         assertGt(b, 0, "a losing-side holder still gets a refund when the market fails");
         assertGt(c, 0);
-        // NB: the original brief wrote `assertLe(m.poolWad(), 3)` — a guess that FAILS
-        // empirically for this fixture (the poolWad left over is 646, not ≤3). The cause is
-        // not a bug: `price()` divides by a `cost()` rounded down, and an error that small is
-        // magnified by a factor of (shares/WAD) every time it is multiplied back in
-        // `liquidate` — for this fixture's ~1e21-scale share counts, that factor puts the dust
-        // in the hundreds of wei-wad, not O(1). The correct bound is not a guessed constant but
-        // the real token granularity: the leftover poolWad must be smaller than `scale` (one
-        // smallest token unit), so that when divided by `scale` it REALLY does round to 0
-        // tokens — dust that is economically zero, whatever the fixture's trade size.
-        assertLt(m.poolWad(), m.scale(), "leftover poolWad must be under 1 real token unit");
+        // Two guessed bounds have already failed here. The brief wrote `assertLe(poolWad, 3)`,
+        // which is off by two orders of magnitude for this fixture (the real leftover is 646).
+        // The replacement, `< scale`, passes here but Task 18 then proved it non-general: at a
+        // 10^12 fixture scale the leftover reaches 2.4e14 against a `scale` of 1e12. Both were
+        // constants dressed up as reasoning — `scale` is a property of the COLLATERAL, and the
+        // dust is a property of `q`.
+        //
+        // The bound used now is the derived one, `InvariantBounds.inv4LiquidationDust`, which
+        // scales as (q₀+q₁)/WAD + 2H + 1 and carries its proof in that library. Three
+        // liquidators paid here, so H = 3.
+        uint256 tol = InvariantBounds.inv4LiquidationDust(m.qArray(), 3);
+        assertLe(m.poolWad(), tol, "leftover poolWad exceeds the derived liquidation-dust bound");
     }
 
     /// @dev A concrete reproduction of the bug the reviewer found: at small q, two legs EACH
@@ -205,6 +210,141 @@ contract MarketExitTest is Fixtures {
         vm.expectRevert(Market.NothingToClaim.selector);
         m.redeem(alice);
         vm.stopPrank();
+    }
+
+    // ── after the sweep: the claim window is closed, and says so ─────────────
+    //
+    // `sweepUnclaimed` moves the entire remaining pool to the Treasury and permanently
+    // ends the claim window — that is its documented purpose (spec §13.1, "unclaimed
+    // funds"). What was undefined was how the two exits behave once it has run, and they
+    // disagreed:
+    //
+    //   redeem    → `poolWad -= payoutWad` underflowed against a zeroed pool: Panic 0x11.
+    //   liquidate → the clamp drove payoutWad to 0, so the call SUCCEEDED, paid nothing,
+    //               and burned the holder's ERC-1155 shares anyway.
+    //
+    // Both were fund-safe — the money was already gone, legitimately — but one crashed and
+    // the other silently destroyed a position. Neither told the caller what had happened.
+    // The Panic was also load-bearing damage elsewhere: Task 18 had to keep
+    // `sweepUnclaimed` out of the invariant handler entirely, because a known Panic would
+    // have forced `invariant_noArithmeticPanic` to be weakened, and that invariant is
+    // INV-3's teeth.
+    //
+    // Both exits now reject with `AlreadySwept`, which is a statement rather than a
+    // symptom.
+
+    function _sweep() internal {
+        vm.warp(block.timestamp + config.params(ConfigKeys.SWEEP_UNCLAIMED_AFTER));
+        m.sweepUnclaimed();
+    }
+
+    function test_redeemAfterSweepRevertsCleanlyInsteadOfPanicking() public {
+        _settleAs(1);
+        _sweep();
+
+        vm.prank(alice);
+        vm.expectRevert(Market.AlreadySwept.selector);
+        m.redeem(alice);
+    }
+
+    /// @dev The sharper half: before this, `liquidate` did not revert at all. It burned the
+    ///      holder's shares for a zero payout. The balance assertion below is what separates
+    ///      "rejected" from "silently consumed" — it fails loudly if the call ever goes
+    ///      through again.
+    function test_liquidateAfterSweepRevertsAndDoesNotBurnShares() public {
+        vm.warp(m.settlementDeadline());
+        m.fail();
+        uint256 held = shares.balanceOfOutcome(alice, address(m), 1);
+        assertGt(held, 0, "precondition: alice holds a tradable position");
+
+        _sweep();
+
+        vm.prank(alice);
+        vm.expectRevert(Market.AlreadySwept.selector);
+        m.liquidate(alice);
+
+        assertEq(shares.balanceOfOutcome(alice, address(m), 1), held, "shares must survive a rejected exit");
+    }
+
+    /// @dev A second sweep used to be blocked only by the accident of a zero balance. Making
+    ///      it explicit is what lets `sweptAt` be trusted as the single closed-window flag.
+    function test_sweepIsOneShot() public {
+        _settleAs(1);
+        _sweep();
+        vm.expectRevert(Market.AlreadySwept.selector);
+        m.sweepUnclaimed();
+    }
+
+    function test_sweepRecordsWhenItHappenedAndEmits() public {
+        _settleAs(1);
+        assertEq(m.sweptAt(), 0, "not swept yet");
+
+        vm.warp(block.timestamp + config.params(ConfigKeys.SWEEP_UNCLAIMED_AFTER));
+        uint256 remaining = usdc.balanceOf(address(m));
+        vm.expectEmit(true, false, false, true, address(m));
+        emit IMarket.Swept(treasury, remaining);
+        m.sweepUnclaimed();
+
+        assertEq(m.sweptAt(), uint64(block.timestamp));
+    }
+
+    // ── the pause never blocks an exit (spec §6.3) ───────────────────────────
+    //
+    // Only `redeem` was covered. `liquidate` is the other user exit, and `sweepUnclaimed`
+    // is the governance path whose whole point is that it eventually runs — none of the
+    // three may depend on the protocol being unpaused.
+
+    function test_liquidateSucceedsWhilePaused() public {
+        vm.warp(m.settlementDeadline());
+        m.fail();
+        vm.prank(guardian);
+        config.pause();
+        vm.prank(alice);
+        assertGt(m.liquidate(alice), 0);
+    }
+
+    function test_sweepSucceedsWhilePaused() public {
+        _settleAs(1);
+        vm.warp(block.timestamp + config.params(ConfigKeys.SWEEP_UNCLAIMED_AFTER));
+        vm.prank(guardian);
+        config.pause();
+        uint256 before = usdc.balanceOf(treasury);
+        m.sweepUnclaimed();
+        assertGt(usdc.balanceOf(treasury) - before, 0);
+    }
+
+    // ── the exit events an indexer rebuilds positions from ───────────────────
+
+    function test_redeemEmitsRedeemedWithSharesAndTokens() public {
+        _settleAs(1);
+        uint256 amount = shares.balanceOfOutcome(alice, address(m), 1) + m.seedSharesOf(alice)[1];
+        (uint256 expected,) = (0, 0);
+        // The payout is recomputed here from the snapshotted rate rather than read back from
+        // the call, so the event is checked against the contract's stated arithmetic and not
+        // against its own return value.
+        expected = Math.mulDiv(amount, m.payoutPerShareWad(), DPMMath.WAD) / m.scale();
+
+        vm.expectEmit(true, false, false, true, address(m));
+        emit IMarket.Redeemed(alice, amount, expected);
+        vm.prank(alice);
+        m.redeem(alice);
+    }
+
+    function test_liquidateEmitsLiquidatedWithBothLegs() public {
+        vm.warp(m.settlementDeadline());
+        m.fail();
+
+        uint256[2] memory amounts;
+        uint256 payoutWad;
+        for (uint8 i = 0; i < 2; ++i) {
+            amounts[i] = shares.balanceOfOutcome(alice, address(m), i) + m.seedSharesOf(alice)[i];
+            payoutWad += Math.mulDiv(amounts[i], m.liqPerShare()[i], DPMMath.WAD);
+        }
+
+        vm.expectEmit(true, false, false, true, address(m));
+        emit IMarket.Liquidated(alice, amounts, payoutWad / m.scale());
+        vm.prank(alice);
+        m.liquidate(alice);
     }
 
     function test_sweepOnlyAfterWindowAndGoesToTreasury() public {

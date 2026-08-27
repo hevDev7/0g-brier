@@ -44,5 +44,9 @@ interface IMarket {
     event Redeemed(address indexed account, uint256 shares, uint256 tokensOut);
     event Liquidated(address indexed account, uint256[2] shares, uint256 tokensOut);
     event FeesDistributed(uint256 toCreator, uint256 toResolvers, uint256 toTreasury);
+    /// @dev Emitted once, and only once, per market. It closes the claim window: an indexer
+    ///      that misses it goes on showing positions as claimable forever, and every later
+    ///      `redeem`/`liquidate` reverts `AlreadySwept` with no on-chain trace of why.
+    event Swept(address indexed treasury, uint256 tokens);
     event MarketVoided(bytes32 reason);
 }

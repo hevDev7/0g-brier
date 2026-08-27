@@ -61,6 +61,10 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     Status public status;
     uint8 public winningOutcome;
     uint64 public resolvedAt;
+    /// @dev 0 until `sweepUnclaimed` runs, then the timestamp at which it did. This is the
+    ///      single flag for "the claim window is closed"; it packs into the slot `status`,
+    ///      `winningOutcome` and `resolvedAt` already share, so it costs no extra storage.
+    uint64 public sweptAt;
     uint256 public payoutPerShareWad;
     uint256[2] internal _liqPerShareWad;
 
@@ -90,6 +94,10 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     error NotLiquidatable();
     error NothingToClaim();
     error TooEarly();
+    /// @dev Every exit after `sweepUnclaimed`. Named rather than implied: before this error
+    ///      existed, `redeem` answered the same situation with an arithmetic Panic and
+    ///      `liquidate` answered it by succeeding and burning the caller's shares for nothing.
+    error AlreadySwept();
 
     constructor() {
         _disableInitializers();
@@ -545,9 +553,13 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     // ── exit ─────────────────────────────────────────────────────────────────
 
     /// @notice Redeems winning-side shares at the rate snapshotted at settle.
-    /// @dev Losing-side shares — tradable and seed alike — are worth nothing and are cleared.
+    /// @dev Losing-side shares are worth nothing. Only the losing SEED is zeroed here; losing
+    ///      tradable ERC-1155 shares are left in the holder's wallet, where they stay
+    ///      worthless. Burning them would cost gas to destroy something already valueless,
+    ///      and this natspec previously claimed it happened when it does not.
     function redeem(address to) external nonReentrant returns (uint256 tokensOut) {
         if (status != Status.Settled) revert NotSettled();
+        if (sweptAt != 0) revert AlreadySwept();
 
         uint8 w = winningOutcome;
         uint8 l = w == 0 ? 1 : 0;
@@ -579,6 +591,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     ///      never assumed to fit.
     function liquidate(address to) external nonReentrant returns (uint256 tokensOut) {
         if (status != Status.Failed && status != Status.Voided) revert NotLiquidatable();
+        if (sweptAt != 0) revert AlreadySwept();
 
         uint256[2] memory amounts;
         uint256 payoutWad;
@@ -611,14 +624,27 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         emit Liquidated(msg.sender, amounts, tokensOut);
     }
 
-    /// @notice Sweeps whatever was never claimed to the Treasury after a long window.
+    /// @notice Sweeps whatever was never claimed to the Treasury after a long window, and
+    ///         permanently closes the claim window.
+    /// @dev Deliberately NOT guarded by the pause: the pause protects users from a broken
+    ///      protocol, and this path runs a year after resolution on funds nobody claimed.
+    ///
+    ///      One-shot by an explicit flag rather than by the accident of a zero balance. The
+    ///      old code was only un-repeatable because `bal == 0` reverted `ZeroAmount` on a
+    ///      second call — which stops being true the moment anyone transfers a single token
+    ///      to this address, and left `redeem`/`liquidate` with nothing to test against.
     function sweepUnclaimed() external {
         if (status != Status.Settled && status != Status.Failed && status != Status.Voided) revert BadTransition();
+        if (sweptAt != 0) revert AlreadySwept();
         if (block.timestamp < resolvedAt + config.params(ConfigKeys.SWEEP_UNCLAIMED_AFTER)) revert TooEarly();
 
         uint256 bal = collateral.balanceOf(address(this));
         if (bal == 0) revert ZeroAmount();
+        sweptAt = uint64(block.timestamp);
         poolWad = 0;
-        collateral.safeTransfer(config.addresses(ConfigKeys.TREASURY), bal);
+
+        address treasury = config.addresses(ConfigKeys.TREASURY);
+        collateral.safeTransfer(treasury, bal);
+        emit Swept(treasury, bal);
     }
 }
