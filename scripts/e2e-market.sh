@@ -58,7 +58,53 @@ USDC="$(j MockUSDC)";        SHARES="$(j OutcomeShares)"
 
 ACTOR="$(cast wallet address --private-key "$DEPLOYER_KEY")"
 CURATOR="$(cast wallet address --private-key "$CURATOR_KEY")"
-send() { cast send --rpc-url "$RPC" --private-key "$DEPLOYER_KEY" "$@" >/dev/null; }
+# Galileo enforces a minimum priority fee and rejects cast's default tip of 1 wei
+# outright: "transaction gas price below minimum: gas tip cap 1, minimum needed
+# 2000000000". `forge script` never hit it because it estimates its own fees.
+#
+# Setting the tip alone is not enough either — the node then reports
+# "max priority fee per gas higher than max fee per gas ... maxFeePerGas: 0",
+# because with a zero base fee cast derives a ceiling of zero. Both halves have to
+# be given, and both are asked of the node rather than hardcoded, so this keeps
+# working on a chain with different economics.
+GAS_FLAGS=()
+TIP="$(cast rpc --rpc-url "$RPC" eth_maxPriorityFeePerGas 2>/dev/null | tr -d '"' || true)"
+if [[ "$TIP" =~ ^0x[0-9a-fA-F]+$ ]] && (( $((TIP)) > 0 )); then
+  TIP=$((TIP))
+  GP="$(cast gas-price --rpc-url "$RPC")"
+  MAXFEE=$(( (TIP > GP ? TIP : GP) * 2 ))   # headroom, so a base-fee bump mid-run does not strand a tx
+  GAS_FLAGS=(--priority-gas-price "$TIP" --gas-price "$MAXFEE")
+  echo "fees: tip $(python3 -c "print(f'{$TIP/10**9:.2f}')") gwei, ceiling $(python3 -c "print(f'{$MAXFEE/10**9:.2f}')") gwei (both from the node)"
+fi
+
+# A failed transaction must stop the run. `set -e` did not catch this on its own,
+# and the script carried on printing an empty balance as though nothing had gone
+# wrong — which is worse than crashing, because the output still looked like a
+# result.
+#
+# Sent with --async and polled, rather than letting cast wait. This node
+# intermittently answers eth_getTransactionReceipt with null before a transaction
+# is mined ("server returned a null response when a non-null response was
+# expected"); the deploy survived it only because `forge` retries and `cast` does
+# not. Polling for the receipt ourselves also lets a revert be reported as a
+# revert, instead of as a timeout.
+send() {
+  local hash status i
+  hash="$(cast send --async --rpc-url "$RPC" --private-key "$DEPLOYER_KEY" \
+          ${GAS_FLAGS[@]+"${GAS_FLAGS[@]}"} "$@")" \
+    || { echo "✗ could not submit: cast send $1 ${2:-}" >&2; exit 1; }
+  for ((i = 0; i < 90; i++)); do
+    # `cast receipt <tx> status` prints "1 (success)", not "1" — comparing against
+    # the whole string reported a successful transaction as a revert, which cost an
+    # hour of looking for a contract bug that was never there.
+    status="$(cast receipt "$hash" status --rpc-url "$RPC" 2>/dev/null | awk '{print $1}' || true)"
+    [[ -n "$status" ]] && break
+    sleep 2
+  done
+  [[ -n "$status" ]] || { echo "✗ no receipt after 180s for $hash ($1 ${2:-})" >&2; exit 1; }
+  [[ "$status" == "1" || "$status" == "0x1" ]] \
+    || { echo "✗ transaction reverted on chain: $hash ($1 ${2:-})" >&2; exit 1; }
+}
 call() { cast call --rpc-url "$RPC" "$@"; }
 step() { printf '\n\033[1m▶ %s\033[0m\n' "$1"; }
 
