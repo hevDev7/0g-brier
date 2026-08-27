@@ -1,40 +1,84 @@
+import {Activity} from "lucide-react";
+import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {formatCollateral, formatProbability, formatShares, shortAddress} from "@/lib/format";
 import type {CollateralInfo, Trade} from "@/lib/data/types";
 
+/**
+ * P(YES) here is `Trade.probAfterWad`, which is already a probability — the
+ * state the market was left in by that trade. The newest row therefore agrees
+ * with the probability panel by construction, not by coincidence; the fixtures
+ * are built to converge on the market's q for exactly that reason.
+ */
 export function TradeTape({trades, collateral}: {trades: Trade[]; collateral: CollateralInfo}) {
   return (
-    <div data-testid="trade-tape" className="overflow-hidden rounded-lg border border-border">
-      <table className="w-full text-[13px]">
-        <thead className="bg-bg-sunken text-[11px] uppercase tracking-wide text-text-faint">
-          <tr>
-            {["Time", "Side", "Shares", collateral.symbol, "P(YES)"].map((h) => (
-              <th key={h} className="px-3 py-2 text-left font-medium last:text-right">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {trades.map((t) => (
-            <tr key={t.id} className="border-t border-border">
-              <td className="px-3 py-2 text-text-muted">
-                {new Date(t.timestamp * 1000).toISOString().slice(11, 16)}
-              </td>
-              <td className={`px-3 py-2 ${t.outcome === 1 ? "text-pos" : "text-neg"}`}>
-                {t.outcome === 1 ? "YES" : "NO"}
-              </td>
-              <td className="px-3 py-2">{formatShares(t.sharesDelta)}</td>
-              <td className="px-3 py-2">{formatCollateral(t.tokens, collateral.decimals)}</td>
-              <td className="px-3 py-2 text-right text-text-muted">
-                {formatProbability(t.probAfterWad)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="border-t border-border px-3 py-1.5 text-[11px] text-text-faint">
-        last {trades.length} trades · trader {shortAddress(trades[0]?.trader ?? "0x")}…
-      </div>
-    </div>
+    <Panel testId="trade-tape" className="overflow-hidden">
+      <PanelHeader eyebrow="Recent activity" title="Trade tape" icon={Activity} />
+      {trades.length === 0 ? (
+        <p className="px-4 py-8 text-center text-[13px] text-text-muted md:px-5">
+          <span>No trades recorded in this market yet.</span>
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-left text-[13px]">
+            <caption className="sr-only">
+              The most recent trades, newest first, with the probability each one left behind.
+            </caption>
+            <thead className="bg-bg-sunken/60 text-[10px] tracking-[0.12em] text-text-faint uppercase">
+              <tr>
+                <th scope="col" className="px-4 py-2.5 font-medium">
+                  Time
+                </th>
+                <th scope="col" className="px-3 py-2.5 font-medium">
+                  Agent
+                </th>
+                <th scope="col" className="px-3 py-2.5 font-medium">
+                  Side
+                </th>
+                <th scope="col" className="px-3 py-2.5 text-right font-medium">
+                  Shares
+                </th>
+                <th scope="col" className="px-3 py-2.5 text-right font-medium">
+                  {collateral.symbol}
+                </th>
+                <th scope="col" className="px-4 py-2.5 text-right font-medium">
+                  P(YES) after
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {trades.map((trade) => (
+                <tr key={trade.id} className="border-t border-border">
+                  <td className="px-4 py-2.5 font-mono text-[11px] text-text-muted">
+                    {new Date(trade.timestamp * 1000).toISOString().slice(11, 16)}
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-[11px] text-text-muted">
+                    {shortAddress(trade.trader)}
+                  </td>
+                  <td
+                    className={`px-3 py-2.5 font-mono text-[11px] font-medium ${
+                      trade.outcome === 1 ? "text-pos" : "text-neg"
+                    }`}
+                  >
+                    {trade.outcome === 1 ? "YES" : "NO"}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono">
+                    {formatShares(trade.sharesDelta)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono">
+                    {formatCollateral(trade.tokens, collateral.decimals)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-mono text-text-muted">
+                    {formatProbability(trade.probAfterWad)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="border-t border-border bg-bg-sunken/40 px-4 py-2 text-[10px] text-text-muted md:px-5">
+        Times are UTC. Every trade here was executed by an agent through the SDK.
+      </p>
+    </Panel>
   );
 }

@@ -1,6 +1,21 @@
+import {Gavel} from "lucide-react";
+import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {payoutPerShareWad} from "@/lib/dpm-view";
 import {formatPayout} from "@/lib/format";
 import type {MarketDetail, SettlementReceipt} from "@/lib/data/types";
+
+/** A stub receipt must never be mistaken for a real one. */
+function SimulatedBanner({testId}: {testId: string}) {
+  return (
+    <div
+      data-testid={testId}
+      role="status"
+      className="border-b border-warn/40 bg-warn/10 px-4 py-2.5 text-[11px] font-semibold tracking-wide text-warn uppercase md:px-5"
+    >
+      Simulated result — not a real resolution by the AI committee
+    </div>
+  );
+}
 
 /**
  * The committee's verdict: the winner, and the payout rate per share for it.
@@ -18,10 +33,12 @@ export function FinalOutcome({receipt, market}: {receipt: SettlementReceipt; mar
   // `unavailable` in Query<T>: not knowing is rendered as such.
   if (outcome === null) {
     return (
-      <div data-testid="final-outcome" className="rounded-lg border border-border p-4">
-        <h2 className="mb-1 text-[12px] uppercase tracking-wide text-text-faint">Final outcome</h2>
-        <p className="text-[13px] text-text-muted">Not resolved yet — no committee resolution is available.</p>
-      </div>
+      <Panel testId="final-outcome">
+        <PanelHeader eyebrow="Committee verdict" title="Final outcome" icon={Gavel} />
+        <p className="p-4 text-[13px] text-text-muted md:p-5">
+          Not resolved yet — no committee resolution is available.
+        </p>
+      </Panel>
     );
   }
 
@@ -29,32 +46,28 @@ export function FinalOutcome({receipt, market}: {receipt: SettlementReceipt; mar
   const payout = payoutPerShareWad(market.q, outcome);
 
   return (
-    <div data-testid="final-outcome" className="flex flex-col gap-3 rounded-lg border border-border p-4">
-      {receipt.simulated && (
-        <div
-          data-testid="final-outcome-simulated"
-          role="status"
-          className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-[12px] font-semibold uppercase tracking-wide text-warn"
-        >
-          Simulated result — not a real resolution by the AI committee
+    <Panel testId="final-outcome" className="overflow-hidden">
+      <PanelHeader eyebrow="Committee verdict" title="Final outcome" icon={Gavel} />
+      {receipt.simulated && <SimulatedBanner testId="final-outcome-simulated" />}
+      <div className="flex flex-col gap-3 p-4 md:p-5">
+        <div className="flex items-baseline justify-between gap-4">
+          <span className="text-[13px] text-text-muted">Winner</span>
+          <span
+            data-testid="winner"
+            className={`font-mono text-[28px] leading-none font-medium ${
+              outcome === 1 ? "text-pos" : "text-neg"
+            }`}
+          >
+            {label}
+          </span>
         </div>
-      )}
-
-      <h2 className="text-[12px] uppercase tracking-wide text-text-faint">Final outcome</h2>
-
-      <div className="flex items-baseline justify-between">
-        <span className="text-[13px] text-text-muted">Winner</span>
-        <span data-testid="winner" className="text-[28px] leading-none text-text">
-          {label}
-        </span>
+        <div className="flex items-baseline justify-between gap-4 border-t border-border pt-3">
+          <span className="text-[13px] text-text-muted">Payout per share</span>
+          <span data-testid="payout" className="font-mono text-[15px] text-text">
+            {formatPayout(payout)}
+          </span>
+        </div>
       </div>
-
-      <div className="flex items-baseline justify-between border-t border-border pt-3">
-        <span className="text-[13px] text-text-muted">Payout per share</span>
-        <span data-testid="payout" className="text-[15px] text-text">
-          {formatPayout(payout)}
-        </span>
-      </div>
-    </div>
+    </Panel>
   );
 }

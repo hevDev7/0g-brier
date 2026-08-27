@@ -1,9 +1,20 @@
+import {ShieldCheck} from "lucide-react";
 import {Badge} from "@/components/primitives/Badge";
+import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import type {Outcome, ResolverVote, SettlementReceipt} from "@/lib/data/types";
 
 function outcomeLabel(outcome: Outcome | null): string {
   if (outcome === null) return "no vote yet";
   return outcome === 1 ? "YES" : "NO";
+}
+
+function Section({title, children}: {title: string; children: React.ReactNode}) {
+  return (
+    <div className="border-t border-border px-4 py-3.5 md:px-5">
+      <h3 className="eyebrow mb-2 text-text-faint">{title}</h3>
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -18,22 +29,26 @@ function VoteRow({vote, finalOutcome}: {vote: ResolverVote; finalOutcome: Outcom
   return (
     <li
       data-testid={`vote-${vote.model}`}
-      className="flex items-center justify-between gap-3 py-1.5 text-[13px]"
+      className="flex items-center justify-between gap-3 py-2 text-[13px]"
     >
-      <div className="flex items-center gap-2">
+      <span className="flex items-center gap-2">
         {/* The model name is deliberately ONE element with no other text inside —
             getByText joins only an element's DIRECT text nodes, so a phrase that
             must match the model name exactly may not share an element with other
             text (see the same note in Unavailable.tsx). */}
-        <span className="text-text">{vote.model}</span>
+        <span className="font-mono text-[12px] text-text">{vote.model}</span>
         {vote.teeVerified && <Badge tone="verified" label="TEE" />}
-      </div>
-      <div className="flex items-center gap-2">
-        <span className={vote.outcome === 1 ? "text-pos" : vote.outcome === 0 ? "text-neg" : "text-text-faint"}>
+      </span>
+      <span className="flex items-center gap-2">
+        <span
+          className={`font-mono text-[12px] ${
+            vote.outcome === 1 ? "text-pos" : vote.outcome === 0 ? "text-neg" : "text-text-faint"
+          }`}
+        >
           {outcomeLabel(vote.outcome)}
         </span>
         {dissents && <Badge tone="warning" label="Dissent" />}
-      </div>
+      </span>
     </li>
   );
 }
@@ -52,19 +67,20 @@ function VoteRow({vote, finalOutcome}: {vote: ResolverVote; finalOutcome: Outcom
  */
 export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
   return (
-    <div data-testid="resolution-evidence" className="flex flex-col gap-4 rounded-lg border border-border p-4">
+    <Panel testId="resolution-evidence" className="overflow-hidden">
+      <PanelHeader eyebrow="Settlement record" title="Resolution evidence" icon={ShieldCheck} />
+
       {receipt.simulated && (
         <div
           data-testid="simulated-badge"
           role="status"
-          className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-[12px] font-semibold uppercase tracking-wide text-warn"
+          className="border-b border-warn/40 bg-warn/10 px-4 py-2.5 text-[11px] font-semibold tracking-wide text-warn uppercase md:px-5"
         >
           Simulated result — not a real resolution by the AI committee
         </div>
       )}
 
-      <div>
-        <h2 className="mb-1 text-[12px] uppercase tracking-wide text-text-faint">Resolver votes</h2>
+      <Section title="Resolver votes">
         {receipt.votes.length === 0 ? (
           <p className="text-[13px] text-text-muted">No resolver votes yet.</p>
         ) : (
@@ -74,10 +90,9 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
             ))}
           </ul>
         )}
-      </div>
+      </Section>
 
-      <div>
-        <h2 className="mb-1 text-[12px] uppercase tracking-wide text-text-faint">Resolution criteria</h2>
+      <Section title="Resolution criteria">
         {/* A null outcome means this market IS NOT RESOLVED YET — the empty criteria
             in the PENDING_RECEIPT fixture are not "criteria that happen to be
             short", they genuinely do not exist yet. Rendering an empty
@@ -89,42 +104,52 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
             MarketStats.tsx already enforces the same pattern (availability judged
             PER ROW, not per panel) for an identical reason. */}
         {receipt.outcome === null ? (
-          <p className="text-[13px] text-text-muted">No criteria yet — this market is not resolved.</p>
+          <p className="text-[13px] text-text-muted">
+            No criteria yet — this market is not resolved.
+          </p>
         ) : (
           <p data-testid="criteria" className="text-[13px] leading-relaxed text-text">
             {receipt.criteria}
           </p>
         )}
-      </div>
+      </Section>
 
-      {receipt.outcome === null ? (
-        // The "in full, verbatim" <details> is NEVER rendered empty: a disclosure
-        // that promises the complete reasoning and then opens onto nothing is
-        // exactly the lie rule #1 above forbids.
-        <p className="text-[13px] text-text-muted">No resolver reasoning yet — this market is not resolved.</p>
-      ) : (
-        <div>
-          {receipt.judgeModel !== null && (
-            // The section is named explicitly ("The reasoning below") so it cannot
-            // be confused with the criteria above it — and it sits immediately
-            // beside the <details> it refers to, rather than near the vote list, so
-            // that "below" points literally at the next element and not at some
-            // other section of the page.
-            <p className="mb-2 text-[12px] text-text-faint">
-              The reasoning below was composed by the judge: {receipt.judgeModel}
-            </p>
-          )}
-          <details data-testid="reasoning" className="text-[13px] leading-relaxed text-text">
-            <summary className="cursor-pointer select-none text-text-muted">
-              Resolver reasoning — in full, verbatim
-            </summary>
-            <p className="mt-2 whitespace-pre-wrap">{receipt.reasoning}</p>
-          </details>
-        </div>
-      )}
+      <Section title="Resolver reasoning">
+        {receipt.outcome === null ? (
+          // The "in full, verbatim" <details> is NEVER rendered empty: a disclosure
+          // that promises the complete reasoning and then opens onto nothing is
+          // exactly the lie rule #1 above forbids.
+          <p className="text-[13px] text-text-muted">
+            No resolver reasoning yet — this market is not resolved.
+          </p>
+        ) : (
+          <>
+            {receipt.judgeModel !== null && (
+              // The section is named explicitly ("The reasoning below") so it cannot
+              // be confused with the criteria above it — and it sits immediately
+              // beside the <details> it refers to, rather than near the vote list, so
+              // that "below" points literally at the next element and not at some
+              // other section of the page.
+              // The judge's name shares this paragraph's text node ON PURPOSE and
+              // must not be wrapped in an element of its own: the judge is
+              // usually also one of the voters, and giving its name a dedicated
+              // element makes `getByText("<model>")` match twice — once in the
+              // vote list, once here — which is ambiguous rather than wrong.
+              <p className="mb-2 font-mono text-[11px] text-text-faint">
+                Reasoning below composed by the judge: {receipt.judgeModel}
+              </p>
+            )}
+            <details data-testid="reasoning" className="text-[13px] leading-relaxed text-text">
+              <summary className="cursor-pointer text-text-muted select-none">
+                Resolver reasoning — in full, verbatim
+              </summary>
+              <p className="mt-2 whitespace-pre-wrap">{receipt.reasoning}</p>
+            </details>
+          </>
+        )}
+      </Section>
 
-      <div>
-        <h2 className="mb-1 text-[12px] uppercase tracking-wide text-text-faint">Sources</h2>
+      <Section title="Sources">
         {receipt.sources.length === 0 ? (
           <p className="text-[13px] text-text-muted">No sources recorded yet.</p>
         ) : (
@@ -135,7 +160,7 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
                   href={s}
                   target="_blank"
                   rel="noreferrer"
-                  className="break-all text-[13px] text-accent underline underline-offset-2"
+                  className="text-[13px] break-all text-accent underline underline-offset-2"
                 >
                   {s}
                 </a>
@@ -143,7 +168,7 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
             ))}
           </ul>
         )}
-      </div>
-    </div>
+      </Section>
+    </Panel>
   );
 }

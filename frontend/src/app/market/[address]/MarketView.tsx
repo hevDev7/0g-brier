@@ -1,9 +1,16 @@
 "use client";
 
+import Link from "next/link";
+import {ArrowLeft, ScrollText} from "lucide-react";
 import {Badge} from "@/components/primitives/Badge";
 import {CopyAddress} from "@/components/primitives/CopyAddress";
 import {Countdown} from "@/components/primitives/Countdown";
+import {PageHeading} from "@/components/primitives/PageHeading";
+import {Panel, PanelHeader} from "@/components/primitives/Panel";
+import {ErrorNote} from "@/components/primitives/QueryStates";
+import {SkeletonRows} from "@/components/primitives/Skeleton";
 import {Unavailable} from "@/components/primitives/Unavailable";
+import {Lifecycle} from "@/components/market/Lifecycle";
 import {MarketStats} from "@/components/market/MarketStats";
 import {PayoutPanel} from "@/components/market/PayoutPanel";
 import {PositionsTable} from "@/components/market/PositionsTable";
@@ -18,6 +25,7 @@ import {useMarket} from "@/hooks/useMarket";
 import {usePositions} from "@/hooks/usePositions";
 import {useReceipt} from "@/hooks/useReceipt";
 import {useTrades} from "@/hooks/useTrades";
+import {statusTone} from "@/lib/market-rows";
 import type {
   Candle,
   CollateralInfo,
@@ -31,40 +39,39 @@ import type {
 
 /**
  * An INSPECTION page, not a place to transact (spec §1 F3): what the price is,
- * where that price came from, who holds what, and on what evidence the market
- * was resolved. Buy, sell, redeem, and liquidate all live in
- * `@0g-delphi/agent-kit`, outside the dApp — so there is no execution control in
- * this file. Not hidden and not disabled: ABSENT. A dead button still promises
- * something that will never exist here, and this page's test asserts that not one
- * buy/sell/approve button remains.
+ * where it came from, who holds what, and on what evidence the market was
+ * resolved. Buy, sell, redeem and liquidate all live in `@0g-delphi/agent-kit`,
+ * outside the dApp — so there is no execution control in this file. Not hidden
+ * and not disabled: ABSENT. A disabled button still promises something that will
+ * never exist here, and this page's test asserts that no buy/sell/approve
+ * control remains.
  *
- * There is no SpecViewer here, and that is deliberate: its content comes from 0G
- * Storage through `specRoot`, whose integration does not exist yet. The
- * resolution rules stay readable through `market.rules` below, and the criteria
- * the committee actually used through `ResolutionEvidence` once the market is
- * settled.
+ * There is no SpecViewer here, deliberately: its content comes from 0G Storage
+ * via `specRoot`, and that integration does not exist. The settlement rules stay
+ * readable through `market.rules` below, and the criteria the committee actually
+ * used through `ResolutionEvidence` once the market settles.
  */
 export function MarketView({address}: {address: `0x${string}`}): React.JSX.Element {
   const market = useMarket(address);
 
-  // The same pattern as every other Query<T> unwrap below — a switch with no
-  // `default`, and an explicit non-nullable return type on the function
-  // signature. The `ready` branch hands off to a component of its own so the
-  // other data hooks (tape, candles, positions, receipt) need not be called
-  // before `market.data` exists, and stay unconditional inside that component.
+  // The same pattern as every Query<T> unwrapping below — a switch with no
+  // `default` and an explicit non-nullable return type on the signature. The
+  // `ready` branch hands off to a component of its own so the other data hooks
+  // (tape, candles, positions, receipt) need not be called before `market.data`
+  // exists, and stay unconditional inside that component.
   switch (market.status) {
     case "ready":
       return <MarketBody market={market.data} />;
     case "unavailable":
-      return (
-        <Shell>
-          <Unavailable capability={market.capability} mode={market.mode} />
-        </Shell>
-      );
+      return <Unavailable capability={market.capability} mode={market.mode} />;
     case "error":
-      return <Shell>Failed to load: {market.error.message}</Shell>;
+      return <ErrorNote error={market.error} what="this market" />;
     case "loading":
-      return <Shell>Loading…</Shell>;
+      return (
+        <Panel>
+          <SkeletonRows rows={6} cols={3} />
+        </Panel>
+      );
   }
 }
 
@@ -76,55 +83,77 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
   const receipt = useReceipt(market.address);
 
   return (
-    <Shell>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="flex flex-col gap-4">
-          <header className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone="neutral" label={market.tier} />
-              <Badge
-                tone={market.status === "Open" ? "positive" : "neutral"}
-                label={market.status}
-              />
-              <span className="text-[12px] text-text-muted">{market.category}</span>
-              {/* A countdown is only meaningful while trading is still running: on a
-                  market that has closed, `formatCountdown` returns "closed" and the
-                  line would read "closes in closed". The market status already says
-                  so through the badge above. */}
-              {market.status === "Open" && (
-                <span className="text-[12px] text-text-muted">
-                  closes in <Countdown until={market.tradingEnd} />
-                </span>
-              )}
-              <CopyAddress address={market.address} />
-            </div>
-            <h1 className="max-w-3xl text-[20px] leading-snug text-text">{market.question}</h1>
-          </header>
+    <>
+      <Link
+        href="/"
+        className="mb-5 inline-flex items-center gap-2 text-[12px] font-semibold text-text-muted hover:text-accent"
+      >
+        <ArrowLeft size={14} aria-hidden />
+        Back to markets
+      </Link>
 
+      <PageHeading
+        eyebrow={`${market.category} / ${market.tier}`}
+        title={market.question}
+        description="Inspect the price, its history, who holds what, and the evidence behind the settlement. Every trade shown here was executed by an agent through the SDK."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={statusTone(market.status)} label={market.status} />
+            {/* A countdown only makes sense while trading is still running: on a
+                closed market formatCountdown returns "closed" and the line would
+                read "closes in closed". The status badge above already says it. */}
+            {market.status === "Open" && (
+              <span className="text-[12px] text-text-muted">
+                closes in <Countdown until={market.tradingEnd} />
+              </span>
+            )}
+            <CopyAddress address={market.address} />
+          </div>
+        }
+      />
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(340px,380px)]">
+        {/*
+          `min-w-0` is load-bearing, not tidying. A grid item's automatic minimum
+          size is its MIN-CONTENT width, so the widest thing in this column — the
+          600px chart viewBox, the 600px positions table — would widen the track
+          past the viewport and make the whole PAGE scroll sideways on a phone,
+          instead of scrolling inside its own overflow-x-auto wrapper. Measured:
+          without this, /market/[address] overflowed by 256px at 375px wide.
+        */}
+        <div className="flex min-w-0 flex-col gap-5">
           <ProbabilityPanel q={market.q} />
+          {/* The dilution disclosure lives in the main column, directly under the
+              probability, rather than in the sidebar: it is the only place a human
+              is ever told the payout floats, so it must not sit below the fold. */}
           <PayoutPanel q={market.q} />
           {renderChart(candles)}
           {renderPositions(positions, market, source.mode)}
           {renderTrades(trades, market.collateral)}
 
-          {/* The resolution rules come from MARKET_STATE — any mode can answer it,
-              so they are never `unavailable`. An inspection page without the rules
-              that bind it hides precisely the thing a reader most needs to examine
-              before the market settles. */}
-          <section className="rounded-lg border border-border p-4">
-            <h2 className="mb-2 text-[12px] uppercase tracking-wide text-text-faint">
-              Resolution rules
-            </h2>
-            <p className="text-[13px] leading-relaxed text-text-muted">{market.rules}</p>
-          </section>
+          {/* The settlement rules come from MARKET_STATE — any mode can answer
+              them, so they are never `unavailable`. An inspection page without the
+              rules that bind it hides the very thing a reader most needs to check
+              before the market resolves. */}
+          <Panel testId="settlement-rules">
+            <PanelHeader
+              eyebrow="Market specification"
+              title="Settlement rules"
+              icon={ScrollText}
+            />
+            <p className="p-4 text-[13px] leading-relaxed text-text-muted md:p-5">
+              {market.rules}
+            </p>
+          </Panel>
         </div>
 
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-6 lg:self-start">
+        <aside className="flex min-w-0 flex-col gap-5 xl:sticky xl:top-[84px] xl:self-start">
           <MarketStats market={market} trades={trades} />
+          <Lifecycle market={market} />
           {market.status === "Settled" && renderSettlement(receipt, market)}
         </aside>
       </div>
-    </Shell>
+    </>
   );
 }
 
@@ -133,14 +162,14 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
  * exhaustiveness guarantee is STRUCTURAL rather than an accident of how this
  * code happens to be written today. The explicit non-nullable return type
  * (`React.JSX.Element`) is the part that enforces it: under `strict`, a function
- * that "falls off" the end of a switch without returning returns `undefined`,
- * and `undefined` is not assignable to `React.JSX.Element` — so deleting a
- * `case` fails to compile (TS2366). Without this annotation TypeScript quietly
- * infers `| undefined` and the guarantee evaporates.
+ * that falls off the end of a switch without returning gives back `undefined`,
+ * and `undefined` is not assignable to `React.JSX.Element` — so removing a
+ * `case` fails to compile (TS2366). Without the annotation TypeScript quietly
+ * infers `| undefined` and the guarantee disappears.
  *
  * There is DELIBERATELY no `default` in any of the functions below: adding one
- * "just in case" would disarm this exhaustiveness check — the compiler stops
- * forcing new cases to be handled the moment a catch-all fallback exists.
+ * "just in case" strips the exhaustiveness check — the compiler stops forcing a
+ * new case to be handled the moment a catch-all exists.
  */
 function renderTrades(trades: Query<Trade[]>, collateral: CollateralInfo): React.JSX.Element {
   switch (trades.status) {
@@ -149,11 +178,13 @@ function renderTrades(trades: Query<Trade[]>, collateral: CollateralInfo): React
     case "unavailable":
       return <Unavailable capability={trades.capability} mode={trades.mode} />;
     case "error":
-      return (
-        <div className="text-[13px] text-neg">Failed to load trades: {trades.error.message}</div>
-      );
+      return <ErrorNote error={trades.error} what="the trade tape" />;
     case "loading":
-      return <div className="text-[13px] text-text-muted">Loading trades…</div>;
+      return (
+        <Panel>
+          <SkeletonRows rows={5} cols={5} />
+        </Panel>
+      );
   }
 }
 
@@ -164,19 +195,21 @@ function renderChart(candles: Query<Candle[]>): React.JSX.Element {
     case "unavailable":
       return <Unavailable capability={candles.capability} mode={candles.mode} />;
     case "error":
-      return (
-        <div className="text-[13px] text-neg">Failed to load history: {candles.error.message}</div>
-      );
+      return <ErrorNote error={candles.error} what="the price history" />;
     case "loading":
-      return <div className="text-[13px] text-text-muted">Loading history…</div>;
+      return (
+        <Panel>
+          <SkeletonRows rows={4} cols={2} />
+        </Panel>
+      );
   }
 }
 
 /**
- * `mode` comes from the data source, not from `positions` — the `ready` branch
- * does not carry it, and the table still needs the current mode for the entry
- * price cell, which can be `null` (COST_BASIS). Availability per CELL, not per
- * panel.
+ * `mode` comes from the data source rather than from `positions` — the `ready`
+ * branch does not carry it, and the table still needs the current mode for the
+ * entry-price cell, which can be `null` (COST_BASIS). Availability per CELL, not
+ * per panel.
  */
 function renderPositions(
   positions: Query<Position[]>,
@@ -189,15 +222,17 @@ function renderPositions(
     case "unavailable":
       return <Unavailable capability={positions.capability} mode={positions.mode} />;
     case "error":
-      return (
-        <div className="text-[13px] text-neg">Failed to load positions: {positions.error.message}</div>
-      );
+      return <ErrorNote error={positions.error} what="the positions" />;
     case "loading":
-      return <div className="text-[13px] text-text-muted">Loading positions…</div>;
+      return (
+        <Panel>
+          <SkeletonRows rows={4} cols={5} />
+        </Panel>
+      );
   }
 }
 
-/** The committee's verdict AND the evidence that makes it inspectable — one receipt, two panels. */
+/** The committee's verdict AND the evidence that makes it checkable — one receipt, two panels. */
 function renderSettlement(
   receipt: Query<SettlementReceipt>,
   market: MarketDetail,
@@ -213,16 +248,12 @@ function renderSettlement(
     case "unavailable":
       return <Unavailable capability={receipt.capability} mode={receipt.mode} />;
     case "error":
-      return (
-        <div className="text-[13px] text-neg">
-          Failed to load the resolution evidence: {receipt.error.message}
-        </div>
-      );
+      return <ErrorNote error={receipt.error} what="the resolution evidence" />;
     case "loading":
-      return <div className="text-[13px] text-text-muted">Loading resolution evidence…</div>;
+      return (
+        <Panel>
+          <SkeletonRows rows={4} cols={2} />
+        </Panel>
+      );
   }
-}
-
-function Shell({children}: {children: React.ReactNode}) {
-  return <main className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8">{children}</main>;
 }

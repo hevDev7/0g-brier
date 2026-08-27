@@ -28,12 +28,9 @@ describe("MarketStats", () => {
     expect(screen.getByTestId("stat-liquidity")).not.toHaveTextContent(/not available/i);
   });
 
-  it("shows the complete lifecycle timeline", () => {
-    render(<MarketStats market={m} trades={{status: "loading"}} />);
-    for (const id of ["stat-created", "stat-closes", "stat-settles-by"]) {
-      expect(screen.getByTestId(id)).toBeInTheDocument();
-    }
-  });
+  // The lifecycle dates moved to <Lifecycle>, which shows them as a sequence and
+  // names the dispute window; the guarantee moved with them, to lifecycle.test.tsx.
+  // Listing the same dates in two panels meant a reader had to check they agreed.
 
   it("shows the fee as a rate, not just as an amount", () => {
     render(<MarketStats market={m} trades={{status: "loading"}} />);

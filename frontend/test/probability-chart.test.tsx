@@ -34,7 +34,12 @@ describe("ProbabilityChart", () => {
 
   it("names the axis as a probability, not a price", () => {
     render(<ProbabilityChart candles={cs} />);
-    expect(screen.getByText(/P\(YES\)/)).toBeInTheDocument();
+    // Named in both the panel title and the series legend, which is why this
+    // counts matches rather than demanding exactly one.
+    expect(screen.getAllByText(/P\(YES\)/).length).toBeGreaterThan(0);
+    // The accessible name has to carry it too: an axis labelled only visually
+    // tells a screen-reader user nothing about what the chart plots.
+    expect(screen.getByRole("img")).toHaveAccessibleName(/probability/i);
   });
 
   it("empty data renders a message, not a bare axis", () => {

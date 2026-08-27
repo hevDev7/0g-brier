@@ -36,8 +36,11 @@ describe("PayoutPanel", () => {
 
   /** A mandatory disclosure: the payout floats until the market closes. */
   it("discloses dilution in terms a reader can act on", () => {
-    const {container} = render(<PayoutPanel q={q} />);
-    const disclosure = container.querySelector("p")!;
+    render(<PayoutPanel q={q} />);
+    // Addressed by test id, not by DOM position: the guarantee is that this
+    // disclosure exists and says these four things, not that it happens to be
+    // the first paragraph in the panel.
+    const disclosure = screen.getByTestId("dilution-disclosure");
     expect(disclosure).toHaveTextContent(/floats until the market closes/i);
     // Self-dilution named explicitly: the reader's own agent is one of the buyers.
     expect(disclosure).toHaveTextContent(/including purchases your own agent makes/i);
