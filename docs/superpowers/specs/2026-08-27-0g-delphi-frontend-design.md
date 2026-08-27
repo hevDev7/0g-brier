@@ -42,6 +42,12 @@ This is the table that drives the entire design. The three modes are **not** equ
 | `MARKET_SPEC_BLOB` | ✓ | ✗ | ✓ | 0G Storage via `specRoot` |
 | `SETTLEMENT_RECEIPT` | ✓ | ✗ | ✓ | 0G Storage + `resolutions` |
 
+> **The authority for this list is `frontend/src/lib/data/types.ts`, not this table.** As shipped,
+> `Capability` holds seven members: `LIST_MARKETS`, `MARKET_STATE`, `PRICE_HISTORY`,
+> `TRADE_TAPE`, `AGENT_POSITIONS`, `COST_BASIS`, `SETTLEMENT_RECEIPT`. `POSITIONS_CURRENT` was
+> folded into `AGENT_POSITIONS`; `MARKET_SPEC_BLOB` awaits the 0G Storage integration and has no
+> consumer yet; `QUOTE` and `EXECUTE` belong to `agent-kit` and will never appear here.
+
 **There is no `MARKET_STATS` capability, and that is deliberate.** The stats panel combines fields whose sources differ in availability: fee, depth, and the timeline come from `MARKET_STATE` (always present), while volume comes from `TRADE_TAPE` (empty in `chain` mode). Making it a single capability would turn the whole panel `unavailable` merely because volume is unknown — throwing away six facts we have for the sake of one we do not. Availability is evaluated **per row**, not per panel.
 
 `QUOTE` and `EXECUTE` **are no longer in this table.** Both belong to `@0g-delphi/agent-kit`; the frontend data layer never calls `Market.buy`, `sell`, `redeem`, or `liquidate`, and holds no signer. That boundary is structural, not conventional — `DataSource` has no writing method at all.
@@ -206,26 +212,43 @@ This is a disclosure, not a disclaimer. DPM funds its payouts out of the pool, a
 
 The badge shows `simulated: true` conspicuously when the receipt came from stub mode — a simulated result must never be mistaken for a real one. The resolver's reasoning is shown verbatim: summarizing it means the UI is passing judgment too, and the reader loses precisely the part they wanted to check. `SETTLEMENT_RECEIPT`.
 
-### 4.3 `/portfolio` — an agent's book, read-only
+### 4.3 `/portfolio/[agent]` — an agent's book, read-only
 
-Because humans do not execute, this page is no longer "my positions" but **one agent's position book**, addressed by that agent's wallet.
+**Revised 2026-08-28.** v1 wrote this as a single `/portfolio`. It is a pair of routes, because
+this UI has no wallet: with no signer there is no "my" address to scope a portfolio to.
+
+- **`/portfolio`** — an address field plus the agents the current source can actually see.
+  Explicitly **not** a Connect Wallet button. A malformed address is rejected rather than
+  navigated to: an empty book reads the same whether the agent holds nothing or the address was
+  mistyped, and those are different facts.
+- **`/portfolio/[agent]`** — that address's book across every indexed market.
 
 | Column | Source |
 |---|---|
-| Market · Outcome | — |
-| Shares | `POSITIONS_CURRENT` |
-| Average entry price | `COST_BASIS` — `unavailable` on chain |
-| Current value | `pᵢ × shares` from `MARKET_STATE` |
-| Unrealized PnL | needs `COST_BASIS` |
-| Status | Open · Settled (not yet redeemed) · Failed/Voided (liquidatable) |
+| Market · Side | `MarketSummary.question`, `Position.outcome` |
+| Shares | `AGENT_POSITIONS` |
+| Entry price | `COST_BASIS` — `unavailable` on chain |
+| Current price | `dpm.price(q, outcome)` from `MARKET_STATE` |
+| Value | `shares × dpm.price`, converted at the token boundary |
+| Unrealised | needs `COST_BASIS` |
+| Status | Open · Awaiting settlement · Settled (agent can redeem) · Voided (agent can liquidate) |
 
-The **Actions column is gone.** Redeem and liquidate are execution, and execution lives in `agent-kit`. The Status column takes its place: it tells the observer that something needs doing, without pretending this page can do it.
+**Value uses the marginal price, never the probability.** At `q = [1000, 1200]` the NO price is
+`0.6402` while `P(NO)` is `41.0%`; valuing at the probability understates the holding by more
+than a third — the same square-root error that makes `1/P` the wrong payout.
 
-In `chain` mode the shares and current-value columns are fully populated; entry price and PnL render `<Unavailable>`. That is a table which is useful and honest at the same time — precisely why `unavailable` was made a status rather than a zero.
+**The Actions column is gone.** Redeem and liquidate are execution, and execution lives in
+`agent-kit`. The Status column takes its place: it tells the observer that something needs doing
+without pretending this page can do it.
 
-**Open:** whether this route eventually gets folded into `/agents/[address]` together with the leaderboard in P4. Left as `/portfolio` for now so as not to pre-empt the agent spec.
+**Composed, not a new capability.** `DataSource.getPositions` is scoped to a MARKET and returns
+every agent's holding in it, so a book is `listMarkets()` → `getPositions(each)` → filter by
+agent. That is deliberate: `chain` mode genuinely can read one balance per market, so composing
+keeps this page honest in every mode instead of inventing a method only an indexer could serve.
+It is O(markets) requests, accepted for v1 under risk R1; `IndexerSource` collapses it in F4.
 
----
+One unreadable market makes the whole book `unavailable` rather than smaller — a partial book
+would understate exposure while looking complete.
 
 ## 5. Correctness rules that bind the UI
 
@@ -316,97 +339,173 @@ A pattern from production agents worth copying: quote the target size, then **ha
 
 ## 7. Visual system
 
-Data-dense, calm, precise. Numbers are first-class citizens; color carries meaning only.
+Data-dense, calm, precise. Numbers are first-class citizens; colour carries meaning only.
+
+**Revised 2026-08-28.** v1 specified a neutral zinc ramp with a single blue accent. The
+palette below replaces it, adopted from the design exploration in `Frontend-New/` — a warm
+paper ground, a teal accent, and a mono face for every figure. What did NOT change is the
+discipline: one accent reserved for chrome, four semantic colours reserved for data, and the
+rule in §7.3 that an element earns colour only by carrying information.
 
 ### 7.1 Tokens
 
+Every value below was checked against every surface it can sit on, in both themes. The lowest
+ratio in the set is 4.63:1 (`--text-faint` on `--bg-sunken`, dark) — above the 4.5:1 small text
+requires. That pair is the one that fails first when the palette is nudged; re-run
+`scratchpad/palette.mjs` rather than eyeballing it.
+
 ```css
 :root {
-  /* neutral — the only ramp used for surfaces and text */
-  --n-0:#ffffff; --n-1:#fafafa; --n-2:#f4f4f5; --n-3:#e4e4e7;
-  --n-4:#d4d4d8; --n-6:#a1a1aa; --n-8:#52525b; --n-10:#27272a; --n-12:#09090b;
+  /* three surfaces: the page, the panels on it, the inset strips inside them */
+  --bg: hsl(42 29% 96%);          /* #f8f6f2 */
+  --bg-raised: hsl(42 31% 98.5%); /* #fcfcfa */
+  --bg-sunken: hsl(38 21% 92%);   /* #efece6 */
 
-  --bg:var(--n-0); --bg-sunken:var(--n-1); --bg-raised:var(--n-0);
-  --border:var(--n-3); --border-strong:var(--n-4);
-  --text:var(--n-12); --text-muted:var(--n-8); --text-faint:var(--n-6);
+  --border: hsl(214 16% 86%);
+  --border-strong: hsl(214 16% 76%);
 
-  /* one accent, used for the primary action and for focus — never for decoration */
-  --accent:#2563eb; --accent-fg:#ffffff;
+  --text: hsl(213 33% 16%);        /* 13.9:1 on --bg */
+  --text-muted: hsl(213 14% 35%);  /*  6.7:1 */
+  --text-faint: hsl(213 11% 42%);  /*  5.1:1 */
 
-  /* semantic: for meaning only */
-  --pos:#15803d;      /* up, profit */
-  --neg:#b91c1c;      /* down, loss */
-  --warn:#a16207;     /* dilution, limits, attention */
-  --verified:#15803d; /* TEE verified */
-  --unverified:var(--n-6);
+  /* one accent: focus ring, active navigation, links. Never decoration. */
+  --accent: hsl(174 58% 28%);
+  --accent-fg: hsl(42 33% 97%);
 
-  --radius:6px;
-  --row-h:38px;
+  /* semantic: each means exactly one thing */
+  --pos: hsl(142 58% 29%);        /* YES, rising, profit */
+  --neg: hsl(5 68% 44%);          /* NO, falling, loss, error */
+  --warn: hsl(28 82% 33%);        /* dilution, simulated data, attention */
+  --verified: hsl(174 58% 28%);   /* TEE-attested */
+
+  --radius: 10px;
+  --radius-sm: 5px;
+  --row-h: 38px;
 }
 
 .dark {
-  --bg:var(--n-12); --bg-sunken:#050507; --bg-raised:var(--n-10);
-  --border:#27272a; --border-strong:#3f3f46;
-  --text:var(--n-1); --text-muted:var(--n-6); --text-faint:var(--n-8);
-  --accent:#3b82f6;
-  --pos:#4ade80; --neg:#f87171; --warn:#fbbf24; --verified:#4ade80;
+  --bg: hsl(214 34% 11%);
+  --bg-raised: hsl(215 29% 15%);
+  --bg-sunken: hsl(215 26% 18%);
+  --border: hsl(215 21% 24%);
+  --border-strong: hsl(215 20% 34%);
+  --text: hsl(40 28% 92%);
+  --text-muted: hsl(214 13% 66%);
+  --text-faint: hsl(214 12% 59%);
+  --accent: hsl(174 55% 52%);
+  --accent-fg: hsl(214 34% 11%);
+  --pos: hsl(142 55% 53%);
+  --neg: hsl(5 78% 67%);
+  --warn: hsl(32 88% 58%);
+  --verified: hsl(174 55% 52%);
 }
 ```
 
-Tailwind `darkMode: 'class'`. Every color has a definition in `:root`; `.dark` only overrides. No color has its only definition inside the dark block.
+Tailwind v4 is CSS-first: there is no `tailwind.config.js`. Dark mode is declared with
+`@custom-variant dark (&:is(.dark *))` and the tokens are exported through `@theme inline`.
+Every colour is defined in `:root`; `.dark` only overrides. **No colour has its only definition
+inside the dark block** — a theme that only half-exists is worse than one that does not.
+
+The theme is applied by an inline script in `layout.tsx` before first paint, reading an explicit
+choice from `localStorage` and falling back to `prefers-color-scheme`. `<html>` carries
+`suppressHydrationWarning` because that script mutates the class list before React hydrates.
 
 ### 7.2 Typography & numerals
 
-One sans family for the UI (Inter or the system stack), one mono used solely for addresses and hashes.
+**Manrope** for the UI, **DM Mono** for every figure, address, and hash. Both are self-hosted by
+`next/font`, so no request leaves the page for `fonts.googleapis.com` and no face causes layout
+shift while loading.
 
-**`font-variant-numeric: tabular-nums` on every numeric cell.** Without it the probability column wobbles as it updates and the table becomes hard to scan — this is a functional requirement in a UI made of columns of numbers, not an aesthetic preference.
+Mono is not decorative here. Every number in this product belongs to a column that must be
+scannable, and a proportional face makes `1,562.05` and `1,897.37` different widths.
+**`font-variant-numeric: tabular-nums` is set on `body`** for the same reason: without it the
+probability column jitters as it updates. Both are functional requirements, not preferences.
 
 | Quantity | Format | Example |
 |---|---|---|
 | Probability | 1 decimal + `%` | `59.0%` |
-| Probability delta | 1 decimal + `pt`, colored | `+0.4 pt` |
-| Payout | 2 decimals + `×` | `1.70×` |
-| Collateral | 2 decimals + symbol | `1,234.56 mUSDC` |
-| Shares | 2 decimals | `135.31` |
-| Price/share | 4 decimals | `0.7391` |
+| Probability delta | 1 decimal + `pt`, coloured | `+1.4 pt` |
+| Payout | 2 decimals + `×` | `1.30×` |
+| Collateral | 2 decimals + symbol | `1,562.05 mUSDC` |
+| Shares | 2 decimals | `115.94` |
+| Price/share | 4 decimals | `0.6402` |
+| Fee rate | 2 decimals + `%` | `1.00%` |
 | Address | `0x1234…cdef`, mono, click-to-copy | |
-| Close time | relative; absolute on hover | `2h 14m` |
+| Close time | relative while Open; absolute otherwise | `27d 0h` |
 
-Type scale: 12 / 13 / 14 / 16 / 20 / 28 px. The first four carry almost the entire UI.
+Type scale: 10 / 11 / 12 / 13 / 20 / 24 / 30 / 34 px. The 11–13 band carries almost the entire UI;
+the large sizes are reserved for the page title and the two probability figures.
 
-### 7.3 Density & chroma
+**Rows are rounded to two decimals; totals are summed from exact amounts and rounded once.** The
+two therefore disagree in the last digit — the fixture book's rows print `-1.67 / -1.09 / -0.71`
+while the exact total is `-3.462942`, shown as `-3.46`. Rounding the rows first would make the
+total wrong, so the UI keeps the total exact and says on screen that it does.
 
-Table rows at `--row-h: 38px`. 1px dividers, not shadows. 6px radius. No gradients, glows, or colored shadows.
+### 7.3 Density, shape & chroma
 
-The color rule: an element may be colored **only when its color carries information that exists nowhere else**. A rising/falling probability is colored; a market's name is not. The TEE badge is colored; the category badge is gray.
+One container shape: the **panel** — `--bg-raised`, a 1px border, `--radius`. Depth comes from the
+surface step, never from a shadow, so it survives both themes. Table rows at `--row-h`. 1px
+dividers. No gradients, glows, or coloured shadows.
+
+Each panel is headed by an **eyebrow** (mono, 10px, tracked, uppercase) naming its kind, above a
+13px bold title naming the instance. Panel eyebrows are `--text-faint`; the accent eyebrow is
+reserved for the page heading, one per page, where it is wayfinding rather than decoration
+competing with the figures below it.
+
+The colour rule, unchanged: an element may be coloured **only when its colour carries information
+that exists nowhere else**. A rising probability is coloured; a market's name is not. The TEE
+badge is coloured; the category badge is grey. `--warn` is reserved — it means dilution,
+simulated data, or a market needing attention, and it is what marks `mock` mode in the chrome so
+fixture figures can never be mistaken for live ones.
+
+**Motion** only signals a state change, lasts ≤150ms, and is disabled wholesale under
+`prefers-reduced-motion` by a global rule in `globals.css`.
+
+**Focus** is declared once, globally, on `:where(a, button, input, select, textarea, summary,
+[tabindex]):focus-visible` — a 2px `--accent` outline with 2px offset — so a new control cannot
+forget it.
+
+**Grid and flex items that contain wide content carry `min-w-0`.** This is load-bearing: an
+item's automatic minimum size is its min-content width, so a 600px chart or an 860px table
+widens its track past the viewport and makes the whole page scroll sideways instead of scrolling
+inside its own `overflow-x-auto` wrapper. Measured on `/market/[address]`: 256px of page overflow
+at 375px wide, before the fix.
 
 ---
 
 ## 8. File structure
 
 ```
-frontend/
+frontend/src/
 ├─ app/
-│  ├─ layout.tsx                 shell, provider, tema
-│  ├─ page.tsx                   /
-│  ├─ market/[address]/page.tsx  /market/[address]
-│  └─ portfolio/page.tsx         /portfolio
+│  ├─ layout.tsx                     fonts, theme script, metadata
+│  ├─ AppShell.tsx                   providers + chrome
+│  ├─ globals.css                    every token and utility (§7)
+│  ├─ page.tsx                       /
+│  ├─ market/[address]/page.tsx      /market/[address]  (+ MarketView.tsx)
+│  ├─ portfolio/page.tsx             /portfolio          — address entry
+│  └─ portfolio/[agent]/page.tsx     /portfolio/[agent]  — one agent's book
 ├─ lib/
-│  ├─ data/
-│  │  ├─ types.ts                DataSource, Capability, Query, model
-│  │  ├─ mock.ts                 MockSource + fixtures
-│  │  ├─ chain.ts                ChainSource (viem)
-│  │  ├─ indexer.ts              IndexerSource (wraps ChainSource)
-│  │  └─ index.ts                mode selector from env
-│  ├─ hooks/                     useMarkets, useMarket, useCandles, usePositions
-│  └─ format.ts                  all of §7.2's rules, in one place
-├─ components/
-│  ├─ primitives/                Table, Badge, Unavailable, CopyAddress, Countdown
-│  ├─ market/                    ProbabilityPanel, PayoutPanel, ProbabilityChart,
-│  │                             MarketStats, PositionsTable, TradeTape, SpecViewer
-│  └─ settlement/                FinalOutcome, ResolutionEvidence, TeeBadge, ReceiptViewer
-└─ test/                         vitest + playwright
+│  ├─ data/{types,mock,index}.ts     DataSource, Query, MockSource, mode selector
+│  ├─ format.ts                      every §7.2 rule, one place
+│  ├─ dpm-view.ts                    probability and payout, from the protocol mirror
+│  ├─ chart.ts                       chart geometry — the ONLY wad→number crossing
+│  ├─ market-rows.ts                 delta24h, volume, status tone
+│  └─ agent-book.ts                  cross-market composition for /portfolio
+├─ hooks/                            provider, toQuery, useMarket(s), useMarketRows, …
+└─ components/
+   ├─ shell/                         Shell, ThemeToggle, ModeIndicator
+   ├─ primitives/                    Panel, PageHeading, Badge, Unavailable,
+   │                                 CopyAddress, Countdown, Skeleton, QueryStates
+   ├─ market/                        ProbabilityPanel, PayoutPanel, ProbabilityChart,
+   │                                 MarketStats, Lifecycle, PositionsTable, TradeTape,
+   │                                 MarketList
+   └─ portfolio/                     AgentBook, AgentPicker
 ```
+
+Dependencies: `next`, `react`, `@tanstack/react-query`, `@0g-delphi/protocol`, and
+`lucide-react` for icons. No component library and no charting library — a chart library takes
+`number`, and wad values must not become floats.
 
 `lib/format.ts` centralizes §7.2 so that no component formats a number on its own — formatting that differs from screen to screen is the easiest way for a numeric UI to lose its credibility.
 
