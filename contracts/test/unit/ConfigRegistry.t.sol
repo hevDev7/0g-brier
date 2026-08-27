@@ -58,6 +58,19 @@ contract ConfigRegistryTest is Test {
         vm.stopPrank();
     }
 
+    /// @dev Batas terbalik (lo > hi) tidak boleh mengunci kunci secara permanen dengan
+    ///      rentang kosong — panggilan yang ditolak tidak boleh menghabiskan kunci sekali-pakai.
+    function test_setBoundsRejectsInvertedRangeAndLeavesKeyUnlocked() public {
+        vm.startPrank(owner);
+        vm.expectRevert(abi.encodeWithSelector(ConfigRegistry.BadBounds.selector, 300, 0));
+        config.setBounds(ConfigKeys.FEE_BPS, 300, 0);
+
+        config.setBounds(ConfigKeys.FEE_BPS, 0, 300);
+        config.setParam(ConfigKeys.FEE_BPS, 100);
+        vm.stopPrank();
+        assertEq(config.params(ConfigKeys.FEE_BPS), 100);
+    }
+
     function test_onlyOwnerCanSetParam() public {
         vm.prank(owner);
         config.setBounds(ConfigKeys.FEE_BPS, 0, 300);

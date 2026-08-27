@@ -7,8 +7,9 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 
 /// @title ConfigRegistry
 /// @notice Satu-satunya sumber parameter, alamat, dan status pause protokol.
-/// @dev Batas parameter DIKUNCI saat pertama dipasang dan tidak pernah bisa dilonggarkan.
-///      Tanpa penguncian itu, "batas keras" hanya akan menjadi saran bagi pemilik.
+/// @dev Batas parameter DIKUNCI saat pertama dipasang: tidak ada fungsi pada implementasi
+///      ini yang bisa melonggarkannya. Satu-satunya jalan di luar batas itu adalah upgrade
+///      tata kelola (spec §13.3) — admin-nya multisig 3/5, dan semua upgrade lewat timelock 48 jam.
 contract ConfigRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable {
     struct Bounds {
         uint128 lo;
@@ -26,6 +27,7 @@ contract ConfigRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeab
 
     error UnboundedParam(bytes32 key);
     error BoundsLocked(bytes32 key);
+    error BadBounds(uint128 lo, uint128 hi);
     error ParamOutOfBounds(bytes32 key, uint256 value, uint256 lo, uint256 hi);
     error NotGuardian();
 
@@ -50,6 +52,7 @@ contract ConfigRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeab
 
     function setBounds(bytes32 key, uint128 lo, uint128 hi) external onlyOwner {
         if (bounds[key].locked) revert BoundsLocked(key);
+        if (lo > hi) revert BadBounds(lo, hi);
         bounds[key] = Bounds({lo: lo, hi: hi, locked: true});
         emit BoundsSet(key, lo, hi);
     }
