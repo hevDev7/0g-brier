@@ -34,6 +34,17 @@ function wadToUnit(v: bigint): number {
   return Number((clamped * COORD_SCALE) / WAD) / Number(COORD_SCALE);
 }
 
+/**
+ * A wad probability as a percentage NUMBER, for layout only — a bar width, a
+ * coordinate. Never for anything a reader sees: displayed percentages come from
+ * `formatProbability`, which stays in bigint the whole way. It lives in this
+ * module because this module is the one place allowed to cross from wad to
+ * `number`, and keeping that single exception single is the point.
+ */
+export function wadToPercent(value: bigint): number {
+  return wadToUnit(value) * 100;
+}
+
 export function seriesPath(
   candles: Candle[],
   box: Box,
