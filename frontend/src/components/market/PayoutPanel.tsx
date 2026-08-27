@@ -4,12 +4,17 @@ import {formatPayout} from "@/lib/format";
 /**
  * Payout DPM didanai seluruhnya oleh pool, dan konsekuensinya payout milik
  * pembeli awal terdilusi oleh pembeli belakangan. Menyembunyikan itu membuat
- * halaman ini berbohong tentang instrumen yang dijualnya — karena itu
- * pengungkapannya ada di sini dan diulang di tiket order sebelum konfirmasi.
+ * halaman ini berbohong tentang instrumen yang ditampilkannya.
+ *
+ * Pengungkapan itu dulu muncul dua kali: di sini dan di tiket order sebelum
+ * konfirmasi. Sejak eksekusi pindah ke `@0g-delphi/agent-kit`, tiketnya tidak
+ * ada lagi — jadi paragraf di bawah adalah SATU-SATUNYA tempat seorang manusia
+ * pernah diberi tahu bahwa payout di market ini mengambang. Ia tidak boleh
+ * dipangkas, diperkecil, atau dilipat ke balik interaksi.
  */
 export function PayoutPanel({q}: {q: readonly [bigint, bigint]}) {
   return (
-    <div className="rounded-lg border border-border px-4 py-3">
+    <div data-testid="payout-panel" className="rounded-lg border border-border px-4 py-3">
       <div className="flex flex-col gap-1.5">
         {([1, 0] as const).map((outcome) => (
           <div key={outcome} className="flex items-baseline justify-between">

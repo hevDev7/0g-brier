@@ -1,10 +1,8 @@
 import {renderHook, waitFor} from "@testing-library/react";
 import type {ReactNode} from "react";
 import {describe, expect, it} from "vitest";
-import {WAD} from "@0g-delphi/protocol";
 import {AppProviders} from "@/hooks/provider";
 import {useMarket} from "@/hooks/useMarket";
-import {useQuote} from "@/hooks/useQuote";
 import {useTrades} from "@/hooks/useTrades";
 import {FIXTURE_MARKETS, MockSource} from "@/lib/data/mock";
 
@@ -43,42 +41,6 @@ describe("useTrades", () => {
   });
 });
 
-describe("useQuote", () => {
-  const q: readonly [bigint, bigint] = [1000n * WAD, 1200n * WAD];
-
-  it("menghitung lembar dan probabilitas secara sinkron, tanpa RPC", () => {
-    const {result} = renderHook(
-      () => useQuote({q, outcome: 1, spendWad: 100n * WAD, feeBps: 100}),
-      {wrapper: wrapper(new MockSource())},
-    );
-    expect(result.current.sharesOut).toBeGreaterThan(0n);
-    expect(result.current.probBeforeWad).toBe(590_163_934_426_229_508n);
-    expect(result.current.probAfterWad).toBeGreaterThan(result.current.probBeforeWad);
-  });
-
-  /** Pembelian menaikkan harga, jadi rata-rata WAJIB di atas marginal awal. */
-  it("harga rata-rata di atas harga marginal sebelum trade", () => {
-    const {result} = renderHook(
-      () => useQuote({q, outcome: 1, spendWad: 100n * WAD, feeBps: 100}),
-      {wrapper: wrapper(new MockSource())},
-    );
-    expect(result.current.avgPriceWad).toBeGreaterThan(768_221_279_597_375_842n);
-  });
-
-  /** Membeli sisi ini menurunkan payout sisi ini — dilusi, terlihat sebagai angka. */
-  it("payout sisi yang dibeli turun setelah trade", () => {
-    const {result} = renderHook(
-      () => useQuote({q, outcome: 1, spendWad: 100n * WAD, feeBps: 100}),
-      {wrapper: wrapper(new MockSource())},
-    );
-    expect(result.current.payoutAfterWad).toBeLessThan(result.current.payoutBeforeWad);
-  });
-
-  it("mengembalikan nol untuk belanja nol tanpa melempar", () => {
-    const {result} = renderHook(
-      () => useQuote({q, outcome: 1, spendWad: 0n, feeBps: 100}),
-      {wrapper: wrapper(new MockSource())},
-    );
-    expect(result.current.sharesOut).toBe(0n);
-  });
-});
+// useQuote dulu diuji di sini. Matematikanya sekarang hidup di
+// packages/protocol/src/quote.ts — murni, tanpa React, jadi ujinya pun tak lagi
+// butuh renderHook: lihat packages/protocol/test/quote.test.ts.

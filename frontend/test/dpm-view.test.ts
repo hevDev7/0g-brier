@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
 import {WAD, dpm} from "@0g-delphi/protocol";
-import {payoutPerShareWad, probabilityWad, qAfterBuy} from "@/lib/dpm-view";
+import {payoutPerShareWad, probabilityWad} from "@/lib/dpm-view";
 
 const q: readonly [bigint, bigint] = [1000n * WAD, 1200n * WAD];
 
@@ -36,12 +36,5 @@ describe("payoutPerShareWad", () => {
 
   it("aman pada market kosong", () => {
     expect(payoutPerShareWad([0n, 0n], 0)).toBe(0n);
-  });
-});
-
-describe("qAfterBuy", () => {
-  it("hanya menambah kaki yang dibeli", () => {
-    expect(qAfterBuy(q, 1, 100n * WAD)).toEqual([1000n * WAD, 1300n * WAD]);
-    expect(qAfterBuy(q, 0, 100n * WAD)).toEqual([1100n * WAD, 1200n * WAD]);
   });
 });
