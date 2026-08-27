@@ -1,7 +1,7 @@
 import type {Candle} from "@/lib/data/types";
 
 const WAD = 10n ** 18n;
-/** Presisi konversi wad→number untuk koordinat. Cukup untuk 600px. */
+/** Precision of the wad→number conversion for coordinates. Enough for 600px. */
 const COORD_SCALE = 10_000n;
 
 export interface Box {
@@ -24,10 +24,10 @@ const plotTop = (b: Box) => b.padTop;
 const plotBottom = (b: Box) => b.height - b.padBottom;
 
 /**
- * Satu-satunya tempat nilai wad menyeberang ke `number` di seluruh frontend,
- * dan hanya untuk koordinat piksel — tidak pernah untuk angka yang dibaca
- * pengguna. Konversi lewat bigint dulu supaya pembagiannya tidak kehilangan
- * presisi sebelum diskalakan.
+ * The only place a wad value crosses into `number` anywhere in the frontend, and
+ * only for pixel coordinates — never for a number a user reads. The conversion
+ * goes through bigint first so the division does not lose precision before being
+ * scaled.
  */
 function wadToUnit(v: bigint): number {
   const clamped = v < 0n ? 0n : v > WAD ? WAD : v;
@@ -46,8 +46,8 @@ export function seriesPath(
   const h = plotBottom(box) - plotTop(box);
   return candles
     .map((c, i) => {
-      // Rentang waktu nol terjadi pada satu bucket; sebarkan merata alih-alih
-      // membagi dengan nol, yang akan menghasilkan NaN di atribut `d`.
+      // A zero time span happens with a single bucket; spread evenly instead of
+      // dividing by zero, which would put NaN in the `d` attribute.
       const tx = span === 0
         ? (candles.length === 1 ? 0 : i / (candles.length - 1))
         : (c.bucketStart - extent.minT) / span;
@@ -84,7 +84,7 @@ export function xTicks(
     const tx = span === 0 ? 0 : (c.bucketStart - extent.minT) / span;
     out.push({
       x: round(plotLeft(box) + tx * w),
-      label: new Date(c.bucketStart * 1000).toLocaleDateString("id-ID", {
+      label: new Date(c.bucketStart * 1000).toLocaleDateString("en-US", {
         day: "numeric",
         month: "short",
       }),

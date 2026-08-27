@@ -3,22 +3,22 @@ import {readFileSync, readdirSync} from "node:fs";
 import {join} from "node:path";
 
 /**
- * Batas ini adalah keputusan produk (spec §1 F3): manusia hanya mengamati.
- * Aturan yang hanya ditulis di dokumen akan dilanggar; yang gagal di CI tidak.
+ * This boundary is a product decision (spec §1 F3): humans only observe. A rule
+ * written only in a document gets broken; one that fails CI does not.
  */
-describe("lapisan data tidak menulis ke rantai", () => {
+describe("the data layer does not write to the chain", () => {
   const dir = join(process.cwd(), "src/lib/data");
 
-  it("tidak ada berkas di lib/data yang menyebut operasi tulis", () => {
+  it("no file in lib/data names a write operation", () => {
     const forbidden = /\b(buyShares|sellShares|redeem|liquidate|writeContract|sendTransaction|getSigner|privateKey)\b/;
     for (const file of readdirSync(dir).filter((f) => f.endsWith(".ts"))) {
       const src = readFileSync(join(dir, file), "utf8");
       const hit = src.match(forbidden);
-      expect(hit?.[0], `${file} menyebut operasi tulis: ${hit?.[0]}`).toBeUndefined();
+      expect(hit?.[0], `${file} names a write operation: ${hit?.[0]}`).toBeUndefined();
     }
   });
 
-  it("DataSource hanya mengekspos metode baca", async () => {
+  it("DataSource exposes only read methods", async () => {
     const {MockSource} = await import("@/lib/data/mock");
     const src = new MockSource();
     const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(src))
@@ -28,7 +28,7 @@ describe("lapisan data tidak menulis ke rantai", () => {
       "getPositions", "getReceipt", "require", "find",
     ]);
     for (const m of methods) {
-      expect(allowed.has(m), `metode tak terduga di MockSource: ${m}`).toBe(true);
+      expect(allowed.has(m), `unexpected method on MockSource: ${m}`).toBe(true);
     }
   });
 });

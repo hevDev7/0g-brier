@@ -14,68 +14,68 @@ const trades: Trade[] = [
 ];
 
 describe("MarketStats", () => {
-  it("menjumlahkan volume dari nilai absolut token, beli maupun jual", () => {
+  it("sums volume from absolute token values, buys and sells alike", () => {
     render(<MarketStats market={m} trades={{status: "ready", data: trades}} />);
     expect(screen.getByTestId("stat-volume")).toHaveTextContent("0.80");
   });
 
-  it("hanya baris volume yang unavailable; baris lain tetap terisi", () => {
+  it("only the volume row is unavailable; the other rows stay populated", () => {
     render(
       <MarketStats market={m} trades={{status: "unavailable", capability: "TRADE_TAPE", mode: "chain"}} />,
     );
-    expect(screen.getByTestId("stat-volume")).toHaveTextContent(/tidak tersedia/i);
-    expect(screen.getByTestId("stat-fee")).not.toHaveTextContent(/tidak tersedia/i);
-    expect(screen.getByTestId("stat-liquidity")).not.toHaveTextContent(/tidak tersedia/i);
+    expect(screen.getByTestId("stat-volume")).toHaveTextContent(/not available/i);
+    expect(screen.getByTestId("stat-fee")).not.toHaveTextContent(/not available/i);
+    expect(screen.getByTestId("stat-liquidity")).not.toHaveTextContent(/not available/i);
   });
 
-  it("menampilkan garis waktu siklus hidup lengkap", () => {
+  it("shows the complete lifecycle timeline", () => {
     render(<MarketStats market={m} trades={{status: "loading"}} />);
     for (const id of ["stat-created", "stat-closes", "stat-settles-by"]) {
       expect(screen.getByTestId(id)).toBeInTheDocument();
     }
   });
 
-  it("menampilkan tarif fee, bukan hanya nominalnya", () => {
+  it("shows the fee as a rate, not just as an amount", () => {
     render(<MarketStats market={m} trades={{status: "loading"}} />);
     expect(screen.getByTestId("stat-fee")).toHaveTextContent("%");
   });
 
-  // Ruling R-F1-1 (task-4 kontroler): Task 7 merakit panel ini ke halaman dan
-  // ujinya bergantung pada `screen.findByTestId("market-stats")` di elemen
-  // terluar panel.
-  it("elemen terluar panel membawa data-testid market-stats", () => {
+  // Ruling R-F1-1 (the task-4 controller): Task 7 assembles this panel into the
+  // page and its test depends on `screen.findByTestId("market-stats")` being on
+  // the panel's outermost element.
+  it("the panel's outermost element carries data-testid market-stats", () => {
     render(<MarketStats market={m} trades={{status: "loading"}} />);
     expect(screen.getByTestId("market-stats")).toBeInTheDocument();
   });
 });
 
 describe("formatTimestamp", () => {
-  // Dua bug tanda sebelumnya di format.ts (formatProbabilityDelta "-0.0", lalu
-  // formatFeeRate kehilangan tanda pada input negatif) adalah alasan kasus tepi
-  // di sini diuji eksplisit, bukan diasumsikan aman karena fungsinya "cuma"
-  // membungkus Date.toLocaleString.
+  // Two earlier sign bugs in format.ts (formatProbabilityDelta's "-0.0", then
+  // formatFeeRate losing the sign on negative input) are why the edge cases here
+  // are tested explicitly rather than assumed safe because the function "merely"
+  // wraps Date.toLocaleString.
   //
-  // Assertion sengaja TIDAK mem-pin string lokal-waktu persis (hari/jam
-  // bergantung zona waktu mesin yang menjalankan test — lihat chart.ts, yang
-  // memakai toLocaleDateString tanpa memin string persis dengan alasan yang
-  // sama). Yang dikunci di sini adalah KEPUTUSAN perilaku di tepi: fungsi
-  // tidak pernah menghasilkan "Invalid Date" / "NaN", dan tahunnya utuh.
+  // The assertions deliberately do NOT pin the exact locale string (the day/hour
+  // depend on the timezone of the machine running the test — see chart.ts, which
+  // uses toLocaleDateString without pinning an exact string for the same reason).
+  // What is locked down here is the behavioural DECISION at the edges: the
+  // function never produces "Invalid Date" / "NaN", and the year survives.
 
-  it("unixSeconds 0 dirender sebagai epoch sungguhan, bukan placeholder", () => {
-    // 0 adalah timestamp Unix yang sah (1 Jan 1970) — formatTimestamp tidak
-    // mengetahui apa pun tentang "belum diketahui"; itu urusan Query.status,
-    // bukan urusan nilai numerik. Jadi 0 diformat apa adanya, sama seperti
-    // formatCollateral(0n, ...) merender "0.00", bukan disembunyikan.
+  it("unixSeconds 0 renders as the real epoch, not as a placeholder", () => {
+    // 0 is a valid Unix timestamp (1 Jan 1970) — formatTimestamp knows nothing
+    // about "not yet known"; that is Query.status's business, not a numeric value's.
+    // So 0 is formatted as it is, just as formatCollateral(0n, ...) renders "0.00"
+    // rather than hiding it.
     const out = formatTimestamp(0);
     expect(out).not.toBe("Invalid Date");
     expect(out).not.toMatch(/nan/i);
-    expect(out).toMatch(/19(69|70)/); // epoch, tahun tepat gantung zona waktu mesin
+    expect(out).toMatch(/19(69|70)/); // the epoch; the exact year depends on the machine's timezone
   });
 
-  it("tanggal jauh di masa depan tetap terformat, tidak overflow", () => {
-    // Tengah tahun & tengah hari UTC sengaja dipakai (bukan tengah malam/akhir
-    // tahun) supaya offset zona waktu (-12..+14 jam) mana pun tidak pernah
-    // menggeser tanggal ke tahun lain — angka tahun aman dipin di sini.
+  it("a date far in the future still formats, without overflowing", () => {
+    // Mid-year and mid-day UTC are used deliberately (not midnight or year end) so
+    // that no timezone offset (-12..+14 hours) can ever shift the date into another
+    // year — which makes the year safe to pin here.
     const farFuture = Math.floor(Date.UTC(9999, 5, 15, 12, 0, 0) / 1000);
     const out = formatTimestamp(farFuture);
     expect(out).not.toBe("Invalid Date");

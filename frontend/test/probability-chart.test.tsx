@@ -11,19 +11,19 @@ const cs: Candle[] = [
 ];
 
 describe("ProbabilityChart", () => {
-  it("menggambar dua seri", () => {
+  it("draws two series", () => {
     const {container} = render(<ProbabilityChart candles={cs} />);
     expect(container.querySelectorAll("path[data-series]").length).toBe(2);
   });
 
-  it("sumbu Y berlabel 0% sampai 100%, bukan rentang data", () => {
+  it("labels the Y axis 0% to 100%, not the data range", () => {
     render(<ProbabilityChart candles={cs} />);
     for (const label of ["0%", "25%", "50%", "75%", "100%"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
   });
 
-  it("seri NO adalah komplemen seri YES", () => {
+  it("the NO series is the complement of the YES series", () => {
     const {container} = render(<ProbabilityChart candles={cs} />);
     const yes = container.querySelector('path[data-series="yes"]')!.getAttribute("d")!;
     const no = container.querySelector('path[data-series="no"]')!.getAttribute("d")!;
@@ -32,13 +32,13 @@ describe("ProbabilityChart", () => {
     expect(no).not.toContain("NaN");
   });
 
-  it("menyebut sumbu sebagai probabilitas, bukan harga", () => {
+  it("names the axis as a probability, not a price", () => {
     render(<ProbabilityChart candles={cs} />);
     expect(screen.getByText(/P\(YES\)/)).toBeInTheDocument();
   });
 
-  it("data kosong merender pesan, bukan sumbu telanjang", () => {
+  it("empty data renders a message, not a bare axis", () => {
     render(<ProbabilityChart candles={[]} />);
-    expect(screen.getByText(/belum ada riwayat/i)).toBeInTheDocument();
+    expect(screen.getByText(/no history yet/i)).toBeInTheDocument();
   });
 });

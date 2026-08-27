@@ -1,18 +1,18 @@
 import {describe, expect, it} from "vitest";
 import {WAD, dpm} from "@0g-delphi/protocol";
 
-describe("integrasi workspace", () => {
-  it("mengimpor WAD dari @0g-delphi/protocol", () => {
+describe("workspace integration", () => {
+  it("imports WAD from @0g-delphi/protocol", () => {
     expect(WAD).toBe(1_000_000_000_000_000_000n);
   });
 
-  it("cermin DPM menghitung probabilitas 3-4-5 yang benar", () => {
-    // P_i = q_i^2 / (q_0^2 + q_1^2); untuk (3,4): 9/25 dan 16/25
+  it("the DPM mirror computes the correct 3-4-5 probabilities", () => {
+    // P_i = q_i^2 / (q_0^2 + q_1^2); for (3,4): 9/25 and 16/25
     expect(dpm.probability([3n * WAD, 4n * WAD], 0)).toBe(360_000_000_000_000_000n);
     expect(dpm.probability([3n * WAD, 4n * WAD], 1)).toBe(640_000_000_000_000_000n);
   });
 
-  it("harga marginal BUKAN probabilitas — keduanya berbeda", () => {
+  it("the marginal price is NOT the probability — the two differ", () => {
     const q: readonly [bigint, bigint] = [3n * WAD, 4n * WAD];
     expect(dpm.price(q, 1)).toBe(800_000_000_000_000_000n);   // 0.8
     expect(dpm.probability(q, 1)).toBe(640_000_000_000_000_000n); // 0.64

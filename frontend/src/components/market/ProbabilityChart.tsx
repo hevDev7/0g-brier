@@ -11,7 +11,7 @@ export function ProbabilityChart({candles}: {candles: Candle[]}) {
         data-testid="probability-chart"
         className="rounded-lg border border-border px-4 py-8 text-center text-[13px] text-text-muted"
       >
-        Belum ada riwayat untuk market ini.
+        No history yet for this market.
       </div>
     );
   }
@@ -20,24 +20,24 @@ export function ProbabilityChart({candles}: {candles: Candle[]}) {
     minT: candles[0]!.bucketStart,
     maxT: candles[candles.length - 1]!.bucketStart,
   };
-  // P(YES) adalah dpm.probability = p_i^2, bukan harga marginal p_i.
-  // Candle.close SUDAH probabilitas (spec §5.1) — tidak ada aritmetika di
-  // sini selain komplemen WAD - close, yang eksak karena kedua probabilitas
-  // dijamin berjumlah WAD menurut konstruksi (bukan pembulatan/pendekatan).
+  // P(YES) is dpm.probability = p_i^2, not the marginal price p_i. Candle.close
+  // is ALREADY a probability (spec §5.1) — there is no arithmetic here beyond the
+  // complement WAD - close, which is exact because the two probabilities are
+  // guaranteed by construction to sum to WAD (not by rounding or approximation).
   const yes = seriesPath(candles, BOX, extent, (c) => c.close);
   const no = seriesPath(candles, BOX, extent, (c) => WAD - c.close);
 
   return (
     <div data-testid="probability-chart" className="rounded-lg border border-border p-3">
       <div className="mb-2 text-[12px] uppercase tracking-wide text-text-muted">
-        Riwayat P(YES)
+        P(YES) history
       </div>
       <div className="overflow-x-auto">
         <svg
           viewBox={`0 0 ${BOX.width} ${BOX.height}`}
           className="w-full"
           role="img"
-          aria-label="Grafik riwayat probabilitas"
+          aria-label="Probability history chart"
         >
           {yTicks(BOX).map((t) => (
             <g key={t.label}>

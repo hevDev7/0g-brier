@@ -30,27 +30,28 @@ import type {
 } from "@/lib/data/types";
 
 /**
- * Halaman PEMERIKSAAN, bukan tempat bertransaksi (spec §1 F3): berapa harganya,
- * dari mana harga itu datang, siapa memegang apa, dan atas bukti apa market
- * diselesaikan. Beli, jual, tebus, dan likuidasi seluruhnya hidup di
- * `@0g-delphi/agent-kit`, di luar dApp — jadi tidak ada kontrol eksekusi di
- * berkas ini. Bukan disembunyikan dan bukan dinonaktifkan: ABSEN. Tombol mati
- * tetap menjanjikan sesuatu yang tak akan pernah ada di sini, dan uji halaman
- * ini menegaskan tak ada satu pun tombol beli/jual/approve yang tersisa.
+ * An INSPECTION page, not a place to transact (spec §1 F3): what the price is,
+ * where that price came from, who holds what, and on what evidence the market
+ * was resolved. Buy, sell, redeem, and liquidate all live in
+ * `@0g-delphi/agent-kit`, outside the dApp — so there is no execution control in
+ * this file. Not hidden and not disabled: ABSENT. A dead button still promises
+ * something that will never exist here, and this page's test asserts that not one
+ * buy/sell/approve button remains.
  *
- * Tidak ada SpecViewer di sini, dan itu disengaja: isinya berasal dari 0G
- * Storage lewat `specRoot`, yang integrasinya belum ada. Aturan penyelesaian
- * tetap terbaca lewat `market.rules` di bawah, dan kriteria yang benar-benar
- * dipakai komite lewat `ResolutionEvidence` begitu market selesai.
+ * There is no SpecViewer here, and that is deliberate: its content comes from 0G
+ * Storage through `specRoot`, whose integration does not exist yet. The
+ * resolution rules stay readable through `market.rules` below, and the criteria
+ * the committee actually used through `ResolutionEvidence` once the market is
+ * settled.
  */
 export function MarketView({address}: {address: `0x${string}`}): React.JSX.Element {
   const market = useMarket(address);
 
-  // Pola yang sama dengan setiap pembongkaran Query<T> di bawah — switch tanpa
-  // `default`, tipe kembalian non-nullable eksplisit di tanda tangan fungsi.
-  // Cabang `ready` menyerahkan ke komponen tersendiri supaya hook data lain
-  // (tape, candle, posisi, receipt) tidak perlu dipanggil sebelum `market.data`
-  // ada, dan tetap tak bersyarat di dalam komponen itu sendiri.
+  // The same pattern as every other Query<T> unwrap below — a switch with no
+  // `default`, and an explicit non-nullable return type on the function
+  // signature. The `ready` branch hands off to a component of its own so the
+  // other data hooks (tape, candles, positions, receipt) need not be called
+  // before `market.data` exists, and stay unconditional inside that component.
   switch (market.status) {
     case "ready":
       return <MarketBody market={market.data} />;
@@ -61,9 +62,9 @@ export function MarketView({address}: {address: `0x${string}`}): React.JSX.Eleme
         </Shell>
       );
     case "error":
-      return <Shell>Gagal memuat: {market.error.message}</Shell>;
+      return <Shell>Failed to load: {market.error.message}</Shell>;
     case "loading":
-      return <Shell>Memuat…</Shell>;
+      return <Shell>Loading…</Shell>;
   }
 }
 
@@ -86,13 +87,13 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
                 label={market.status}
               />
               <span className="text-[12px] text-text-muted">{market.category}</span>
-              {/* Hitung mundur hanya sah selama perdagangan masih berjalan: di
-                  market yang sudah tutup, `formatCountdown` mengembalikan
-                  "tutup" dan barisnya akan terbaca "tutup dalam tutup". Status
-                  market sendiri sudah mengatakannya lewat badge di atas. */}
+              {/* A countdown is only meaningful while trading is still running: on a
+                  market that has closed, `formatCountdown` returns "closed" and the
+                  line would read "closes in closed". The market status already says
+                  so through the badge above. */}
               {market.status === "Open" && (
                 <span className="text-[12px] text-text-muted">
-                  tutup dalam <Countdown until={market.tradingEnd} />
+                  closes in <Countdown until={market.tradingEnd} />
                 </span>
               )}
               <CopyAddress address={market.address} />
@@ -106,13 +107,13 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
           {renderPositions(positions, market, source.mode)}
           {renderTrades(trades, market.collateral)}
 
-          {/* Aturan penyelesaian berasal dari MARKET_STATE — mode apa pun bisa
-              menjawabnya, jadi ia tak pernah `unavailable`. Halaman pemeriksaan
-              tanpa aturan yang mengikatnya menyembunyikan justru hal yang
-              paling perlu diperiksa pembaca sebelum market selesai. */}
+          {/* The resolution rules come from MARKET_STATE — any mode can answer it,
+              so they are never `unavailable`. An inspection page without the rules
+              that bind it hides precisely the thing a reader most needs to examine
+              before the market settles. */}
           <section className="rounded-lg border border-border p-4">
             <h2 className="mb-2 text-[12px] uppercase tracking-wide text-text-faint">
-              Aturan penyelesaian
+              Resolution rules
             </h2>
             <p className="text-[13px] leading-relaxed text-text-muted">{market.rules}</p>
           </section>
@@ -128,18 +129,18 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
 }
 
 /**
- * Diekstrak dari ternary jadi switch atas `.status` supaya jaminan
- * exhaustiveness-nya STRUKTURAL, bukan kebetulan cara kode ini ditulis hari
- * ini. Tipe kembalian non-nullable eksplisit (`React.JSX.Element`) adalah
- * bagian yang menegakkan itu: di bawah `strict`, fungsi yang "jatuh" dari
- * akhir switch tanpa return mengembalikan `undefined`, dan `undefined` tak
- * bisa ditetapkan ke `React.JSX.Element` — jadi menghapus satu `case` gagal
- * kompilasi (TS2366). Tanpa anotasi ini TypeScript diam-diam menyimpulkan
- * `| undefined` dan jaminannya lenyap.
+ * Extracted from a ternary into a switch over `.status` so that the
+ * exhaustiveness guarantee is STRUCTURAL rather than an accident of how this
+ * code happens to be written today. The explicit non-nullable return type
+ * (`React.JSX.Element`) is the part that enforces it: under `strict`, a function
+ * that "falls off" the end of a switch without returning returns `undefined`,
+ * and `undefined` is not assignable to `React.JSX.Element` — so deleting a
+ * `case` fails to compile (TS2366). Without this annotation TypeScript quietly
+ * infers `| undefined` and the guarantee evaporates.
  *
- * SENGAJA TIDAK ADA `default` di seluruh fungsi di bawah: menambahkannya "demi
- * jaga-jaga" akan melucuti exhaustiveness check ini — compiler berhenti memaksa
- * kasus baru ditangani begitu ada fallback yang menampung segalanya.
+ * There is DELIBERATELY no `default` in any of the functions below: adding one
+ * "just in case" would disarm this exhaustiveness check — the compiler stops
+ * forcing new cases to be handled the moment a catch-all fallback exists.
  */
 function renderTrades(trades: Query<Trade[]>, collateral: CollateralInfo): React.JSX.Element {
   switch (trades.status) {
@@ -149,10 +150,10 @@ function renderTrades(trades: Query<Trade[]>, collateral: CollateralInfo): React
       return <Unavailable capability={trades.capability} mode={trades.mode} />;
     case "error":
       return (
-        <div className="text-[13px] text-neg">Gagal memuat transaksi: {trades.error.message}</div>
+        <div className="text-[13px] text-neg">Failed to load trades: {trades.error.message}</div>
       );
     case "loading":
-      return <div className="text-[13px] text-text-muted">Memuat transaksi…</div>;
+      return <div className="text-[13px] text-text-muted">Loading trades…</div>;
   }
 }
 
@@ -164,17 +165,18 @@ function renderChart(candles: Query<Candle[]>): React.JSX.Element {
       return <Unavailable capability={candles.capability} mode={candles.mode} />;
     case "error":
       return (
-        <div className="text-[13px] text-neg">Gagal memuat riwayat: {candles.error.message}</div>
+        <div className="text-[13px] text-neg">Failed to load history: {candles.error.message}</div>
       );
     case "loading":
-      return <div className="text-[13px] text-text-muted">Memuat riwayat…</div>;
+      return <div className="text-[13px] text-text-muted">Loading history…</div>;
   }
 }
 
 /**
- * `mode` diambil dari sumber data, bukan dari `positions` — cabang `ready` tak
- * membawanya, dan tabel tetap perlu tahu mode saat ini untuk sel harga masuk
- * yang bisa `null` (COST_BASIS). Ketersediaan per SEL, bukan per panel.
+ * `mode` comes from the data source, not from `positions` — the `ready` branch
+ * does not carry it, and the table still needs the current mode for the entry
+ * price cell, which can be `null` (COST_BASIS). Availability per CELL, not per
+ * panel.
  */
 function renderPositions(
   positions: Query<Position[]>,
@@ -188,14 +190,14 @@ function renderPositions(
       return <Unavailable capability={positions.capability} mode={positions.mode} />;
     case "error":
       return (
-        <div className="text-[13px] text-neg">Gagal memuat posisi: {positions.error.message}</div>
+        <div className="text-[13px] text-neg">Failed to load positions: {positions.error.message}</div>
       );
     case "loading":
-      return <div className="text-[13px] text-text-muted">Memuat posisi…</div>;
+      return <div className="text-[13px] text-text-muted">Loading positions…</div>;
   }
 }
 
-/** Putusan komite DAN bukti yang membuatnya bisa diperiksa — satu receipt, dua panel. */
+/** The committee's verdict AND the evidence that makes it inspectable — one receipt, two panels. */
 function renderSettlement(
   receipt: Query<SettlementReceipt>,
   market: MarketDetail,
@@ -213,11 +215,11 @@ function renderSettlement(
     case "error":
       return (
         <div className="text-[13px] text-neg">
-          Gagal memuat bukti resolusi: {receipt.error.message}
+          Failed to load the resolution evidence: {receipt.error.message}
         </div>
       );
     case "loading":
-      return <div className="text-[13px] text-text-muted">Memuat bukti resolusi…</div>;
+      return <div className="text-[13px] text-text-muted">Loading resolution evidence…</div>;
   }
 }
 

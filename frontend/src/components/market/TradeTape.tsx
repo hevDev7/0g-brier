@@ -7,7 +7,7 @@ export function TradeTape({trades, collateral}: {trades: Trade[]; collateral: Co
       <table className="w-full text-[13px]">
         <thead className="bg-bg-sunken text-[11px] uppercase tracking-wide text-text-faint">
           <tr>
-            {["Waktu", "Sisi", "Lembar", collateral.symbol, "P(YES)"].map((h) => (
+            {["Time", "Side", "Shares", collateral.symbol, "P(YES)"].map((h) => (
               <th key={h} className="px-3 py-2 text-left font-medium last:text-right">
                 {h}
               </th>
@@ -33,7 +33,7 @@ export function TradeTape({trades, collateral}: {trades: Trade[]; collateral: Co
         </tbody>
       </table>
       <div className="border-t border-border px-3 py-1.5 text-[11px] text-text-faint">
-        {trades.length} transaksi terakhir · trader {shortAddress(trades[0]?.trader ?? "0x")}…
+        last {trades.length} trades · trader {shortAddress(trades[0]?.trader ?? "0x")}…
       </div>
     </div>
   );

@@ -19,13 +19,13 @@ export function CopyAddress({address}: {address: string}) {
       title={address}
       aria-live="polite"
       onClick={() => {
-        // "tersalin" hanya sah SETELAH writeText sungguh resolve — bukan
-        // diklaim di muka. API yang absen (optional chaining di bawah pendek-
-        // sirkuit ke undefined, tak pernah sampai ke .then) atau promise yang
-        // reject (dokumen tak fokus, izin ditolak) harus membiarkan tombol
-        // tetap menampilkan alamat, bukan mengklaim sukses yang tak terjadi —
-        // aturan yang sama yang membuat `unavailable` jadi anggota union
-        // Query, dipindah di sini dari data ke aksi.
+        // "copied" is only true AFTER writeText genuinely resolves — never
+        // claimed up front. An absent API (the optional chaining below
+        // short-circuits to undefined and never reaches .then) or a rejected
+        // promise (document not focused, permission denied) must leave the button
+        // showing the address rather than claiming a success that did not happen —
+        // the same rule that makes `unavailable` a member of the Query union,
+        // moved here from data to action.
         navigator.clipboard
           ?.writeText(address)
           .then(() => {
@@ -37,7 +37,7 @@ export function CopyAddress({address}: {address: string}) {
       }}
       className="font-mono text-[13px] text-text-muted hover:text-text"
     >
-      {copied ? "tersalin" : shortAddress(address)}
+      {copied ? "copied" : shortAddress(address)}
     </button>
   );
 }

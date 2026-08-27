@@ -14,49 +14,49 @@ const positions: Position[] = [
 ];
 
 describe("PositionsTable", () => {
-  it("merender satu baris per posisi dengan sisinya", () => {
+  it("renders one row per position, with its side", () => {
     render(<PositionsTable positions={positions} market={m} mode="mock" />);
-    expect(screen.getAllByRole("row")).toHaveLength(3); // kepala + 2
+    expect(screen.getAllByRole("row")).toHaveLength(3); // header + 2
     expect(screen.getByText("YES")).toBeInTheDocument();
     expect(screen.getByText("NO")).toBeInTheDocument();
   });
 
-  it("harga masuk dan harga sekarang keduanya per lembar, tanpa label persen", () => {
+  it("entry price and current price are both per share, with no percent label", () => {
     render(<PositionsTable positions={positions} market={m} mode="mock" />);
     const row = screen.getAllByRole("row")[1]!;
     expect(within(row).getByTestId("entry")).not.toHaveTextContent("%");
     expect(within(row).getByTestId("current")).not.toHaveTextContent("%");
   });
 
-  it("daftar kosong menjelaskan, bukan tabel telanjang", () => {
+  it("an empty list explains itself rather than showing a bare table", () => {
     render(<PositionsTable positions={[]} market={m} mode="mock" />);
-    expect(screen.getByText(/belum ada posisi/i)).toBeInTheDocument();
+    expect(screen.getByText(/no positions/i)).toBeInTheDocument();
   });
 
-  it("harga masuk null merender penjelasan, bukan nol; kolom lain tetap terisi", () => {
+  it("a null entry price renders an explanation, not a zero; the other columns stay populated", () => {
     const unknown = positions.map((p) => ({...p, entryPriceWad: null}));
     render(<PositionsTable positions={unknown} market={m} mode="chain" />);
     const row = screen.getAllByRole("row")[1]!;
-    expect(within(row).getByTestId("entry")).toHaveTextContent(/tidak tersedia/i);
+    expect(within(row).getByTestId("entry")).toHaveTextContent(/not available/i);
     expect(within(row).getByTestId("entry")).not.toHaveTextContent("0.0000");
-    expect(within(row).getByTestId("current")).not.toHaveTextContent(/tidak tersedia/i);
+    expect(within(row).getByTestId("current")).not.toHaveTextContent(/not available/i);
   });
 
-  it("memendekkan alamat agent", () => {
+  it("elides the agent address", () => {
     render(<PositionsTable positions={positions} market={m} mode="mock" />);
     expect(screen.queryByText(positions[0]!.agent)).not.toBeInTheDocument();
     expect(screen.getByText(/0xAAaA…AaAa/i)).toBeInTheDocument();
   });
 
-  // Ruling R-F1-1 (task-5 kontroler): Task 7 merakit panel ini ke halaman dan
-  // ujinya bergantung pada `screen.findByTestId("positions-table")` di elemen
-  // terluar panel — di KEDUA cabang, baik terisi maupun kosong.
-  it("elemen terluar membawa data-testid positions-table saat terisi", () => {
+  // Ruling R-F1-1 (the task-5 controller): Task 7 assembles this panel into the
+  // page and its test depends on `screen.findByTestId("positions-table")` being on
+  // the panel's outermost element — in BOTH branches, populated and empty.
+  it("the outermost element carries data-testid positions-table when populated", () => {
     render(<PositionsTable positions={positions} market={m} mode="mock" />);
     expect(screen.getByTestId("positions-table")).toBeInTheDocument();
   });
 
-  it("elemen terluar membawa data-testid positions-table saat kosong", () => {
+  it("the outermost element carries data-testid positions-table when empty", () => {
     render(<PositionsTable positions={[]} market={m} mode="mock" />);
     expect(screen.getByTestId("positions-table")).toBeInTheDocument();
   });

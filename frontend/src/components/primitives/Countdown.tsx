@@ -3,17 +3,17 @@ import {useEffect, useState} from "react";
 import {formatCountdown} from "@/lib/format";
 
 /**
- * `nowSeconds` disuntik agar bisa diuji secara deterministik; bila ada, efek di
- * bawah dilewati sepenuhnya.
+ * `nowSeconds` is injected so this can be tested deterministically; when present,
+ * the effect below is skipped entirely.
  *
- * Tanpa suntikan itu jam dinding dibaca di EFEK, bukan saat render. Membacanya
- * saat render melanggar `react-hooks/purity` — dan bukan karena aturan lint yang
- * cerewet: hasil render jadi bergantung pada kapan ia dipanggil, sehingga server
- * dan klien bisa menghasilkan angka berbeda untuk masukan yang sama.
+ * Without that injection the wall clock is read in an EFFECT, not during render.
+ * Reading it during render violates `react-hooks/purity` — and not because of a
+ * fussy lint rule: the render result would then depend on when it was called, so
+ * server and client could produce different numbers for the same input.
  *
- * Sebelum efeknya jalan, komponen ini merender elipsis, bukan angka. Server
- * memang TIDAK TAHU jam pembaca, dan menebaknya berarti menampilkan hitungan
- * mundur yang salah lalu memperbaikinya diam-diam.
+ * Before the effect runs, this component renders an ellipsis, not a number. The
+ * server genuinely DOES NOT KNOW the reader's clock, and guessing means showing a
+ * wrong countdown and then silently correcting it.
  */
 export function Countdown({until, nowSeconds}: {until: number; nowSeconds?: number}) {
   const [now, setNow] = useState<number | null>(nowSeconds ?? null);
@@ -22,7 +22,7 @@ export function Countdown({until, nowSeconds}: {until: number; nowSeconds?: numb
     if (nowSeconds !== undefined) return;
     const tick = () => setNow(Math.floor(Date.now() / 1000));
     tick();
-    // Granularitas tampilannya menit, jadi 30 detik sudah lebih dari cukup.
+    // The display granularity is minutes, so 30 seconds is more than enough.
     const id = setInterval(tick, 30_000);
     return () => clearInterval(id);
   }, [nowSeconds]);

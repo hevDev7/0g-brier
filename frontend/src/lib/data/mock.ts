@@ -29,7 +29,7 @@ const MUSDC: CollateralInfo = {
 const HOUR = 3_600;
 const NOW = 1_790_000_000;
 
-/** poolWad diturunkan, tidak pernah diketik — fixture tak boleh melanggar invarian rantai. */
+/** poolWad is derived, never typed — a fixture must not break a chain invariant. */
 function market(
   partial: Omit<MarketDetail, "poolWad" | "collateral">,
 ): MarketDetail {
@@ -39,12 +39,12 @@ function market(
 export const FIXTURE_MARKETS: MarketDetail[] = [
   market({
     address: "0x1111111111111111111111111111111111111111",
-    question: "Apakah harga penutupan ETH/USD pada 30 September 2026 berada di atas $4.000?",
+    question: "Will the ETH/USD closing price on 30 September 2026 be above $4,000?",
     rules:
-      "Diselesaikan YES bila harga penutupan harian ETH/USD pada 2026-09-30 23:59 UTC menurut " +
-      "sumber yang terdaftar berada di atas $4.000,00. Diselesaikan NO bila di bawah atau sama " +
-      "dengan. Bila tidak ada sumber yang menerbitkan harga penutupan pada hari itu, market " +
-      "dianggap UNRESOLVABLE dan dilikuidasi.",
+      "Resolves YES if the daily ETH/USD closing price at 2026-09-30 23:59 UTC, per the listed " +
+      "sources, is above $4,000.00. Resolves NO if it is at or below that. If no source " +
+      "publishes a closing price on that day, the market is deemed UNRESOLVABLE and is wound " +
+      "down.",
     category: "crypto",
     tier: "VERIFIED",
     status: "Open",
@@ -58,10 +58,10 @@ export const FIXTURE_MARKETS: MarketDetail[] = [
   }),
   market({
     address: "0x2222222222222222222222222222222222222222",
-    question: "Apakah 0G Chain akan mengumumkan mainnet v2 sebelum 1 Desember 2026?",
+    question: "Will 0G Chain announce mainnet v2 before 1 December 2026?",
     rules:
-      "Diselesaikan YES bila pengumuman resmi terbit di kanal resmi 0G Labs sebelum " +
-      "2026-12-01 00:00 UTC. Pengumuman pihak ketiga tidak dihitung.",
+      "Resolves YES if an official announcement is published on an official 0G Labs channel " +
+      "before 2026-12-01 00:00 UTC. Third-party announcements do not count.",
     category: "crypto",
     tier: "FAST",
     status: "Open",
@@ -75,8 +75,8 @@ export const FIXTURE_MARKETS: MarketDetail[] = [
   }),
   market({
     address: "0x3333333333333333333333333333333333333333",
-    question: "Apakah inflasi tahunan zona euro turun di bawah 2,0% pada rilis Oktober 2026?",
-    rules: "Diselesaikan menurut rilis HICP Eurostat untuk Oktober 2026, angka flash.",
+    question: "Will euro-area annual inflation fall below 2.0% in the October 2026 release?",
+    rules: "Resolves according to the Eurostat HICP release for October 2026, the flash figure.",
     category: "economics",
     tier: "DETERMINISTIC",
     status: "Settled",
@@ -90,12 +90,12 @@ export const FIXTURE_MARKETS: MarketDetail[] = [
   }),
 ];
 
-/** Pola sisi pseudo-acak i-dependent: 1 dari 3 trade di sisi NO, sisanya YES. */
+/** An i-dependent pseudo-random side pattern: 1 trade in 3 on the NO side, the rest YES. */
 function syntheticOutcome(i: number): Outcome {
   return (i % 3 === 0 ? 0 : 1) as Outcome;
 }
 
-/** Bobot pseudo-acak i-dependent — proporsi RELATIF, bukan hitungan lembar absolut (lihat fixtureTrades). */
+/** An i-dependent pseudo-random weight — a RELATIVE proportion, not an absolute share count (see fixtureTrades). */
 function syntheticWeight(i: number): bigint {
   return BigInt(12 + ((i * 37) % 90));
 }
@@ -104,18 +104,18 @@ function fixtureTrades(m: MarketDetail): Trade[] {
   const trades: Trade[] = [];
   const startQ: readonly [bigint, bigint] = [m.q[0] / 2n, m.q[1] / 2n];
 
-  // Bobot di atas dulunya diperlakukan sebagai hitungan LEMBAR ABSOLUT.
-  // Bug: totalnya (414 utk sisi NO, 906 utk sisi YES) sama untuk setiap
-  // market, jadi q sintetis di akhir 24 trade melenceng dari m.q market ini
-  // — trade TERBARU (yang tampil paling atas di tape) menunjukkan
-  // probabilitas yang tak cocok dengan panel probabilitas, yang dihitung
-  // langsung dari m.q.
+  // The weights above were once treated as ABSOLUTE share counts. The bug: their
+  // totals (414 for the NO side, 906 for the YES side) were identical for every
+  // market, so the synthetic q at the end of 24 trades drifted away from this
+  // market's m.q — and the MOST RECENT trade (the one at the top of the tape)
+  // showed a probability that did not match the probability panel, which is
+  // computed directly from m.q.
   //
-  // Di bawah ini bobot yang sama dipakai sebagai PROPORSI relatif per sisi,
-  // diskalakan lewat distribusi bigint-eksak (bukan .toFixed / floating
-  // point) supaya trade TERAKHIR tiap sisi tepat menutup q ke m.q — trade
-  // tape jadi koheren dengan keadaan market saat ini, tanpa mengubah m.q itu
-  // sendiri (setiap uji probabilitas/payout di suite ini bergantung padanya).
+  // Below, the same weights are used as RELATIVE proportions per side, scaled
+  // through an exact-bigint distribution (not .toFixed / floating point) so that
+  // the LAST trade on each side closes q onto m.q exactly — the trade tape becomes
+  // coherent with the current market state without changing m.q itself (every
+  // probability/payout test in this suite depends on it).
   const remainingWeight: [bigint, bigint] = [0n, 0n];
   for (let i = 0; i < 24; i++) {
     remainingWeight[syntheticOutcome(i)] += syntheticWeight(i);
@@ -126,10 +126,10 @@ function fixtureTrades(m: MarketDetail): Trade[] {
   for (let i = 0; i < 24; i++) {
     const outcome = syntheticOutcome(i);
     const w = syntheticWeight(i);
-    // Distribusi proporsional bigint-eksak: saat trade TERAKHIR di sisi ini
-    // diproses, remainingWeight[outcome] === w, jadi shares ===
-    // remainingAmount[outcome] persis — sisa pembulatan antar-trade tidak
-    // menumpuk ke mana-mana, ia disapu habis oleh trade penutup itu sendiri.
+    // An exact-bigint proportional distribution: when the LAST trade on this side
+    // is processed, remainingWeight[outcome] === w, so shares ===
+    // remainingAmount[outcome] exactly — the rounding remainder between trades
+    // accumulates nowhere, it is swept up by that closing trade itself.
     const shares = (remainingAmount[outcome] * w) / remainingWeight[outcome];
     remainingAmount[outcome] -= shares;
     remainingWeight[outcome] -= w;
@@ -148,19 +148,19 @@ function fixtureTrades(m: MarketDetail): Trade[] {
       probAfterWad: dpm.probability(q, 1),
     });
   }
-  return trades.reverse(); // terbaru dulu
+  return trades.reverse(); // newest first
 }
 
 /**
- * Posisi diturunkan dari transaksi fixture, bukan ditulis terpisah. Menulisnya
- * terpisah adalah cara paling mudah membuat dua panel di halaman yang sama
- * saling membantah — dan itu sudah pernah terjadi di F0, saat tape berakhir di
- * 73,1% sementara market berharga 59,0%.
+ * Positions are derived from the fixture trades, not written separately. Writing
+ * them separately is the easiest way to make two panels on the same page
+ * contradict each other — and that already happened in F0, when the tape ended at
+ * 73.1% while the market was priced at 59.0%.
  */
 export function fixturePositions(m: MarketSummary, trades: Trade[]): Position[] {
   const acc = new Map<string, {shares: bigint; tokens: bigint}>();
   for (const t of trades) {
-    if (t.sharesDelta <= 0n) continue; // hanya pembelian membentuk harga masuk
+    if (t.sharesDelta <= 0n) continue; // only purchases form an entry price
     const key = `${t.trader}:${t.outcome}`;
     const cur = acc.get(key) ?? {shares: 0n, tokens: 0n};
     acc.set(key, {shares: cur.shares + t.sharesDelta, tokens: cur.tokens + t.tokens});
@@ -173,8 +173,8 @@ export function fixturePositions(m: MarketSummary, trades: Trade[]): Position[] 
       agent: agent as `0x${string}`,
       outcome: Number(outcomeStr) as Outcome,
       shares: v.shares,
-      // tokens sudah dalam satuan token; naikkan ke wad sebelum membagi supaya
-      // hasilnya harga per lembar dalam wad, bukan pecahan yang terpotong nol.
+      // tokens is already in token units; scale it up to wad before dividing so the
+      // result is a price per share in wad, not a fraction truncated to zero.
       entryPriceWad: (toWad(v.tokens, m.collateral.decimals) * WAD) / v.shares,
     });
   }
@@ -189,30 +189,29 @@ const FIXTURE_RECEIPT: SettlementReceipt = {
     {model: "qwen3-32b", outcome: 0, teeVerified: false, simulated: true},
   ],
   judgeModel: "claude-opus-5",
-  // Diselesaikan untuk market ketiga (inflasi zona euro) — lihat FIXTURE_MARKETS.
-  // criteria/reasoning/sources HARUS mengacu pada pertanyaan itu, bukan pertanyaan
-  // market lain: satu-satunya market yang receipt-nya bisa diquery adalah yang
-  // status-nya Settled, jadi konten yang salah topik di sini tidak akan pernah
-  // tertutupi oleh market lain yang "kebetulan" cocok.
+  // Resolved for the third market (euro-area inflation) — see FIXTURE_MARKETS.
+  // criteria/reasoning/sources MUST refer to that question and not another market's:
+  // the only market whose receipt can be queried is the one whose status is Settled,
+  // so off-topic content here would never be covered by some other market that
+  // "happens" to match.
   reasoning:
-    "Dua dari tiga resolver menyimpulkan YES. Rilis flash HICP Eurostat untuk " +
-    "Oktober 2026 mencatat inflasi tahunan zona euro di 1,9%, di bawah ambang " +
-    "2,0% yang ditetapkan kriteria. Resolver ketiga mengutip estimasi " +
-    "pendahuluan salah satu negara anggota yang terbit lebih dulu dan " +
-    "menunjukkan 2,1%, dan karena itu menjawab NO; sumber itu bukan rilis " +
-    "flash Eurostat yang disyaratkan kriteria.",
+    "Two of three resolvers concluded YES. The Eurostat flash HICP release for " +
+    "October 2026 put euro-area annual inflation at 1.9%, below the 2.0% threshold " +
+    "the criteria set. The third resolver cited a preliminary estimate from one " +
+    "member state, published earlier and showing 2.1%, and answered NO on that " +
+    "basis; that source is not the Eurostat flash release the criteria require.",
   criteria:
-    "YES bila inflasi tahunan HICP flash zona euro untuk Oktober 2026, menurut " +
-    "rilis Eurostat, berada di bawah 2,0%. Hanya rilis flash resmi Eurostat " +
-    "yang dipakai; estimasi pendahuluan negara anggota atau revisi berikutnya " +
-    "tidak mengubah keputusan.",
+    "YES if euro-area annual flash HICP inflation for October 2026, per the " +
+    "Eurostat release, is below 2.0%. Only the official Eurostat flash release " +
+    "counts; a member state's preliminary estimate or a subsequent revision does " +
+    "not change the decision.",
   sources: ["https://ec.europa.eu/eurostat/web/hicp/data/database"],
   provider: "0x0000000000000000000000000000000000000000",
   chatId: "stub-0001",
   simulated: true,
 };
 
-/** Belum ada apa pun untuk dilaporkan — resolusi belum dimulai, bukan tersembunyi. */
+/** Nothing to report yet — resolution has not started, it is not being hidden. */
 const PENDING_RECEIPT: SettlementReceipt = {
   outcome: null,
   votes: [],
@@ -244,7 +243,7 @@ export class MockSource implements DataSource {
     const found = FIXTURE_MARKETS.find(
       (m) => m.address.toLowerCase() === address.toLowerCase(),
     );
-    if (!found) throw new Error(`Market ${address} tidak ditemukan`);
+    if (!found) throw new Error(`Market ${address} not found`);
     return found;
   }
 
@@ -265,14 +264,14 @@ export class MockSource implements DataSource {
 
   async getCandles(address: `0x${string}`, interval: Interval): Promise<Candle[]> {
     this.require("PRICE_HISTORY");
-    // fixtureTrades() adalah terbaru-dulu; balikkan ke urutan waktu naik supaya
-    // trade pertama yang diproses per bucket benar-benar trade paling awal.
+    // fixtureTrades() is newest-first; reverse into ascending time order so the
+    // first trade processed per bucket really is the earliest one.
     const trades = [...fixtureTrades(this.find(address))].reverse();
     const step = interval === "1d" ? 24 * HOUR : interval === "1h" ? HOUR : 5 * 60;
 
-    // Kelompokkan trade ke bucket berdasarkan bucketStart — SATU candle per
-    // bucket, bukan satu candle per trade. open/close berasal dari trade
-    // pertama/terakhir dalam bucket itu sendiri; high/low dari rentang bucket.
+    // Group trades into buckets by bucketStart — ONE candle per bucket, not one
+    // candle per trade. open/close come from the first/last trade within that
+    // bucket; high/low from the bucket's range.
     const buckets = new Map<number, Candle>();
     for (const t of trades) {
       const bucketStart = t.timestamp - (t.timestamp % step);
@@ -301,9 +300,9 @@ export class MockSource implements DataSource {
     this.require("AGENT_POSITIONS");
     const m = this.find(address);
     const positions = fixturePositions(m, fixtureTrades(m));
-    // COST_BASIS diomit -> posisinya sendiri tetap diketahui (AGENT_POSITIONS
-    // ada), tapi harga masuknya tidak: hanya event yang menyimpan apa yang
-    // dibayar. null di sini, bukan larik kosong atau nol.
+    // COST_BASIS omitted -> the position itself is still known (AGENT_POSITIONS is
+    // present), but its entry price is not: only events record what was paid. null
+    // here, not an empty array and not zero.
     if (!this.capabilities.has("COST_BASIS")) {
       return positions.map((p) => ({...p, entryPriceWad: null}));
     }

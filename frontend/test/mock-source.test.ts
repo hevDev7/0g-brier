@@ -9,42 +9,42 @@ describe("MockSource", () => {
     source = new MockSource();
   });
 
-  it("melaporkan mode dan seluruh kemampuan secara bawaan", () => {
+  it("reports its mode and every capability by default", () => {
     expect(source.mode).toBe("mock");
     expect(source.capabilities.has("PRICE_HISTORY")).toBe(true);
     expect(source.capabilities.has("TRADE_TAPE")).toBe(true);
   });
 
-  it("mengembalikan market fixture", async () => {
+  it("returns the fixture markets", async () => {
     const markets = await source.listMarkets();
     expect(markets.length).toBeGreaterThanOrEqual(2);
     expect(markets[0]!.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 
-  it("mengambil satu market berdasarkan alamat", async () => {
+  it("fetches a single market by address", async () => {
     const [first] = await source.listMarkets();
     const detail = await source.getMarket(first!.address);
     expect(detail.address).toBe(first!.address);
     expect(detail.question).toBe(first!.question);
   });
 
-  it("melempar untuk alamat yang tidak dikenal", async () => {
+  it("throws for an unknown address", async () => {
     await expect(source.getMarket("0x0000000000000000000000000000000000000009")).rejects.toThrow(
-      /tidak ditemukan/,
+      /not found/,
     );
   });
 
   /**
-   * Fixture yang tidak konsisten merender keadaan yang tidak mungkin ada di
-   * rantai. poolWad DITURUNKAN dari q, tidak pernah diketik tangan.
+   * An inconsistent fixture renders a state that could not exist on chain.
+   * poolWad is DERIVED from q, never typed by hand.
    */
-  it("setiap fixture memenuhi invarian pool protokol", async () => {
+  it("every fixture satisfies the protocol pool invariant", async () => {
     for (const m of await source.listMarkets()) {
       expect(m.poolWad).toBe(dpm.costUp(m.q));
     }
   });
 
-  it("mengembalikan tape trade", async () => {
+  it("returns the trade tape", async () => {
     const [first] = await source.listMarkets();
     const trades = await source.getTrades(first!.address, 50);
     expect(trades.length).toBeGreaterThan(0);
@@ -52,19 +52,18 @@ describe("MockSource", () => {
   });
 
   /**
-   * Bug yang ditemukan reviewer di halaman sungguhan: trade PALING BARU di
-   * tape (baris teratas, sejak getTrades mengembalikan terbaru-dulu)
-   * menunjukkan P(YES) 73.1% sementara panel probabilitas — dihitung
-   * langsung dari q pasar — menunjukkan 59.0%, tanpa ada trade di antaranya.
-   * Penyebabnya: fixtureTrades() dulu memakai bobot sebagai hitungan lembar
-   * ABSOLUT, jumlah totalnya (414 sisi NO, 906 sisi YES) sama untuk setiap
-   * market, jadi q sintetis di akhir riwayat melenceng dari q pasar
-   * sesungguhnya. q pasar sendiri (FIXTURE_MARKETS[i].q) TIDAK diubah untuk
-   * memperbaiki ini — hanya cara riwayat sintetis dikonstruksi mundur
-   * darinya, jadi setiap uji probabilitas/payout yang bergantung pada q
-   * tetap sah.
+   * A bug the reviewer found on the real page: the MOST RECENT trade in the tape
+   * (the top row, since getTrades returns newest-first) showed P(YES) 73.1% while
+   * the probability panel — computed straight from the market's q — showed 59.0%,
+   * with no trade in between. The cause: fixtureTrades() once used the weights as
+   * ABSOLUTE share counts whose totals (414 on the NO side, 906 on the YES side)
+   * were the same for every market, so the synthetic q at the end of the history
+   * drifted away from the market's real q. The market's q itself
+   * (FIXTURE_MARKETS[i].q) was NOT changed to fix this — only the way the
+   * synthetic history is constructed backwards from it, so every
+   * probability/payout test that depends on q remains valid.
    */
-  it("trade paling baru di tape konvergen TEPAT ke probabilitas pasar saat ini", async () => {
+  it("the newest trade in the tape converges EXACTLY on the current market probability", async () => {
     for (const market of FIXTURE_MARKETS) {
       const trades = await source.getTrades(market.address, 50);
       const mostRecent = trades[0]!;
@@ -73,12 +72,12 @@ describe("MockSource", () => {
   });
 
   /**
-   * Mekanisme pusat spec: kemampuan yang absen MELEMPAR, bukan mengembalikan
-   * larik kosong. Larik kosong berarti "tidak ada data" — klaim yang berbeda
-   * dari "aku tidak bisa tahu". MockSource bisa mensimulasikan mode terbatas
-   * supaya perilaku ini teruji tanpa menunggu ChainSource ada.
+   * The spec's central mechanism: an absent capability THROWS rather than
+   * returning an empty array. An empty array means "there is no data" — a
+   * different claim from "I cannot know". MockSource can simulate a limited mode
+   * so this behaviour is tested without waiting for ChainSource to exist.
    */
-  it("melempar CapabilityUnavailableError untuk kemampuan yang dihilangkan", async () => {
+  it("throws CapabilityUnavailableError for an omitted capability", async () => {
     const limited = new MockSource({omit: ["PRICE_HISTORY", "TRADE_TAPE"]});
     const [first] = await limited.listMarkets();
 
@@ -91,7 +90,7 @@ describe("MockSource", () => {
     );
   });
 
-  it("error membawa kemampuan dan mode yang gagal", async () => {
+  it("the error carries the capability and the mode that failed", async () => {
     const limited = new MockSource({omit: ["TRADE_TAPE"]});
     const [first] = await limited.listMarkets();
     await limited.getTrades(first!.address, 10).catch((error: unknown) => {
@@ -103,13 +102,13 @@ describe("MockSource", () => {
   });
 
   /**
-   * getCandles harus MENGAGREGASI trade ke dalam bucket, bukan memetakan satu
-   * candle per trade. Dengan jadwal fixture (24 trade, satu per jam), interval
-   * "1d" membuktikannya: 24 trade jatuh ke hanya 2 bucket harian, jadi harus
-   * kembali sebagai 2 candle — bukan 24 candle dengan bucketStart berulang.
+   * getCandles must AGGREGATE trades into buckets rather than map one candle per
+   * trade. With the fixture's schedule (24 trades, one per hour), the "1d"
+   * interval proves it: 24 trades fall into only 2 daily buckets, so they must
+   * come back as 2 candles — not 24 candles with repeated bucketStarts.
    */
   describe("getCandles", () => {
-    it("setiap candle punya bucketStart unik, untuk setiap interval", async () => {
+    it("every candle has a unique bucketStart, at every interval", async () => {
       const [first] = await source.listMarkets();
       for (const interval of ["1m", "5m", "1h", "1d"] as const) {
         const candles = await source.getCandles(first!.address, interval);
@@ -118,13 +117,13 @@ describe("MockSource", () => {
       }
     });
 
-    it("interval 1d menggabungkan 24 trade per-jam menjadi 2 candle, bukan 24", async () => {
+    it("the 1d interval merges 24 hourly trades into 2 candles, not 24", async () => {
       const [first] = await source.listMarkets();
       const daily = await source.getCandles(first!.address, "1d");
       expect(daily.length).toBe(2);
     });
 
-    it("candle terurut naik berdasarkan bucketStart, dan high >= low", async () => {
+    it("candles are sorted ascending by bucketStart, and high >= low", async () => {
       const [first] = await source.listMarkets();
       const daily = await source.getCandles(first!.address, "1d");
       for (const c of daily) {
@@ -136,23 +135,22 @@ describe("MockSource", () => {
     });
 
     /**
-     * open/close harus berasal dari trade PERTAMA/TERAKHIR di dalam bucket itu
-     * sendiri — bukan trade dari bucket sebelumnya. Nilai berikut dihitung
-     * independen dari trade tape (bukan dari implementasi getCandles), supaya
-     * refactor yang mengacak agregasi (mis. tertukar open/close atau high/low)
-     * tertangkap alih-alih diam-diam lolos karena kebetulan cocok.
+     * open/close must come from the FIRST/LAST trade within that bucket itself —
+     * not from a trade in the previous bucket. The values below were computed
+     * independently from the trade tape (not from getCandles' implementation), so
+     * that a refactor which scrambles the aggregation (swapping open/close or
+     * high/low, say) is caught rather than quietly passing by coincidence.
      *
-     * Nilai di bawah berubah dari versi sebelumnya saat fixtureTrades()
-     * diperbaiki (lihat uji "trade paling baru... konvergen" di atas) — q
-     * sintetis sekarang benar-benar mendarat di q pasar, jadi setiap trade di
-     * dalamnya ikut berubah. Dihitung ulang secara independen dari
-     * getCandles: via source.getTrades() lalu di-bucket-kan lewat kode
-     * bucketing terpisah yang ditulis khusus untuk verifikasi ini (bukan
-     * dengan menjalankan getCandles dan menyalin hasilnya), lalu disilangkan
-     * terhadap output getCandles yang sesungguhnya untuk ketiga fixture
-     * market — cocok persis.
+     * The values below changed from an earlier version when fixtureTrades() was
+     * fixed (see the "newest trade ... converges" test above) — the synthetic q
+     * now genuinely lands on the market's q, so every trade within it changed too.
+     * Recomputed independently of getCandles: through source.getTrades() and then
+     * bucketed by separate bucketing code written specifically for this
+     * verification (not by running getCandles and copying its output), then
+     * cross-checked against getCandles' actual output for all three fixture
+     * markets — an exact match.
      */
-    it("open/close berasal dari ujung bucket, high/low dari rentang bucket", async () => {
+    it("open/close come from the bucket ends, high/low from the bucket range", async () => {
       const [first] = await source.listMarkets();
       const [bucket1, bucket2] = await source.getCandles(first!.address, "1d");
 
@@ -176,20 +174,20 @@ describe("MockSource", () => {
   });
 });
 
-describe("kemampuan observasi", () => {
+describe("observation capabilities", () => {
   const addr = FIXTURE_MARKETS[0]!.address;
 
-  it("getPositions melempar bila AGENT_POSITIONS diomit", async () => {
+  it("getPositions throws when AGENT_POSITIONS is omitted", async () => {
     const src = new MockSource({omit: ["AGENT_POSITIONS"]});
     await expect(src.getPositions(addr)).rejects.toBeInstanceOf(CapabilityUnavailableError);
   });
 
-  it("getReceipt melempar bila SETTLEMENT_RECEIPT diomit", async () => {
+  it("getReceipt throws when SETTLEMENT_RECEIPT is omitted", async () => {
     const src = new MockSource({omit: ["SETTLEMENT_RECEIPT"]});
     await expect(src.getReceipt(addr)).rejects.toBeInstanceOf(CapabilityUnavailableError);
   });
 
-  it("posisi menjumlah ke q market, per outcome", async () => {
+  it("positions sum to the market q, per outcome", async () => {
     const src = new MockSource();
     for (const m of FIXTURE_MARKETS) {
       const pos = await src.getPositions(m.address);
@@ -202,7 +200,7 @@ describe("kemampuan observasi", () => {
     }
   });
 
-  it("harga masuk tiap posisi berada di antara 0 dan WAD", async () => {
+  it("every position's entry price lies between 0 and WAD", async () => {
     const src = new MockSource();
     const pos = await src.getPositions(FIXTURE_MARKETS[0]!.address);
     expect(pos.length).toBeGreaterThan(0);
@@ -213,17 +211,17 @@ describe("kemampuan observasi", () => {
     }
   });
 
-  it("COST_BASIS diomit -> posisi tetap ada, harga masuknya null", async () => {
+  it("COST_BASIS omitted -> the positions remain, their entry price is null", async () => {
     const src = new MockSource({omit: ["COST_BASIS"]});
     const pos = await src.getPositions(FIXTURE_MARKETS[0]!.address);
     expect(pos.length).toBeGreaterThan(0);
     for (const p of pos) expect(p.entryPriceWad).toBeNull();
   });
 
-  it("receipt market Settled menyebut outcome, dan yang Open tidak", async () => {
+  it("a Settled market's receipt names an outcome, and an Open one's does not", async () => {
     const src = new MockSource();
     const settled = FIXTURE_MARKETS.find((m) => m.status === "Settled");
-    expect(settled, "fixture wajib punya satu market Settled").toBeDefined();
+    expect(settled, "the fixtures must include one Settled market").toBeDefined();
     expect((await src.getReceipt(settled!.address)).outcome).not.toBeNull();
 
     const open = FIXTURE_MARKETS.find((m) => m.status === "Open")!;
@@ -232,19 +230,18 @@ describe("kemampuan observasi", () => {
 });
 
 /**
- * fixtureTrades() memberi setiap trade trader berbeda (dikunci ke indeks
- * loop), jadi di fixture asli tidak ada dua trade yang pernah berbagi kunci
- * (trader, outcome) — cabang akumulasi Map di fixturePositions() tidak
- * pernah benar-benar dilatih oleh uji lain di berkas ini. Uji berikut
- * memanggil fixturePositions() langsung dengan dua trade sintetis yang
- * SENGAJA berbagi trader dan outcome, dengan harga per lembar yang berbeda
- * (0,40 lalu 0,60) — kalau "+"-nya hilang (trade kedua menimpa yang
- * pertama) ATAU rata-ratanya dihitung polos alih-alih tertimbang-lembar
- * ((0,40+0,60)/2 = 0,50), keduanya beda dari hasil yang benar dan uji ini
- * yang menangkapnya.
+ * fixtureTrades() gives every trade a different trader (keyed to the loop index),
+ * so in the real fixtures no two trades ever share a (trader, outcome) key — the
+ * Map accumulation branch in fixturePositions() is never genuinely exercised by
+ * any other test in this file. The test below calls fixturePositions() directly
+ * with two synthetic trades that DELIBERATELY share a trader and an outcome, at
+ * different prices per share (0.40 then 0.60) — if the "+" were lost (the second
+ * trade overwriting the first) OR the average were computed plainly instead of
+ * share-weighted ((0.40+0.60)/2 = 0.50), both differ from the correct result and
+ * this test is what catches it.
  */
 describe("fixturePositions", () => {
-  it("mengakumulasi shares dan tokens antar-trade pada (trader, outcome) yang sama", () => {
+  it("accumulates shares and tokens across trades on the same (trader, outcome)", () => {
     const m = FIXTURE_MARKETS[0]!; // collateral.decimals = 6 (mUSDC)
     const trader = "0xcc1111111111111111111111111111111111cc11" as const;
     const trades: Trade[] = [
@@ -253,8 +250,8 @@ describe("fixturePositions", () => {
         timestamp: 0,
         trader,
         outcome: 1,
-        sharesDelta: 100n * WAD, // 100 lembar
-        tokens: 40_000_000n, // 40.000000 mUSDC -> 0,40/lembar
+        sharesDelta: 100n * WAD, // 100 shares
+        tokens: 40_000_000n, // 40.000000 mUSDC -> 0.40/share
         fee: 0n,
         probAfterWad: 0n,
       },
@@ -263,8 +260,8 @@ describe("fixturePositions", () => {
         timestamp: 1,
         trader,
         outcome: 1,
-        sharesDelta: 50n * WAD, // 50 lembar lagi, trader & outcome SAMA
-        tokens: 30_000_000n, // 30.000000 mUSDC -> 0,60/lembar
+        sharesDelta: 50n * WAD, // 50 more shares, SAME trader & outcome
+        tokens: 30_000_000n, // 30.000000 mUSDC -> 0.60/share
         fee: 0n,
         probAfterWad: 0n,
       },
@@ -276,10 +273,10 @@ describe("fixturePositions", () => {
     const [p] = positions;
     expect(p!.agent).toBe(trader);
     expect(p!.outcome).toBe(1);
-    // 100 + 50, bukan trade terakhir menimpa yang pertama.
+    // 100 + 50, not the last trade overwriting the first.
     expect(p!.shares).toBe(150n * WAD);
-    // (40 + 30) token / (100 + 50) lembar = 0,4667 — rata-rata TERTIMBANG
-    // lembar, bukan rata-rata polos 0,40 dan 0,60 (yang akan jadi 0,50).
+    // (40 + 30) tokens / (100 + 50) shares = 0.4667 — a share-WEIGHTED average,
+    // not a plain average of 0.40 and 0.60 (which would be 0.50).
     expect(p!.entryPriceWad).toBe(466_666_666_666_666_666n);
   });
 });

@@ -4,23 +4,23 @@ import {formatPricePerShare, formatShares, shortAddress} from "@/lib/format";
 import type {DataMode, MarketDetail, Position} from "@/lib/data/types";
 
 /**
- * Meja observasi: siapa memegang apa, pada harga berapa. Ini menggantikan
- * order ticket di pentingnya halaman market — UI manusia hanya mengamati
- * (spec §1 F3); seluruh eksekusi hidup di @0g-delphi/agent-kit, bukan di sini.
+ * The observation desk: who holds what, at what price. This takes the order
+ * ticket's place in the market page's importance — the human UI only observes
+ * (spec §1 F3); all execution lives in @0g-delphi/agent-kit, not here.
  *
- * "Harga sekarang" adalah `dpm.price(market.q, outcome)` — harga per lembar
- * dalam satuan collateral, sebanding langsung dengan harga masuk yang dibayar
- * agent. BUKAN probabilitas (p_i^2, yang hidup di panel probabilitas, lewat
- * `probabilityWad`): memberi label persen padanya melanggar Global
- * Constraints. Draf pertama spec proyek ini sendiri pernah mengirim
- * kebingungan harga-vs-probabilitas yang sama.
+ * "Current price" is `dpm.price(market.q, outcome)` — a price per share in
+ * collateral units, directly comparable to the entry price an agent paid. NOT
+ * the probability (p_i^2, which lives in the probability panel, via
+ * `probabilityWad`): labelling it with a percent sign breaks the Global
+ * Constraints. This project's own first spec draft once shipped the same
+ * price-versus-probability confusion.
  *
- * Hanya kolom "Harga masuk" yang bisa tidak diketahui: hanya event yang
- * menyimpan apa yang dibayar, jadi mode `chain` mengembalikan
- * `entryPriceWad: null`. Sel itu merender `<Unavailable capability=
- * "COST_BASIS">` sementara empat kolom lain tetap terisi — penerapan aturan
- * per-baris (spec §2) di tingkat SEL, bukan panel: baris itu sendiri, dan
- * harga sekarangnya, tetap sepenuhnya diketahui terlepas dari mode.
+ * Only the "Entry price" column can be unknown: only events record what was
+ * paid, so `chain` mode returns `entryPriceWad: null`. That cell renders
+ * `<Unavailable capability="COST_BASIS">` while the other four columns stay
+ * populated — the per-row rule (spec §2) applied at CELL level rather than panel
+ * level: the row itself, and its current price, remain fully known whatever the
+ * mode.
  */
 export function PositionsTable({
   positions,
@@ -37,10 +37,10 @@ export function PositionsTable({
         data-testid="positions-table"
         className="rounded-lg border border-border p-4 text-[13px] text-text-muted"
       >
-        {/* Satu node teks dengan sengaja — getByText hanya menggabungkan node
-            teks LANGSUNG suatu elemen, tidak turun ke elemen anak (lihat
-            Unavailable.tsx untuk kejadian yang sama). */}
-        <span>Belum ada posisi di market ini.</span>
+        {/* One text node deliberately — getByText joins only an element's DIRECT
+            text nodes and does not descend into children (see Unavailable.tsx for
+            the same case). */}
+        <span>No positions in this market yet.</span>
       </div>
     );
   }
@@ -50,7 +50,7 @@ export function PositionsTable({
       <table className="w-full text-[13px]">
         <thead className="bg-bg-sunken text-[11px] uppercase tracking-wide text-text-faint">
           <tr>
-            {["Agent", "Sisi", "Lembar", "Harga masuk", "Harga sekarang"].map((h) => (
+            {["Agent", "Side", "Shares", "Entry price", "Current price"].map((h) => (
               <th key={h} className="px-3 py-2 text-left font-medium last:text-right">
                 {h}
               </th>
@@ -59,9 +59,9 @@ export function PositionsTable({
         </thead>
         <tbody>
           {positions.map((p, i) => {
-            // Harga sekarang tidak bergantung pada apa yang dibayar agent —
-            // ia keadaan pool SAAT INI, jadi dihitung langsung dari
-            // market.q dan selalu terisi, di mode manapun.
+            // The current price does not depend on what an agent paid — it is the
+            // pool's state RIGHT NOW, so it is computed straight from market.q and
+            // is always populated, in any mode.
             const currentPriceWad = dpm.price(market.q, p.outcome);
             return (
               <tr key={`${p.agent}-${p.outcome}-${i}`} className="border-t border-border">

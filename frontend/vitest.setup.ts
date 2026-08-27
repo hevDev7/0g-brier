@@ -3,37 +3,37 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import type {TestingLibraryMatchers} from "@testing-library/jest-dom/matchers";
 import {afterEach, expect} from "vitest";
 
-// Bukan `import "@testing-library/jest-dom/vitest"` (biasa dipakai): berkas itu
-// mengimpor `expect` dari 'vitest' miliknya sendiri, yang di-resolve dari lokasi
-// paket jest-dom (di-hoist ke node_modules akar workspace, tempat vitest@3 hidup
-// untuk packages/protocol) — bukan dari `expect` milik frontend (vitest@4, di-nest
-// di frontend/node_modules karena rentang versinya bentrok dengan protocol).
-// Dua instance modul 'vitest' yang berbeda berarti dua registry Chai yang
-// berbeda: matcher ter-daftar di salah satu, tapi test file memakai yang lain.
-// Mengimpor matcher mentah lalu extend `expect` yang di-resolve dari sini
-// (frontend/) menjamin keduanya memakai instance vitest yang sama.
+// Not `import "@testing-library/jest-dom/vitest"` (the usual line): that file
+// imports `expect` from its own 'vitest', resolved from the jest-dom package's
+// location (hoisted to the workspace root node_modules, where vitest@3 lives for
+// packages/protocol) — not from the frontend's `expect` (vitest@4, nested in
+// frontend/node_modules because its version range conflicts with protocol's).
+// Two different 'vitest' module instances mean two different Chai registries: the
+// matchers register on one, while the test files use the other. Importing the raw
+// matchers and extending the `expect` resolved from here (frontend/) guarantees
+// both use the same vitest instance.
 expect.extend(matchers);
 
-// `test.globals` sengaja tidak diaktifkan (lihat vitest.config.ts), jadi `afterEach`
-// bukan global — dan auto-cleanup bawaan @testing-library/react (yang hanya mendaftar
-// diri saat `typeof afterEach === "function"` di lingkupnya sendiri) tidak pernah
-// terpicu. Tanpa baris ini, render() dari satu `it` tetap menumpuk di document.body
-// setelahnya, dan query berbasis `screen` di `it` berikutnya (dalam berkas yang sama)
-// bisa menemukan node duplikat peninggalan test lain alih-alih hanya miliknya sendiri.
+// `test.globals` is deliberately off (see vitest.config.ts), so `afterEach` is not
+// global — and @testing-library/react's built-in auto-cleanup (which registers
+// itself only when `typeof afterEach === "function"` in its own scope) never fires.
+// Without this line, the render() from one `it` keeps piling up in document.body
+// afterwards, and `screen`-based queries in the next `it` (in the same file) can
+// find duplicate nodes left over from another test instead of only their own.
 afterEach(cleanup);
 
-// Augmentasi tipe yang sama harus dideklarasikan dari SINI (frontend/), bukan
-// diimpor dari `@testing-library/jest-dom/vitest`, dengan alasan yang identik:
-// `declare module "vitest"` di berkas itu me-resolve 'vitest' dari lokasi paket
-// jest-dom (root), yang menimpa tipe vitest@3 — bukan vitest@4 milik frontend
-// yang dipakai berkas uji. Dideklarasikan di sini, "vitest" me-resolve ke
-// frontend/node_modules/vitest, tipe yang sama yang dipakai berkas uji.
+// The same type augmentation must be declared from HERE (frontend/) rather than
+// imported from `@testing-library/jest-dom/vitest`, for an identical reason: the
+// `declare module "vitest"` in that file resolves 'vitest' from the jest-dom
+// package's location (the root), which augments vitest@3's types — not the
+// frontend's vitest@4 that the test files use. Declared here, "vitest" resolves to
+// frontend/node_modules/vitest, the same types the test files use.
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-empty-object-type --
-   Bentuk ini identik dengan types/vitest.d.ts resmi @testing-library/jest-dom: interface kosong
-   yang meng-extend TestingLibraryMatchers ADALAH cara sah menambahkan matcher ke Assertion lewat
-   declaration merging. `any` di sini wajib: parameter generik pertama TestingLibraryMatchers
-   diketik `any` di seluruh definisi jest-dom sendiri, dan default `T = any` harus sama persis
-   dengan deklarasi asli Assertion di @vitest/expect agar TypeScript mau menggabungkannya. */
+   This shape is identical to @testing-library/jest-dom's own types/vitest.d.ts: an empty
+   interface extending TestingLibraryMatchers IS the sanctioned way to add matchers to Assertion
+   through declaration merging. The `any` here is mandatory: TestingLibraryMatchers' first generic
+   parameter is typed `any` throughout jest-dom's own definitions, and the `T = any` default must
+   match Assertion's original declaration in @vitest/expect exactly for TypeScript to merge them. */
 declare module "vitest" {
   interface Assertion<T = any> extends TestingLibraryMatchers<any, T> {}
   interface AsymmetricMatchersContaining extends TestingLibraryMatchers<any, any> {}

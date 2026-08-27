@@ -15,7 +15,7 @@ function wrapper(source: MockSource) {
 }
 
 describe("useMarket", () => {
-  it("berpindah dari loading ke ready", async () => {
+  it("moves from loading to ready", async () => {
     const {result} = renderHook(() => useMarket(ADDRESS), {wrapper: wrapper(new MockSource())});
     expect(result.current.status).toBe("loading");
     await waitFor(() => expect(result.current.status).toBe("ready"));
@@ -25,13 +25,13 @@ describe("useMarket", () => {
 });
 
 describe("useTrades", () => {
-  it("mengembalikan tape saat kemampuan ada", async () => {
+  it("returns the tape when the capability is present", async () => {
     const {result} = renderHook(() => useTrades(ADDRESS, 10), {wrapper: wrapper(new MockSource())});
     await waitFor(() => expect(result.current.status).toBe("ready"));
   });
 
-  /** Kontrak inti: kemampuan yang absen jadi status `unavailable`, bukan `error`. */
-  it("memetakan kemampuan yang hilang jadi unavailable, bukan error", async () => {
+  /** The core contract: an absent capability becomes status `unavailable`, not `error`. */
+  it("maps a missing capability to unavailable, not to error", async () => {
     const limited = new MockSource({omit: ["TRADE_TAPE"]});
     const {result} = renderHook(() => useTrades(ADDRESS, 10), {wrapper: wrapper(limited)});
     await waitFor(() => expect(result.current.status).toBe("unavailable"));
@@ -41,6 +41,6 @@ describe("useTrades", () => {
   });
 });
 
-// useQuote dulu diuji di sini. Matematikanya sekarang hidup di
-// packages/protocol/src/quote.ts — murni, tanpa React, jadi ujinya pun tak lagi
-// butuh renderHook: lihat packages/protocol/test/quote.test.ts.
+// useQuote was once tested here. Its maths now lives in
+// packages/protocol/src/quote.ts — pure, no React — so its tests no longer need
+// renderHook either: see packages/protocol/test/quote.test.ts.

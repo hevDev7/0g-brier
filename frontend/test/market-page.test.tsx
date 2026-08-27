@@ -16,18 +16,18 @@ function renderMarket(source = new MockSource(), address = OPEN) {
 }
 
 describe("MarketView", () => {
-  it("merender pertanyaan, probabilitas, dan payout", async () => {
+  it("renders the question, the probability, and the payout", async () => {
     renderMarket();
-    // Fixture pertama menyebut "ETH/USD" baik di pertanyaan (h1) maupun di teks
-    // aturan penyelesaian — getByText teks polos jadi ambigu. Query berbasis role
-    // menyasar heading pertanyaannya secara spesifik, sesuai maksud uji ini.
+    // The first fixture mentions "ETH/USD" in both the question (h1) and the
+    // resolution-rules text — a plain getByText would be ambiguous. A role-based
+    // query targets the question heading specifically, which is what this test means.
     await waitFor(() =>
       expect(screen.getByRole("heading", {name: /ETH\/USD/})).toBeInTheDocument(),
     );
-    // Sejak fixtureTrades() diperbaiki supaya konvergen ke q pasar, trade
-    // TERBARU di tape juga menunjukkan P(YES) 59.0% — dengan sengaja, bukan
-    // kebetulan (lihat mock-source.test.ts). getByText("59.0%") polos jadi
-    // ambigu karena itu; scope ke panel probabilitas secara spesifik.
+    // Since fixtureTrades() was fixed to converge on the market's q, the NEWEST
+    // trade in the tape also shows P(YES) 59.0% — deliberately, not by coincidence
+    // (see mock-source.test.ts). A plain getByText("59.0%") is ambiguous because of
+    // that; scope it to the probability panel specifically.
     await waitFor(() =>
       expect(within(screen.getByTestId("probability-panel")).getByText("59.0%")).toBeInTheDocument(),
     );
@@ -35,20 +35,19 @@ describe("MarketView", () => {
   });
 
   /**
-   * Keputusan produk (spec §1 F3), bukan selera tata letak: eksekusi hidup di
-   * `@0g-delphi/agent-kit`, jadi halaman manusia tidak boleh punya kontrol
-   * eksekusi sama sekali — bukan disembunyikan, bukan dinonaktifkan, ABSEN.
-   * Tombol yang dinonaktifkan tetap menjanjikan sesuatu yang tak akan pernah
-   * ada di sini.
+   * A product decision (spec §1 F3), not a layout preference: execution lives in
+   * `@0g-delphi/agent-kit`, so the human page must have no execution control at
+   * all — not hidden, not disabled, ABSENT. A disabled button still promises
+   * something that will never exist here.
    */
-  it("tidak ada kontrol eksekusi di halaman manusia", async () => {
+  it("has no execution control on the human page", async () => {
     renderMarket();
     expect(await screen.findByTestId("probability-panel")).toBeInTheDocument();
     expect(screen.queryByTestId("order-ticket")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", {name: /beli|jual|approve|setujui/i})).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {name: /buy|sell|approve|confirm/i})).not.toBeInTheDocument();
   });
 
-  it("merender panel pemeriksaan", async () => {
+  it("renders the inspection panels", async () => {
     renderMarket();
     for (const id of ["probability-panel", "payout-panel", "probability-chart",
                       "market-stats", "positions-table", "trade-tape"]) {
@@ -57,40 +56,40 @@ describe("MarketView", () => {
   });
 
   /**
-   * Uji yang paling mudah terlupa dan paling penting: di mode terbatas, panel
-   * yang datanya tak bisa diketahui menampilkan penjelasan, BUKAN tabel kosong
-   * dan bukan nol.
+   * The easiest test to forget and the most important one: in a limited mode, a
+   * panel whose data cannot be known shows an explanation, NOT an empty table and
+   * not a zero.
    */
-  it("menjelaskan kapabilitas yang absen, bukan merender tabel kosong", async () => {
+  it("explains an absent capability rather than rendering an empty table", async () => {
     renderMarket(new MockSource({omit: ["AGENT_POSITIONS"]}));
-    expect(await screen.findByText(/posisi agent.*tidak tersedia/i)).toBeInTheDocument();
+    expect(await screen.findByText(/agent positions.*not available/i)).toBeInTheDocument();
     expect(screen.queryByTestId("positions-table")).not.toBeInTheDocument();
   });
 
-  it("menampilkan Unavailable, bukan nol, saat tape tidak tersedia", async () => {
+  it("shows Unavailable rather than zero when the tape is unavailable", async () => {
     renderMarket(new MockSource({omit: ["TRADE_TAPE"]}));
     await waitFor(() =>
-      expect(screen.getAllByText(/riwayat transaksi.*tidak tersedia/i).length).toBeGreaterThan(0),
+      expect(screen.getAllByText(/trade history.*not available/i).length).toBeGreaterThan(0),
     );
     expect(screen.queryByTestId("trade-tape")).toBeNull();
   });
 
-  it("menampilkan Unavailable, bukan grafik kosong, saat riwayat harga tidak tersedia", async () => {
+  it("shows Unavailable rather than an empty chart when price history is unavailable", async () => {
     renderMarket(new MockSource({omit: ["PRICE_HISTORY"]}));
     await waitFor(() =>
-      expect(screen.getByText(/riwayat harga.*tidak tersedia/i)).toBeInTheDocument(),
+      expect(screen.getByText(/price history.*not available/i)).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("probability-chart")).toBeNull();
   });
 
-  /** Market yang sudah diselesaikan: putusan komite DAN bukti yang bisa diperiksa. */
-  it("market Settled menampilkan hasil akhir dan bukti resolusinya", async () => {
+  /** A resolved market: the committee's verdict AND the evidence one can inspect. */
+  it("a Settled market shows the final outcome and its resolution evidence", async () => {
     renderMarket(new MockSource(), SETTLED);
     expect(await screen.findByTestId("final-outcome")).toBeInTheDocument();
     expect(await screen.findByTestId("resolution-evidence")).toBeInTheDocument();
   });
 
-  it("market yang masih terbuka tidak menampilkan panel penyelesaian", async () => {
+  it("a still-open market shows no settlement panels", async () => {
     renderMarket();
     expect(await screen.findByTestId("market-stats")).toBeInTheDocument();
     expect(screen.queryByTestId("final-outcome")).not.toBeInTheDocument();

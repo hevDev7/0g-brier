@@ -2,8 +2,8 @@ import {probabilityWad} from "@/lib/dpm-view";
 import {formatProbability} from "@/lib/format";
 
 /**
- * Menampilkan P_i = p_i^2. Harga marginal p_i TIDAK pernah muncul di sini —
- * ia hanya sah sebagai harga eksekusi per lembar, bukan sebagai persentase.
+ * Shows P_i = p_i^2. The marginal price p_i NEVER appears here — it is only valid
+ * as an execution price per share, not as a percentage.
  */
 export function ProbabilityPanel({q}: {q: readonly [bigint, bigint]}) {
   return (

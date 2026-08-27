@@ -15,15 +15,16 @@ export class CapabilityUnavailableError extends Error {
     readonly capability: Capability,
     readonly mode: DataMode,
   ) {
-    super(`${capability} tidak tersedia di mode ${mode}`);
+    super(`${capability} is not available in ${mode} mode`);
     this.name = "CapabilityUnavailableError";
   }
 }
 
 /**
- * `unavailable` adalah anggota union, bukan kasus khusus. Karena ia ada di
- * sini, TypeScript memaksa setiap konsumen menanganinya — komponen yang lupa
- * tidak akan mengompilasi. Kejujuran UI ditegakkan compiler, bukan disiplin.
+ * `unavailable` is a member of the union, not a special case. Because it lives
+ * here, TypeScript forces every consumer to handle it — a component that
+ * forgets will not compile. The UI's honesty is enforced by the compiler, not
+ * by discipline.
  */
 export type Query<T> =
   | {status: "loading"}
@@ -49,17 +50,23 @@ export interface MarketSummary {
   category: string;
   tier: Tier;
   status: MarketStatus;
-  /** Pasokan lembar per outcome, wad. Indeks 0 = NO, 1 = YES. */
+  /** Share supply per outcome, wad. Index 0 = NO, 1 = YES. */
   q: readonly [bigint, bigint];
-  /** Selalu sama dengan dpm.costUp(q). Tidak pernah diketik tangan. */
+  /** Always equal to dpm.costUp(q). Never typed by hand. */
   poolWad: bigint;
+  /**
+   * Creation time, unix seconds. It lives on the SUMMARY rather than only on
+   * the detail because the market list sorts by it, and a list may not reach
+   * for a field the type it receives does not carry. It costs nothing to
+   * provide: it is MARKET_STATE, answerable in every mode.
+   */
+  createdAt: number;
   tradingEnd: number;
   collateral: CollateralInfo;
 }
 
 export interface MarketDetail extends MarketSummary {
   feeBps: number;
-  createdAt: number;
   settlementDeadline: number;
   creator: `0x${string}`;
   specRoot: `0x${string}`;
@@ -71,7 +78,7 @@ export interface Trade {
   timestamp: number;
   trader: `0x${string}`;
   outcome: Outcome;
-  /** Positif untuk beli, negatif untuk jual. */
+  /** Positive for a buy, negative for a sell. */
   sharesDelta: bigint;
   tokens: bigint;
   fee: bigint;
@@ -92,47 +99,46 @@ export interface Position {
   outcome: Outcome;
   shares: bigint;
   /**
-   * Harga rata-rata masuk, wad. `null` berarti mode saat ini TIDAK BISA
-   * mengetahuinya — bukan nol, dan bukan "belum dimuat". Hanya event yang
-   * menyimpan apa yang dibayar, jadi mode `chain` mengembalikan null di sini
-   * dan tabel merender `<Unavailable capability="COST_BASIS">` di sel itu.
-   * Tipenya sengaja nullable supaya konsumen yang lupa tidak mengompilasi.
+   * Average entry price, wad. `null` means the current mode CANNOT know it —
+   * not zero, and not "not loaded yet". Only events record what was paid, so
+   * `chain` mode returns null here and the table renders
+   * `<Unavailable capability="COST_BASIS">` in that cell. The type is
+   * deliberately nullable so that a consumer which forgets will not compile.
    */
   entryPriceWad: bigint | null;
 }
 
 export interface ResolverVote {
   model: string;
-  /** null = resolver tidak memberi suara (belum reveal, atau abstain). */
+  /** null = the resolver cast no vote (not yet revealed, or abstained). */
   outcome: Outcome | null;
   teeVerified: boolean;
   simulated: boolean;
 }
 
 export interface SettlementReceipt {
-  /** null selama market belum diselesaikan. */
+  /** null while the market has not been resolved. */
   outcome: Outcome | null;
   votes: ResolverVote[];
   judgeModel: string | null;
-  /** Alasan apa adanya dari resolver. TIDAK diringkas — lihat spec §4.2. */
+  /** The resolver's reasoning verbatim. NOT summarized — see spec §4.2. */
   reasoning: string;
   criteria: string;
   sources: string[];
   provider: `0x${string}`;
   chatId: string;
-  /** true bila receipt berasal dari mode stub. Wajib mencolok di UI. */
+  /** true when the receipt came from stub mode. Must be conspicuous in the UI. */
   simulated: boolean;
 }
 
 /**
- * Kontrak baca. Perhatikan tidak ada metode untuk membeli, menjual, menebus,
- * maupun melikuidasi di sini, dan itu bukan kelalaian: UI manusia hanya
- * mengamati (spec §1 F3). Seluruh eksekusi hidup di `@0g-delphi/agent-kit`.
- * Batas ini ditegakkan uji, bukan hanya konvensi — lihat
- * test/write-boundary.test.ts. (Sengaja diparafrase dalam Bahasa Indonesia,
- * bukan ditulis sebagai istilah bahasa Inggris: uji itu sendiri melarang
- * beberapa istilah tulis-rantai versi bahasa Inggris muncul di berkas mana
- * pun di direktori ini, termasuk komentar.)
+ * The read contract. Note there is no method here for buying, selling, claiming
+ * a settled position, or unwinding one, and that is not an oversight: the human
+ * UI only observes (spec §1 F3). All execution lives in
+ * `@0g-delphi/agent-kit`. This boundary is enforced by a test, not merely by
+ * convention — see test/write-boundary.test.ts. (The two exit verbs are
+ * deliberately paraphrased rather than named: that test greps every file in
+ * this directory, comments included, for the literal chain-write terms.)
  */
 export interface DataSource {
   readonly mode: DataMode;

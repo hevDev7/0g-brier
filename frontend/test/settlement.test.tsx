@@ -14,8 +14,8 @@ const receipt: SettlementReceipt = {
     {model: "qwen3-32b", outcome: 0, teeVerified: false, simulated: true},
   ],
   judgeModel: "claude-opus-5",
-  reasoning: "Dua dari tiga resolver menyimpulkan YES.",
-  criteria: "YES bila harga penutupan di atas $4.000.",
+  reasoning: "Two of three resolvers concluded YES.",
+  criteria: "YES if the closing price is above $4,000.",
   sources: ["https://example.org/data"],
   provider: "0x0000000000000000000000000000000000000000",
   chatId: "stub-0001",
@@ -23,71 +23,71 @@ const receipt: SettlementReceipt = {
 };
 
 describe("FinalOutcome", () => {
-  it("menyebut pemenang dan kurs payout-nya", () => {
+  it("names the winner and its payout rate", () => {
     render(<FinalOutcome receipt={receipt} market={m} />);
     expect(screen.getByTestId("winner")).toHaveTextContent("YES");
     expect(screen.getByTestId("payout")).toHaveTextContent("×");
   });
 
-  it("kurs payout memakai 1/p, bukan 1/P", () => {
+  it("the payout rate uses 1/p, not 1/P", () => {
     render(<FinalOutcome receipt={receipt} market={m} />);
-    // q fixture memberi P(YES)=59,0% -> p=0,7681 -> 1/p = 1,30x. 1/P akan 1,69x.
+    // The fixture q gives P(YES)=59.0% -> p=0.7681 -> 1/p = 1.30x. 1/P would be 1.69x.
     expect(screen.getByTestId("payout")).toHaveTextContent("1.30×");
     expect(screen.getByTestId("payout")).not.toHaveTextContent("1.69×");
   });
 
-  // Pola yang sama dengan simulated-badge milik ResolutionEvidence di bawah —
-  // dicek di sini juga karena verdict (pemenang + kurs payout) sama-sama tidak
-  // boleh disangka sungguhan saat berasal dari receipt stub.
-  it("menandai hasil tersimulasi secara mencolok juga di panel outcome final", () => {
+  // The same pattern as ResolutionEvidence's simulated-badge below — checked here
+  // too, because the verdict (winner + payout rate) must likewise never be taken
+  // for real when it comes from a stub receipt.
+  it("flags a simulated result conspicuously in the final-outcome panel too", () => {
     render(<FinalOutcome receipt={receipt} market={m} />);
-    expect(screen.getByTestId("final-outcome-simulated")).toHaveTextContent(/simulasi/i);
+    expect(screen.getByTestId("final-outcome-simulated")).toHaveTextContent(/simulated/i);
   });
 
-  it("tidak menandai simulasi di panel outcome final saat receipt sungguhan", () => {
+  it("does not flag simulation in the final-outcome panel for a real receipt", () => {
     render(<FinalOutcome receipt={{...receipt, simulated: false}} market={m} />);
     expect(screen.queryByTestId("final-outcome-simulated")).not.toBeInTheDocument();
   });
 });
 
 describe("ResolutionEvidence", () => {
-  it("menampilkan setiap model resolver dan suaranya", () => {
+  it("shows every resolver model and its vote", () => {
     render(<ResolutionEvidence receipt={receipt} />);
     for (const v of receipt.votes) expect(screen.getByText(v.model)).toBeInTheDocument();
   });
 
-  it("menampilkan alasan verbatim, tanpa dipangkas", () => {
+  it("shows the reasoning verbatim, untrimmed", () => {
     render(<ResolutionEvidence receipt={receipt} />);
     expect(screen.getByTestId("reasoning")).toHaveTextContent(receipt.reasoning);
   });
 
-  it("menampilkan kriteria resolusi dan sumber data", () => {
+  it("shows the resolution criteria and the data sources", () => {
     render(<ResolutionEvidence receipt={receipt} />);
     expect(screen.getByTestId("criteria")).toHaveTextContent(receipt.criteria);
     expect(screen.getByText(receipt.sources[0]!)).toBeInTheDocument();
   });
 
-  it("menandai hasil tersimulasi secara mencolok", () => {
+  it("flags a simulated result conspicuously", () => {
     render(<ResolutionEvidence receipt={receipt} />);
-    expect(screen.getByTestId("simulated-badge")).toHaveTextContent(/simulasi/i);
+    expect(screen.getByTestId("simulated-badge")).toHaveTextContent(/simulated/i);
   });
 
-  it("tidak menandai simulasi saat receipt sungguhan", () => {
+  it("does not flag simulation for a real receipt", () => {
     render(<ResolutionEvidence receipt={{...receipt, simulated: false}} />);
     expect(screen.queryByTestId("simulated-badge")).not.toBeInTheDocument();
   });
 
-  it("menandai resolver yang suaranya berbeda dari outcome final", () => {
+  it("flags a resolver whose vote differs from the final outcome", () => {
     render(<ResolutionEvidence receipt={receipt} />);
     expect(screen.getByTestId("vote-qwen3-32b")).toHaveTextContent(/NO/);
   });
 });
 
-describe("ResolutionEvidence — market belum diselesaikan", () => {
-  // Setara PENDING_RECEIPT di lib/data/mock.ts (tidak diekspor dari sana,
-  // jadi ditulis ulang di sini) — bentuk yang dikembalikan getReceipt() untuk
-  // market mana pun yang statusnya BUKAN Settled: dua dari tiga fixture
-  // market memakai bentuk ini, bukan kasus tepi langka.
+describe("ResolutionEvidence — an unresolved market", () => {
+  // The equivalent of PENDING_RECEIPT in lib/data/mock.ts (not exported from
+  // there, so rewritten here) — the shape getReceipt() returns for any market
+  // whose status is NOT Settled: two of the three fixture markets take this shape,
+  // so it is no rare edge case.
   const pending: SettlementReceipt = {
     outcome: null,
     votes: [],
@@ -100,17 +100,17 @@ describe("ResolutionEvidence — market belum diselesaikan", () => {
     simulated: true,
   };
 
-  it("menampilkan pesan belum-diselesaikan, bukan panel kosong tak berpenjelasan", () => {
+  it("shows a not-resolved-yet message rather than an unexplained empty panel", () => {
     render(<ResolutionEvidence receipt={pending} />);
-    expect(screen.getAllByText(/belum diselesaikan/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/not resolved/i).length).toBeGreaterThan(0);
   });
 
-  // Inti perbaikan: sebelum ini, judul "Kriteria resolusi" merender paragraf
-  // kosong dan <details> "lengkap, apa adanya" membuka ke ketiadaan — disclosure
-  // yang menjanjikan isi lengkap lalu tidak memberi apa-apa. Itu terbaca sebagai
-  // "resolusi terjadi dan tidak menghasilkan apa-apa", bukan "belum ada
-  // resolusi", persis kebohongan yang dilarang aturan #1 file komponen ini.
-  it("tidak menjanjikan kriteria maupun alasan lengkap yang sebenarnya kosong", () => {
+  // The heart of the fix: before this, the "Resolution criteria" heading rendered
+  // an empty paragraph and the "in full, verbatim" <details> opened onto nothing —
+  // a disclosure that promises complete content and then delivers none. That reads
+  // as "a resolution happened and produced nothing" rather than "no resolution has
+  // happened", exactly the lie rule #1 of that component file forbids.
+  it("promises neither criteria nor full reasoning when both are actually empty", () => {
     render(<ResolutionEvidence receipt={pending} />);
     expect(screen.queryByTestId("criteria")).not.toBeInTheDocument();
     expect(screen.queryByTestId("reasoning")).not.toBeInTheDocument();

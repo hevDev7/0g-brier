@@ -8,7 +8,7 @@ import {Unavailable} from "@/components/primitives/Unavailable";
 
 const FULL_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678";
 
-/** Menetapkan navigator.clipboard hanya untuk satu uji; dipulihkan di afterEach. */
+/** Installs navigator.clipboard for a single test only; restored in afterEach. */
 function stubClipboard(writeText: () => Promise<void>) {
   Object.defineProperty(window.navigator, "clipboard", {
     value: {writeText},
@@ -17,14 +17,14 @@ function stubClipboard(writeText: () => Promise<void>) {
 }
 
 describe("Unavailable", () => {
-  it("menamai kemampuan yang hilang dan mode yang menyediakannya", () => {
+  it("names the missing capability and the mode that provides it", () => {
     render(<Unavailable capability="PRICE_HISTORY" mode="chain" />);
-    expect(screen.getByText(/riwayat harga/i)).toBeInTheDocument();
+    expect(screen.getByText(/price history/i)).toBeInTheDocument();
     expect(screen.getByText(/indexer/i)).toBeInTheDocument();
   });
 
-  /** Inti aturannya: ketidaktahuan tidak boleh menyamar jadi angka. */
-  it("tidak pernah merender nol atau strip telanjang", () => {
+  /** The heart of the rule: not knowing must not disguise itself as a number. */
+  it("never renders a zero or a bare dash", () => {
     const {container} = render(<Unavailable capability="TRADE_TAPE" mode="chain" />);
     const text = container.textContent ?? "";
     expect(text.trim()).not.toBe("0");
@@ -33,18 +33,18 @@ describe("Unavailable", () => {
   });
 
   /**
-   * Ini perubahan status yang pengguna layar-baca perlu dengar, sama seperti
-   * pengguna bermata perlu melihatnya — tanpa role="status" penjelasannya
-   * hanya ada secara visual.
+   * This is a status change a screen-reader user needs to hear, just as a sighted
+   * user needs to see it — without role="status" the explanation exists only
+   * visually.
    */
-  it("diumumkan ke pembaca layar lewat role=status", () => {
+  it("is announced to screen readers through role=status", () => {
     render(<Unavailable capability="TRADE_TAPE" mode="chain" />);
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 });
 
 describe("Badge", () => {
-  it("merender labelnya", () => {
+  it("renders its label", () => {
     render(<Badge tone="neutral" label="VERIFIED" />);
     expect(screen.getByText("VERIFIED")).toBeInTheDocument();
   });
@@ -55,27 +55,27 @@ describe("CopyAddress", () => {
     Object.defineProperty(window.navigator, "clipboard", {value: undefined, configurable: true});
   });
 
-  it("menampilkan bentuk terpotong tapi menyimpan alamat penuh di title", () => {
+  it("shows the elided form but keeps the full address in the title", () => {
     render(<CopyAddress address={FULL_ADDRESS} />);
     const button = screen.getByRole("button");
     expect(button).toHaveTextContent("0x1234…5678");
     expect(button).toHaveAttribute("title", FULL_ADDRESS);
   });
 
-  /** Transisi ke "tersalin" adalah perubahan status; pengguna layar-baca perlu mendengarnya juga. */
-  it("mengumumkan konfirmasi tersalin lewat aria-live", () => {
+  /** The transition to "copied" is a status change; screen-reader users need to hear it too. */
+  it("announces the copied confirmation through aria-live", () => {
     render(<CopyAddress address={FULL_ADDRESS} />);
     expect(screen.getByRole("button")).toHaveAttribute("aria-live", "polite");
   });
 
   /**
-   * Tombol tidak boleh mengklaim sukses yang belum terjadi — aturan yang sama
-   * yang membuat `unavailable` jadi anggota union Query, dipindah dari data ke
-   * aksi. Sebelum writeText resolve, "tersalin" belum sah muncul.
+   * The button must not claim a success that has not happened — the same rule that
+   * makes `unavailable` a member of the Query union, moved from data to action.
+   * Before writeText resolves, "copied" may not appear.
    */
-  it("menampilkan 'tersalin' hanya SETELAH penulisan clipboard sungguh berhasil", async () => {
-    // userEvent.setup() memasang stub clipboard-nya SENDIRI ke navigator —
-    // stub kita harus dipasang SESUDAHNYA, atau tertimpa diam-diam.
+  it("shows 'copied' only AFTER the clipboard write genuinely succeeds", async () => {
+    // userEvent.setup() installs its OWN clipboard stub on navigator — ours must be
+    // installed AFTERWARDS, or it is silently overwritten.
     const user = userEvent.setup();
     let resolveWrite!: () => void;
     const pending = new Promise<void>((res) => {
@@ -85,16 +85,16 @@ describe("CopyAddress", () => {
 
     render(<CopyAddress address={FULL_ADDRESS} />);
     await user.click(screen.getByRole("button"));
-    expect(screen.getByRole("button")).not.toHaveTextContent("tersalin");
+    expect(screen.getByRole("button")).not.toHaveTextContent("copied");
 
     await act(async () => {
       resolveWrite();
       await pending;
     });
-    expect(screen.getByRole("button")).toHaveTextContent("tersalin");
+    expect(screen.getByRole("button")).toHaveTextContent("copied");
   });
 
-  it("tidak mengklaim tersalin saat penulisan clipboard gagal (promise reject)", async () => {
+  it("does not claim copied when the clipboard write fails (rejected promise)", async () => {
     const user = userEvent.setup();
     let rejectWrite!: (reason: unknown) => void;
     const pending = new Promise<void>((_resolve, rej) => {
@@ -105,13 +105,13 @@ describe("CopyAddress", () => {
     render(<CopyAddress address={FULL_ADDRESS} />);
     await user.click(screen.getByRole("button"));
     await act(async () => {
-      rejectWrite(new Error("izin ditolak"));
+      rejectWrite(new Error("permission denied"));
       await pending.catch(() => {});
     });
     expect(screen.getByRole("button")).toHaveTextContent("0x1234…5678");
   });
 
-  it("tidak mengklaim tersalin saat clipboard API tidak tersedia", async () => {
+  it("does not claim copied when the clipboard API is unavailable", async () => {
     const user = userEvent.setup();
     Object.defineProperty(window.navigator, "clipboard", {value: undefined, configurable: true});
 
@@ -122,15 +122,15 @@ describe("CopyAddress", () => {
 });
 
 describe("Countdown", () => {
-  it("memformat sisa waktu dari stempel waktu absolut", () => {
+  it("formats the time remaining from an absolute timestamp", () => {
     const now = 1_790_000_000;
     render(<Countdown until={now + 2 * 3600 + 14 * 60} nowSeconds={now} />);
-    expect(screen.getByText("2j 14m")).toBeInTheDocument();
+    expect(screen.getByText("2h 14m")).toBeInTheDocument();
   });
 
-  it("menyatakan tutup saat sudah lewat", () => {
+  it("says closed once it has passed", () => {
     const now = 1_790_000_000;
     render(<Countdown until={now - 60} nowSeconds={now} />);
-    expect(screen.getByText("tutup")).toBeInTheDocument();
+    expect(screen.getByText("closed")).toBeInTheDocument();
   });
 });
