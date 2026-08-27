@@ -1,7 +1,7 @@
 import {beforeEach, describe, expect, it} from "vitest";
-import {dpm} from "@0g-delphi/protocol";
-import {FIXTURE_MARKETS, MockSource} from "@/lib/data/mock";
-import {CapabilityUnavailableError} from "@/lib/data/types";
+import {WAD, dpm} from "@0g-delphi/protocol";
+import {FIXTURE_MARKETS, MockSource, fixturePositions} from "@/lib/data/mock";
+import {CapabilityUnavailableError, type Trade} from "@/lib/data/types";
 
 describe("MockSource", () => {
   let source: MockSource;
@@ -209,7 +209,7 @@ describe("kemampuan observasi", () => {
     for (const p of pos) {
       expect(p.entryPriceWad).not.toBeNull();
       expect(p.entryPriceWad!).toBeGreaterThan(0n);
-      expect(p.entryPriceWad!).toBeLessThan(10n ** 18n);
+      expect(p.entryPriceWad!).toBeLessThan(WAD);
     }
   });
 
@@ -228,5 +228,58 @@ describe("kemampuan observasi", () => {
 
     const open = FIXTURE_MARKETS.find((m) => m.status === "Open")!;
     expect((await src.getReceipt(open.address)).outcome).toBeNull();
+  });
+});
+
+/**
+ * fixtureTrades() memberi setiap trade trader berbeda (dikunci ke indeks
+ * loop), jadi di fixture asli tidak ada dua trade yang pernah berbagi kunci
+ * (trader, outcome) — cabang akumulasi Map di fixturePositions() tidak
+ * pernah benar-benar dilatih oleh uji lain di berkas ini. Uji berikut
+ * memanggil fixturePositions() langsung dengan dua trade sintetis yang
+ * SENGAJA berbagi trader dan outcome, dengan harga per lembar yang berbeda
+ * (0,40 lalu 0,60) — kalau "+"-nya hilang (trade kedua menimpa yang
+ * pertama) ATAU rata-ratanya dihitung polos alih-alih tertimbang-lembar
+ * ((0,40+0,60)/2 = 0,50), keduanya beda dari hasil yang benar dan uji ini
+ * yang menangkapnya.
+ */
+describe("fixturePositions", () => {
+  it("mengakumulasi shares dan tokens antar-trade pada (trader, outcome) yang sama", () => {
+    const m = FIXTURE_MARKETS[0]!; // collateral.decimals = 6 (mUSDC)
+    const trader = "0xcc1111111111111111111111111111111111cc11" as const;
+    const trades: Trade[] = [
+      {
+        id: "synthetic-1",
+        timestamp: 0,
+        trader,
+        outcome: 1,
+        sharesDelta: 100n * WAD, // 100 lembar
+        tokens: 40_000_000n, // 40.000000 mUSDC -> 0,40/lembar
+        fee: 0n,
+        probAfterWad: 0n,
+      },
+      {
+        id: "synthetic-2",
+        timestamp: 1,
+        trader,
+        outcome: 1,
+        sharesDelta: 50n * WAD, // 50 lembar lagi, trader & outcome SAMA
+        tokens: 30_000_000n, // 30.000000 mUSDC -> 0,60/lembar
+        fee: 0n,
+        probAfterWad: 0n,
+      },
+    ];
+
+    const positions = fixturePositions(m, trades);
+
+    expect(positions.length).toBe(1);
+    const [p] = positions;
+    expect(p!.agent).toBe(trader);
+    expect(p!.outcome).toBe(1);
+    // 100 + 50, bukan trade terakhir menimpa yang pertama.
+    expect(p!.shares).toBe(150n * WAD);
+    // (40 + 30) token / (100 + 50) lembar = 0,4667 — rata-rata TERTIMBANG
+    // lembar, bukan rata-rata polos 0,40 dan 0,60 (yang akan jadi 0,50).
+    expect(p!.entryPriceWad).toBe(466_666_666_666_666_666n);
   });
 });

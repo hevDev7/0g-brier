@@ -157,7 +157,7 @@ function fixtureTrades(m: MarketDetail): Trade[] {
  * saling membantah — dan itu sudah pernah terjadi di F0, saat tape berakhir di
  * 73,1% sementara market berharga 59,0%.
  */
-function fixturePositions(m: MarketSummary, trades: Trade[]): Position[] {
+export function fixturePositions(m: MarketSummary, trades: Trade[]): Position[] {
   const acc = new Map<string, {shares: bigint; tokens: bigint}>();
   for (const t of trades) {
     if (t.sharesDelta <= 0n) continue; // hanya pembelian membentuk harga masuk
@@ -178,7 +178,7 @@ function fixturePositions(m: MarketSummary, trades: Trade[]): Position[] {
       entryPriceWad: (toWad(v.tokens, m.collateral.decimals) * WAD) / v.shares,
     });
   }
-  return out.sort((a, b) => (b.shares > a.shares ? 1 : -1));
+  return out.sort((a, b) => (a.shares === b.shares ? 0 : b.shares > a.shares ? 1 : -1));
 }
 
 const FIXTURE_RECEIPT: SettlementReceipt = {
@@ -189,15 +189,24 @@ const FIXTURE_RECEIPT: SettlementReceipt = {
     {model: "qwen3-32b", outcome: 0, teeVerified: false, simulated: true},
   ],
   judgeModel: "claude-opus-5",
+  // Diselesaikan untuk market ketiga (inflasi zona euro) — lihat FIXTURE_MARKETS.
+  // criteria/reasoning/sources HARUS mengacu pada pertanyaan itu, bukan pertanyaan
+  // market lain: satu-satunya market yang receipt-nya bisa diquery adalah yang
+  // status-nya Settled, jadi konten yang salah topik di sini tidak akan pernah
+  // tertutupi oleh market lain yang "kebetulan" cocok.
   reasoning:
-    "Dua dari tiga resolver menyimpulkan YES. Resolver ketiga membaca rilis " +
-    "yang berbeda tanggal dan karena itu menjawab NO; bukti yang dikutipnya " +
-    "berada di luar jendela yang ditetapkan kriteria.",
+    "Dua dari tiga resolver menyimpulkan YES. Rilis flash HICP Eurostat untuk " +
+    "Oktober 2026 mencatat inflasi tahunan zona euro di 1,9%, di bawah ambang " +
+    "2,0% yang ditetapkan kriteria. Resolver ketiga mengutip estimasi " +
+    "pendahuluan salah satu negara anggota yang terbit lebih dulu dan " +
+    "menunjukkan 2,1%, dan karena itu menjawab NO; sumber itu bukan rilis " +
+    "flash Eurostat yang disyaratkan kriteria.",
   criteria:
-    "YES bila harga penutupan ETH/USD pada 30 September 2026 di atas $4.000 " +
-    "menurut rilis harian CoinGecko. Sumber lain hanya dipakai bila CoinGecko " +
-    "tidak menerbitkan.",
-  sources: ["https://www.coingecko.com/en/coins/ethereum/historical_data"],
+    "YES bila inflasi tahunan HICP flash zona euro untuk Oktober 2026, menurut " +
+    "rilis Eurostat, berada di bawah 2,0%. Hanya rilis flash resmi Eurostat " +
+    "yang dipakai; estimasi pendahuluan negara anggota atau revisi berikutnya " +
+    "tidak mengubah keputusan.",
+  sources: ["https://ec.europa.eu/eurostat/web/hicp/data/database"],
   provider: "0x0000000000000000000000000000000000000000",
   chatId: "stub-0001",
   simulated: true,
