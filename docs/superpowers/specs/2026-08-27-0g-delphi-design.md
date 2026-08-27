@@ -54,12 +54,24 @@ Galileo system contracts: Flow `0x22E03a6A89B950F1c82ec5e74F8eCa321a105296` · M
 Package: **`@0gfoundation/0g-storage-ts-sdk`** (peer dep `ethers`). Testnet indexer: `https://indexer-storage-testnet-turbo.0g.ai`.
 
 ```ts
-const file       = await ZgFile.fromFilePath(path);
-const [tree,err] = await file.merkleTree();      // tree.rootHash()
+const file       = new MemData(bytes);           // or ZgFile.fromFilePath(path)
+const [tree,err] = await file.merkleTree();      // tree.rootHash() — no network needed
 const indexer    = new Indexer(indexerRpc);
-const [tx, uerr] = await indexer.upload(file, evmRpc, signer);
+const [tx, uerr] = await indexer.upload(file, evmRpc, signer);   // needs 0G Chain gas
 const derr       = await indexer.download(rootHash, outPath, /*withProof*/ true);
 ```
+
+**Reading needs none of that.** `GET {indexer}/file?root=0x…` returns the bytes over plain HTTPS
+with `access-control-allow-origin: *`, so a browser can fetch a document directly, and a root a
+node has never seen comes back as `{"code":101,"message":"File not found"}` at HTTP 200. The
+frontend therefore carries no SDK and no `ethers`: it fetches, recomputes the Merkle root with
+`keccak256`, and compares. See `frontend/src/lib/data/zg-storage.ts`, pinned to the SDK by 19
+vectors.
+
+The tree is 256-byte chunks under 1024-chunk segments, and two details of it are easy to get
+subtly wrong: padding above 16 chunks rounds up to a multiple of a sixteenth of the next power of
+two rather than to the power of two itself, and an odd node is carried unchanged to the back of
+the queue rather than paired with itself.
 
 ### 3.3 0G Compute
 
@@ -210,7 +222,15 @@ Draft ──approve──▶  Open ──tradingEnd──▶ Closed ──≥k r
 }
 ```
 
-`specRoot = keccak256` of this document's 0G Storage Merkle root. The spec's content is **immutable** once the market is created — resolvers judge exactly what was promised to traders.
+`specRoot` **is** this document's 0G Storage Merkle root — stored verbatim, not hashed again.
+The root is already a `bytes32` content address, and hashing it a second time would be one-way:
+nothing could fetch the document, which is the entire purpose of anchoring it. The first live
+market on Galileo shipped with `keccak256` of a string and no document behind it, and its
+question is unreadable for exactly that reason.
+
+The spec's content is **immutable** once the market is created — resolvers judge exactly what was
+promised to traders — and a reader can prove it, because the bytes it receives must hash back to
+the root the chain holds.
 
 ---
 

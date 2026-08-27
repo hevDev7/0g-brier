@@ -39,8 +39,13 @@ This is the table that drives the entire design. The three modes are **not** equ
 | `PRICE_HISTORY` | ✓ | ✗ | ✓ | indexer `price_points` |
 | `TRADE_TAPE` | ✓ | ✗ | ✓ | indexer `trades` |
 | `COST_BASIS` | ✓ | ✗ | ✓ | indexer `positions.avg_cost` |
-| `MARKET_SPEC_BLOB` | ✓ | ✗ | ✓ | 0G Storage via `specRoot` |
+| `MARKET_SPEC_BLOB` | ✓ | ✓* | ✓ | 0G Storage via `specRoot` |
 | `SETTLEMENT_RECEIPT` | ✓ | ✗ | ✓ | 0G Storage + `resolutions` |
+
+\* `MARKET_SPEC_BLOB` is answerable in `chain` mode because 0G Storage reads are a plain HTTPS
+GET keyed by the root already on chain — no indexer and no event history. It appears in
+`capabilities` only when `NEXT_PUBLIC_ZG_INDEXER` is set, so a deployment with a chain and no
+storage still reports it honestly as unavailable rather than claiming a question it cannot read.
 
 > **The authority for this list is `frontend/src/lib/data/types.ts`, not this table.** As shipped,
 > `CAPABILITIES` holds nine members: `LIST_MARKETS`, `MARKET_STATE`, `PRICE_HISTORY`,
