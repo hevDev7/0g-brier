@@ -79,6 +79,10 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     error BadLambda();
     error InsufficientSeedShares();
     error CreatorSeedFloor();
+    error TradingNotEnded();
+    error BadTransition();
+    error NotResolutionModule();
+    error NotGuardian();
 
     constructor() {
         _disableInitializers();
@@ -421,5 +425,102 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
 
         collateral.safeTransfer(to, tokensOut);
         emit LiquidityChanged(msg.sender, -int256(lambdaWad), tokensOut, qNew);
+    }
+
+    // ── siklus hidup ─────────────────────────────────────────────────────────
+
+    modifier onlyResolutionModule() {
+        if (msg.sender != config.addresses(ConfigKeys.RESOLUTION_MODULE)) revert NotResolutionModule();
+        _;
+    }
+
+    function close() external {
+        if (status != Status.Open) revert BadTransition();
+        if (block.timestamp < tradingEnd) revert TradingNotEnded();
+        _setStatus(Status.Closed);
+    }
+
+    function markProposed() external onlyResolutionModule {
+        if (status != Status.Closed && status != Status.Disputed) revert BadTransition();
+        _setStatus(Status.Proposed);
+    }
+
+    function markDisputed() external onlyResolutionModule {
+        if (status != Status.Proposed) revert BadTransition();
+        _setStatus(Status.Disputed);
+    }
+
+    /// @dev Kurs payout DIPOTRET di sini sehingga penebus pertama dan terakhir
+    ///      menerima kurs yang sama. `_q[outcome]` dijamin > 0 oleh lantai seed creator.
+    function settle(uint8 outcome) external onlyResolutionModule {
+        if (status != Status.Closed && status != Status.Proposed && status != Status.Disputed) revert BadTransition();
+        if (outcome > 1) revert BadOutcome();
+
+        winningOutcome = outcome;
+        resolvedAt = uint64(block.timestamp);
+        payoutPerShareWad = Math.mulDiv(DPMMath.WAD, poolWad, _q[outcome]);
+
+        _setStatus(Status.Settled);
+        _distributeFees(false);
+        emit Settled(outcome, payoutPerShareWad);
+    }
+
+    /// @notice Tidak ada outcome yang bisa ditetapkan → semua pihak dilikuidasi pada pᵢ.
+    function fail() external {
+        bool byModule = msg.sender == config.addresses(ConfigKeys.RESOLUTION_MODULE);
+        bool pastDeadline = block.timestamp >= settlementDeadline;
+        if (!byModule && !pastDeadline) revert BadTransition();
+        if (status == Status.Settled || status == Status.Failed || status == Status.Voided) revert BadTransition();
+
+        _snapshotLiquidation();
+        _setStatus(Status.Failed);
+        _distributeFees(false);
+    }
+
+    /// @notice Pembatalan darurat oleh guardian, hanya sebelum market ditutup.
+    ///         Setoran settlement DISITA — inilah yang membuat market abusif mahal.
+    function void(bytes32 reason) external {
+        if (msg.sender != config.guardian()) revert NotGuardian();
+        if (status != Status.Open) revert BadTransition();
+
+        _snapshotLiquidation();
+        _setStatus(Status.Voided);
+        _distributeFees(true);
+        emit MarketVoided(reason);
+    }
+
+    function _snapshotLiquidation() internal {
+        resolvedAt = uint64(block.timestamp);
+        _liqPerShareWad[0] = DPMMath.price(_q, 0);
+        _liqPerShareWad[1] = DPMMath.price(_q, 1);
+    }
+
+    function _setStatus(Status next) internal {
+        Status prev = status;
+        status = next;
+        emit StatusChanged(prev, next);
+    }
+
+    /// @param slashDeposit true saat void — setoran ke Treasury, bukan ke kas resolver.
+    function _distributeFees(bool slashDeposit) internal {
+        uint256 fees = feeAccrued;
+        uint256 deposit = settlementDeposit;
+        feeAccrued = 0;
+        settlementDeposit = 0;
+        if (fees == 0 && deposit == 0) return;
+
+        address treasuryAddr = config.addresses(ConfigKeys.TREASURY);
+        address resolverPool = config.addresses(ConfigKeys.RESOLUTION_MODULE);
+        if (resolverPool == address(0)) resolverPool = treasuryAddr;
+
+        uint256 toCreator = (fees * config.params(ConfigKeys.CREATOR_FEE_SHARE_BPS)) / 10_000;
+        uint256 resolverFee = (fees * config.params(ConfigKeys.RESOLVER_FEE_SHARE_BPS)) / 10_000;
+        uint256 toResolvers = slashDeposit ? resolverFee : resolverFee + deposit;
+        uint256 toTreasury = fees - toCreator - resolverFee + (slashDeposit ? deposit : 0);
+
+        if (toCreator > 0) collateral.safeTransfer(creator, toCreator);
+        if (toResolvers > 0) collateral.safeTransfer(resolverPool, toResolvers);
+        if (toTreasury > 0) collateral.safeTransfer(treasuryAddr, toTreasury);
+        emit FeesDistributed(toCreator, toResolvers, toTreasury);
     }
 }
