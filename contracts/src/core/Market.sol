@@ -255,4 +255,82 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         uint256 probAfter = DPMMath.probability(qNew, outcome);
         emit Trade(msg.sender, to, outcome, int256(sharesOut), tokensIn, fee, qNew, probAfter);
     }
+
+    // ── jual ─────────────────────────────────────────────────────────────────
+
+    /// @dev Analog `_priceBuy`: satu-satunya tempat rumus harga jual ditulis — dipakai
+    ///      `quoteSell` DAN `sell` supaya keduanya tak bisa diam-diam berbeda formula. Murni
+    ///      kalkulasi: guard (`BadOutcome`/`ZeroAmount`) tetap di pemanggil, bukan di sini,
+    ///      persis seperti `_priceBuy`, karena `outcome` dipakai sebagai indeks array sebelum
+    ///      tervalidasi. Pemeriksaan lantai benih (`SeedFloorBreached`) JUGA sengaja tetap di
+    ///      pemanggil (`sell`), bukan di sini: `quoteSell` adalah kuotasi, bukan otoritas, jadi
+    ///      boleh menunjukkan angka mentah walau `sharesIn` menembus benih; hanya eksekusi
+    ///      sungguhan yang menolaknya, dan urutan pemeriksaannya penting — lihat komentar di
+    ///      `sell`. `sell` memakai `target` untuk menyetel `poolWad`; `quoteSell` mengabaikannya.
+    function _priceSell(uint8 outcome, uint256 sharesIn)
+        internal
+        view
+        returns (uint256 target, uint256 grossTokens, uint256 fee, uint256 tokensOut)
+    {
+        uint256[2] memory qNew = _q;
+        qNew[outcome] -= sharesIn; // underflow revert bila melampaui pasokan
+        target = DPMMath.costUp(qNew);
+        grossTokens = (poolWad - target) / scale; // floor: sisa debu tinggal di pool
+        fee = (grossTokens * feeBps) / 10_000;
+        tokensOut = grossTokens - fee;
+    }
+
+    function quoteSell(uint8 outcome, uint256 sharesIn) public view returns (uint256 tokensOut, uint256 fee) {
+        if (outcome > 1) revert BadOutcome();
+        if (sharesIn == 0) revert ZeroAmount();
+        (,, fee, tokensOut) = _priceSell(outcome, sharesIn);
+    }
+
+    function sell(uint8 outcome, uint256 sharesIn, uint256 minTokensOut, address to)
+        external
+        nonReentrant
+        returns (uint256 tokensOut)
+    {
+        _requireExitable(); // sengaja tanpa pemeriksaan pause
+        if (outcome > 1) revert BadOutcome();
+        if (sharesIn == 0) revert ZeroAmount();
+
+        uint256[2] memory qNew = _q;
+        qNew[outcome] -= sharesIn; // underflow revert bila melampaui pasokan
+
+        // Lantai benih: dicek di sini, SEBELUM memanggil `_priceSell`, bukan di dalamnya —
+        // supaya selalu mendahului pemeriksaan debu/slippage. Urutan ini bukan kosmetik: untuk
+        // outcome yang pasokan tradable-nya kecil atau nol, oversell yang menabrak lantai benih
+        // sering JUGA jatuh di bawah MIN_TRADE_TOKENS (lihat `test_creatorCannotSellSeedShares`),
+        // dan tanpa urutan ini `TradeTooSmall` akan menutupi sebab revert yang sebenarnya.
+        //
+        // Bukan sekadar jaring pengaman teoretis — check ini independen dari `shares.burn` di
+        // bawah (ia membaca akunting pool sendiri, `_q` vs `_seedSupply`, bukan saldo ERC-1155),
+        // dan TEREKSEKUSI sungguhan setiap kali `sharesIn` melampaui seluruh pasokan tradable
+        // outcome ini (lihat `test_cannotSellMoreThanOwned`, `test_creatorCannotSellSeedShares`).
+        // Lembar seed memang bukan ERC-1155 hari ini — saldo gabungan seluruh pemegang tak
+        // pernah melebihi `_q[outcome] - _seedSupply[outcome]`, jadi `burn` di bawah AKAN JUGA
+        // menolak oversell sebesar ini seandainya baris ini dihapus — tapi dipertahankan sebagai
+        // pernyataan independen: bila suatu saat lembar seed ikut dicetak sebagai ERC-1155 oleh
+        // perubahan di masa depan, jalur inilah yang tetap menangkapnya, terlepas dari burn.
+        if (qNew[outcome] < _seedSupply[outcome]) revert SeedFloorBreached();
+
+        uint256 target;
+        uint256 grossTokens;
+        uint256 fee;
+        (target, grossTokens, fee, tokensOut) = _priceSell(outcome, sharesIn);
+        if (grossTokens < minTradeTokens) revert TradeTooSmall();
+        if (tokensOut < minTokensOut) revert SlippageExceeded(tokensOut, minTokensOut);
+
+        // Efek sebelum interaksi: burn ERC-1155 memanggil balik `msg.sender`.
+        _q = qNew;
+        poolWad = target;
+        feeAccrued += fee;
+
+        shares.burn(msg.sender, outcome, sharesIn);
+        collateral.safeTransfer(to, tokensOut);
+
+        uint256 probAfter = DPMMath.probability(qNew, outcome);
+        emit Trade(msg.sender, to, outcome, -int256(sharesIn), tokensOut, fee, qNew, probAfter);
+    }
 }
