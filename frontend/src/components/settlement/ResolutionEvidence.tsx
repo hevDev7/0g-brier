@@ -74,31 +74,59 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
             ))}
           </ul>
         )}
-        {receipt.judgeModel !== null && (
-          <p className="mt-2 text-[12px] text-text-faint">
-            Ringkasan di bawah disusun oleh juri: {receipt.judgeModel}
-          </p>
-        )}
       </div>
 
       <div>
         <h2 className="mb-1 text-[12px] uppercase tracking-wide text-text-faint">Kriteria resolusi</h2>
-        <p data-testid="criteria" className="text-[13px] leading-relaxed text-text">
-          {receipt.criteria}
-        </p>
+        {/* outcome null berarti market ini BELUM DISELESAIKAN — kriteria kosong di
+            fixture PENDING_RECEIPT bukan "kriteria yang kebetulan pendek", ia
+            memang belum ada. Merender <p data-testid="criteria"> kosong di sini
+            akan membuat panel tampak seperti "resolusi terjadi dan tidak
+            menghasilkan apa-apa", padahal yang benar adalah "belum ada resolusi
+            sama sekali" — kebohongan sejenis dengan merender nol untuk data yang
+            tak diketahui. Digerbang per-bagian (bukan seluruh panel sekaligus),
+            sama seperti baris suara resolver dan sumber di atas dan di bawah:
+            MarketStats.tsx sudah menegakkan pola yang sama (ketersediaan dinilai
+            PER BARIS, bukan per panel) dengan alasan yang identik. */}
+        {receipt.outcome === null ? (
+          <p className="text-[13px] text-text-muted">Belum ada kriteria — market ini belum diselesaikan.</p>
+        ) : (
+          <p data-testid="criteria" className="text-[13px] leading-relaxed text-text">
+            {receipt.criteria}
+          </p>
+        )}
       </div>
 
-      <details data-testid="reasoning" className="text-[13px] leading-relaxed text-text">
-        <summary className="cursor-pointer select-none text-text-muted">
-          Alasan resolver — lengkap, apa adanya
-        </summary>
-        <p className="mt-2 whitespace-pre-wrap">{receipt.reasoning}</p>
-      </details>
+      {receipt.outcome === null ? (
+        // <details> "lengkap, apa adanya" TIDAK PERNAH dirender kosong: sebuah
+        // disclosure yang menjanjikan alasan lengkap lalu membuka ke ketiadaan
+        // adalah persis kebohongan yang dilarang aturan #1 di atas.
+        <p className="text-[13px] text-text-muted">Belum ada alasan resolver — market ini belum diselesaikan.</p>
+      ) : (
+        <div>
+          {receipt.judgeModel !== null && (
+            // Nama bagian disebut eksplisit ("Alasan di bawah") supaya tidak
+            // ambigu dengan kriteria di atasnya — dan diletakkan bersebelahan
+            // langsung dengan <details> yang dimaksud, bukan di dekat daftar
+            // suara, supaya "di bawah" menunjuk ke elemen berikutnya secara
+            // harfiah, bukan ke bagian mana pun di halaman.
+            <p className="mb-2 text-[12px] text-text-faint">
+              Alasan di bawah disusun oleh juri: {receipt.judgeModel}
+            </p>
+          )}
+          <details data-testid="reasoning" className="text-[13px] leading-relaxed text-text">
+            <summary className="cursor-pointer select-none text-text-muted">
+              Alasan resolver — lengkap, apa adanya
+            </summary>
+            <p className="mt-2 whitespace-pre-wrap">{receipt.reasoning}</p>
+          </details>
+        </div>
+      )}
 
       <div>
         <h2 className="mb-1 text-[12px] uppercase tracking-wide text-text-faint">Sumber</h2>
         {receipt.sources.length === 0 ? (
-          <p className="text-[13px] text-text-muted">Tidak ada sumber tercatat.</p>
+          <p className="text-[13px] text-text-muted">Belum ada sumber tercatat.</p>
         ) : (
           <ul className="flex flex-col gap-1">
             {receipt.sources.map((s) => (

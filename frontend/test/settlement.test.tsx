@@ -35,6 +35,19 @@ describe("FinalOutcome", () => {
     expect(screen.getByTestId("payout")).toHaveTextContent("1.30×");
     expect(screen.getByTestId("payout")).not.toHaveTextContent("1.69×");
   });
+
+  // Pola yang sama dengan simulated-badge milik ResolutionEvidence di bawah —
+  // dicek di sini juga karena verdict (pemenang + kurs payout) sama-sama tidak
+  // boleh disangka sungguhan saat berasal dari receipt stub.
+  it("menandai hasil tersimulasi secara mencolok juga di panel outcome final", () => {
+    render(<FinalOutcome receipt={receipt} market={m} />);
+    expect(screen.getByTestId("final-outcome-simulated")).toHaveTextContent(/simulasi/i);
+  });
+
+  it("tidak menandai simulasi di panel outcome final saat receipt sungguhan", () => {
+    render(<FinalOutcome receipt={{...receipt, simulated: false}} market={m} />);
+    expect(screen.queryByTestId("final-outcome-simulated")).not.toBeInTheDocument();
+  });
 });
 
 describe("ResolutionEvidence", () => {
@@ -67,5 +80,39 @@ describe("ResolutionEvidence", () => {
   it("menandai resolver yang suaranya berbeda dari outcome final", () => {
     render(<ResolutionEvidence receipt={receipt} />);
     expect(screen.getByTestId("vote-qwen3-32b")).toHaveTextContent(/NO/);
+  });
+});
+
+describe("ResolutionEvidence — market belum diselesaikan", () => {
+  // Setara PENDING_RECEIPT di lib/data/mock.ts (tidak diekspor dari sana,
+  // jadi ditulis ulang di sini) — bentuk yang dikembalikan getReceipt() untuk
+  // market mana pun yang statusnya BUKAN Settled: dua dari tiga fixture
+  // market memakai bentuk ini, bukan kasus tepi langka.
+  const pending: SettlementReceipt = {
+    outcome: null,
+    votes: [],
+    judgeModel: null,
+    reasoning: "",
+    criteria: "",
+    sources: [],
+    provider: "0x0000000000000000000000000000000000000000",
+    chatId: "",
+    simulated: true,
+  };
+
+  it("menampilkan pesan belum-diselesaikan, bukan panel kosong tak berpenjelasan", () => {
+    render(<ResolutionEvidence receipt={pending} />);
+    expect(screen.getAllByText(/belum diselesaikan/i).length).toBeGreaterThan(0);
+  });
+
+  // Inti perbaikan: sebelum ini, judul "Kriteria resolusi" merender paragraf
+  // kosong dan <details> "lengkap, apa adanya" membuka ke ketiadaan — disclosure
+  // yang menjanjikan isi lengkap lalu tidak memberi apa-apa. Itu terbaca sebagai
+  // "resolusi terjadi dan tidak menghasilkan apa-apa", bukan "belum ada
+  // resolusi", persis kebohongan yang dilarang aturan #1 file komponen ini.
+  it("tidak menjanjikan kriteria maupun alasan lengkap yang sebenarnya kosong", () => {
+    render(<ResolutionEvidence receipt={pending} />);
+    expect(screen.queryByTestId("criteria")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("reasoning")).not.toBeInTheDocument();
   });
 });

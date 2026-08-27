@@ -20,7 +20,7 @@ export function FinalOutcome({receipt, market}: {receipt: SettlementReceipt; mar
     return (
       <div data-testid="final-outcome" className="rounded-lg border border-border p-4">
         <h2 className="mb-1 text-[12px] uppercase tracking-wide text-text-faint">Hasil akhir</h2>
-        <p className="text-[13px] text-text-muted">Belum diselesaikan — komite belum mengeluarkan putusan.</p>
+        <p className="text-[13px] text-text-muted">Belum diselesaikan — resolusi komite belum tersedia.</p>
       </div>
     );
   }
@@ -36,7 +36,7 @@ export function FinalOutcome({receipt, market}: {receipt: SettlementReceipt; mar
           role="status"
           className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-[12px] font-semibold uppercase tracking-wide text-warn"
         >
-          Hasil simulasi — bukan putusan sungguhan dari komite AI
+          Hasil simulasi — bukan resolusi sungguhan dari komite AI
         </div>
       )}
 
