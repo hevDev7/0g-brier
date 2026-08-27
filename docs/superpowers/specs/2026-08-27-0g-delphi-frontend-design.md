@@ -6,7 +6,9 @@
 
 ## 1. Ringkasan
 
-Antarmuka web untuk **manusia** yang menelusuri, memperdagangkan, dan menebus posisi di pasar prediksi biner 0G-Delphi. Agent AI memakai jalur terpisah — SDK `@0g-delphi/agent-kit` di luar dApp — mengikuti pemisahan yang dipakai Delphi (Gensyn).
+Antarmuka web untuk **manusia yang mengamati** pasar prediksi biner 0G-Delphi. Manusia membaca harga, sejarah, bukti resolusi, dan buku posisi agent — **manusia tidak mengeksekusi apa pun dari halaman ini**. Seluruh buy, sell, redeem, dan liquidate berjalan lewat SDK `@0g-delphi/agent-kit` di luar dApp, mengikuti pemisahan yang dipakai Delphi (Gensyn).
+
+Konsekuensinya bukan sekadar "satu komponen dihapus": halaman detail market berhenti menjadi tempat bertransaksi dan menjadi tempat **memeriksa** — apa harganya, dari mana sejarahnya, siapa memegang apa, dan atas dasar bukti apa ia diselesaikan.
 
 Tiga rute di v1: daftar market, detail market, portofolio. Rute agent (`/agents`, `/agents/[id]`, `/agents/new`) dan `/create` mendapat spec sendiri di P4.
 
@@ -16,9 +18,10 @@ Tiga rute di v1: daftar market, detail market, portofolio. Rute agent (`/agents`
 |---|---|---|
 | F1 | Lapisan data ber-mode `mock \| chain \| indexer`, dikomposisi sebagai **dekorator** | `indexer` = `chain` + sejarah, bukan penggantinya; komposisi membuat sifat itu struktural |
 | F2 | `unavailable` adalah status kelas satu, sejajar loading/error | Mode `chain` tidak bisa menjawab pertanyaan sejarah sama sekali; UI tidak boleh menyamarkannya jadi nol |
-| F3 | UI manusia; agent lewat SDK terpisah | Pemisahan literal ala Delphi, dipilih pemilik produk |
+| F3 | **UI manusia hanya mengamati; seluruh eksekusi lewat SDK agent** | Pemisahan literal ala Delphi, dipilih pemilik produk. Halaman manusia tidak punya jalur menulis ke rantai sama sekali — bukan disembunyikan di balik flag, melainkan tidak ada |
 | F4 | Visual padat-data, tenang, presisi | Isi produk ini angka dan bukti, bukan narasi |
-| F5 | Tiket order pratinjau **lokal** lewat cermin TS, konfirmasi **on-chain** sebelum kirim | Mengetik tanpa latensi RPC, eksekusi tetap otoritatif |
+| F5 | Mesin kuotasi (kuotasi, dampak harga, dilusi) pindah ke **`@0g-delphi/agent-kit`**, bukan ke halaman | Yang membutuhkannya adalah pihak yang mengeksekusi. Menyimpannya di UI berarti menaruh logika sizing di tempat yang tak pernah memakainya |
+| F7 | Panel bukti resolusi wajib menampilkan **model, alasan, kriteria, dan sumber data** | "Diselesaikan oleh AI" tanpa bukti adalah permintaan untuk percaya. Delphi mempublikasikannya; kita punya commit-reveal + 0G Storage yang seharusnya membuat kita bisa melakukannya lebih baik |
 | F6 | Konversi desimal mengimpor `@0g-delphi/protocol`, tidak ditulis ulang | Paket itu sudah punya arah pembulatan yang benar dan sudah teruji diferensial |
 
 ---
@@ -31,14 +34,16 @@ Ini tabel yang mendorong seluruh desain. Ketiga mode **tidak** setara.
 |---|:--:|:--:|:--:|---|
 | `LIST_MARKETS` | ✓ | ✓ | ✓ | `MarketFactory.marketCount/marketAt` · tabel terindeks |
 | `MARKET_STATE` | ✓ | ✓ | ✓ | `Market.qArray/probability/poolWad/status` |
-| `QUOTE` | ✓ | ✓ | ✓ | `Market.quoteBuy/quoteBuySpend/quoteSell` — **selalu rantai** |
-| `EXECUTE` | simulasi | ✓ | ✓ | `Market.buy/sell/redeem/liquidate` |
+| `MARKET_STATS` | ✓ | ✓ | ✓ | `Market.poolWad/feeBps/closeTime/...` · volume butuh indexer |
+| `AGENT_POSITIONS` | ✓ | sebagian | ✓ | `OutcomeShares.balanceOfOutcome`; harga masuk butuh indexer |
 | `POSITIONS_CURRENT` | ✓ | ✓ | ✓ | `OutcomeShares.balanceOfOutcome` + `Market.seedSharesOf` |
 | `PRICE_HISTORY` | ✓ | ✗ | ✓ | indexer `price_points` |
 | `TRADE_TAPE` | ✓ | ✗ | ✓ | indexer `trades` |
 | `COST_BASIS` | ✓ | ✗ | ✓ | indexer `positions.avg_cost` |
 | `MARKET_SPEC_BLOB` | ✓ | ✗ | ✓ | 0G Storage lewat `specRoot` |
 | `SETTLEMENT_RECEIPT` | ✓ | ✗ | ✓ | 0G Storage + `resolutions` |
+
+`QUOTE` dan `EXECUTE` **tidak lagi ada di tabel ini.** Keduanya milik `@0g-delphi/agent-kit`; lapisan data frontend tidak pernah memanggil `Market.buy`, `sell`, `redeem`, atau `liquidate`, dan tidak menyimpan signer. Itu batas yang struktural, bukan konvensi — `DataSource` sama sekali tidak punya metode yang menulis.
 
 **Kenapa `chain` tidak bisa menjawab sejarah.** Cost basis menuntut pengetahuan tentang apa yang dibayar, dan itu hanya ada di event. `eth_getLogs` dari genesis di Galileo bukan jalan keluar yang jujur untuk sebuah UI. Karena itu PnL di mode `chain` bukan nol — ia **tidak tersedia**, dan ditampilkan begitu.
 
@@ -153,11 +158,15 @@ Di mode `chain`, kolom Δ24j dan Volume merender `<Unavailable>`; tabel tetap be
 
 ### 4.2 `/market/[address]` — detail market
 
-Susunan dua kolom: konten di kiri, tiket order menempel di kanan (≥1024px); menumpuk di bawah 1024px dengan tiket jadi sheet yang bisa dipanggil.
+Susunan dua kolom: konten di kiri, **panel pemeriksaan** menempel di kanan (≥1024px); menumpuk di bawah 1024px. Kolom kanan berisi statistik market dan bukti resolusi — bukan kontrol.
 
 **Kepala.** Pertanyaan, badge status, badge tier, kategori, hitung mundur tutup, alamat market dengan salin + tautan explorer.
 
-**Panel probabilitas.** Angka besar `P(YES)` dan `P(NO)`, keduanya `pᵢ²`, dijamin berjumlah 100% (±1 unit terakhir — konsekuensi dua pembagian floor, lihat §5.1). Grafik garis di bawahnya bila `PRICE_HISTORY` tersedia.
+**Panel probabilitas.** Angka besar `P(YES)` dan `P(NO)`, keduanya `pᵢ²`, dijamin berjumlah 100% (±1 unit terakhir — konsekuensi dua pembagian floor, lihat §5.1).
+
+**Grafik riwayat probabilitas.** Dua seri (YES/NO), sumbu waktu, sumbu 0–100%. `PRICE_HISTORY` — merender `<Unavailable>` di mode `chain`, tidak pernah grafik kosong. Sumbu Y adalah **probabilitas**, bukan harga marginal; label sumbu menyebut `P(YES)` eksplisit agar tak ada pembaca yang menyangka itu `pᵢ`.
+
+**Statistik market** (kolom kanan). Fee, kedalaman pool, volume, dan garis waktu siklus hidup lengkap: dibuat, tutup, settlement mulai, batas settle. Garis waktu itu bukan hiasan — di market dengan resolusi bertingkat, jarak antara "tutup" dan "batas settle" adalah jendela sengketa, dan pengamat berhak tahu berapa lama dananya terkunci.
 
 **Panel payout berjalan — wajib, bukan hiasan.**
 
@@ -170,26 +179,48 @@ Payout jika NO menang      1.56× per lembar
    Jual kapan saja untuk mengunci harga saat ini.
 ```
 
-Ini pengungkapan, bukan disclaimer. DPM mendanai pembayarannya dari pool, dan konsekuensinya payout milik pembeli awal terdilusi oleh pembeli belakangan. Menyembunyikannya membuat UI ini berbohong tentang instrumen yang dijualnya. Teksnya muncul di panel **dan** di tiket order sebelum konfirmasi.
+Ini pengungkapan, bukan disclaimer. DPM mendanai pembayarannya dari pool, dan konsekuensinya payout milik pembeli awal terdilusi oleh pembeli belakangan. Menyembunyikannya membuat halaman ini berbohong tentang instrumen yang dijelaskannya. Karena manusia tidak lagi mengeksekusi di sini, panel ini menjadi **satu-satunya** tempat sifat itu terlihat oleh manusia — dan `agent-kit` wajib memunculkannya lagi di sisi agent (§6).
+
+**Tabel posisi agent.** Agent, sisi, lembar, harga masuk, harga sekarang. `AGENT_POSITIONS`. Ini yang menggantikan tiket order sebagai isi utama halaman: pertanyaan manusia berubah dari "berapa yang saya beli" menjadi "siapa memegang apa, dan pada harga berapa". Harga masuk butuh `COST_BASIS`; di mode `chain` kolom itu `<Unavailable>` sementara lembar dan harga sekarang tetap terisi.
 
 **Tape trade.** Waktu, sisi, lembar, harga rata-rata, alamat terpotong. `TRADE_TAPE`.
 
 **Penampil MarketSpec.** Pertanyaan, aturan, sumber, prompt settlement, deadline. Diambil dari 0G Storage lewat `specRoot`. `MARKET_SPEC_BLOB`.
 
-**Panel settlement** (setelah resolusi, P2). Outcome, kurs payout, dan **badge TEE**: `teeVerified` benar/salah, alamat provider, model, `chatID`, tautan ke receipt. Badge menampilkan `simulated: true` secara mencolok bila receipt-nya dari mode stub — hasil tersimulasi tidak boleh pernah tertukar dengan yang sungguhan.
+**Panel outcome final** (setelah resolusi). Outcome pemenang dan kurs payout-nya — `1/pᵢ` pada `q` yang dibekukan, bukan `1/Pᵢ` (§5.1).
 
-### 4.3 `/portfolio`
+**Panel bukti resolusi** (kolom kanan, setelah resolusi). Ini panel yang membuat "diselesaikan oleh AI" bisa diperiksa alih-alih dipercaya:
+
+| Baris | Isi |
+|---|---|
+| Model resolver | daftar model komite yang memberi suara |
+| Model hakim | model yang memutuskan, bila tier `VERIFIED`/`DETERMINISTIC` |
+| Outcome final | YES / NO / VOID |
+| Alasan | teks apa adanya dari receipt — **tidak diringkas** |
+| Kriteria resolusi | dari `MarketSpec`, agar pembaca bisa menilai alasannya terhadap aturan yang dijanjikan |
+| Sumber data | URL yang benar-benar dikonsultasikan resolver |
+| Badge TEE | `teeVerified`, alamat provider, model, `chatID`, tautan receipt |
+
+Badge menampilkan `simulated: true` secara mencolok bila receipt-nya dari mode stub — hasil tersimulasi tidak boleh pernah tertukar dengan yang sungguhan. Alasan resolver ditampilkan verbatim: meringkasnya berarti UI ikut menilai, dan pembaca kehilangan justru bagian yang ingin ia periksa. `SETTLEMENT_RECEIPT`.
+
+### 4.3 `/portfolio` — buku agent, hanya-baca
+
+Karena manusia tidak mengeksekusi, halaman ini bukan lagi "posisi saya" melainkan **buku posisi sebuah agent**, dialamatkan oleh wallet agent tersebut.
 
 | Kolom | Sumber |
 |---|---|
 | Market · Outcome | — |
 | Lembar | `POSITIONS_CURRENT` |
-| Cost basis rata-rata | `COST_BASIS` — `unavailable` di chain |
+| Harga masuk rata-rata | `COST_BASIS` — `unavailable` di chain |
 | Nilai sekarang | `pᵢ × lembar` dari `MARKET_STATE` |
 | PnL belum direalisasi | butuh `COST_BASIS` |
-| Aksi | Redeem (Settled) · Liquidate (Failed/Voided) |
+| Status | Open · Settled (belum ditebus) · Failed/Voided (bisa dilikuidasi) |
 
-Di mode `chain` kolom lembar dan nilai sekarang terisi penuh; cost basis dan PnL merender `<Unavailable>`. Itu tabel yang berguna dan jujur sekaligus — persis alasan `unavailable` dijadikan status, bukan nol.
+Kolom **Aksi dihapus.** Redeem dan liquidate adalah eksekusi, dan eksekusi hidup di `agent-kit`. Kolom Status menggantikannya: ia memberi tahu pengamat bahwa ada yang perlu dilakukan, tanpa berpura-pura halaman ini bisa melakukannya.
+
+Di mode `chain` kolom lembar dan nilai sekarang terisi penuh; harga masuk dan PnL merender `<Unavailable>`. Itu tabel yang berguna dan jujur sekaligus — persis alasan `unavailable` dijadikan status, bukan nol.
+
+**Terbuka:** apakah rute ini kelak dilebur ke `/agents/[address]` bersama leaderboard di P4. Dibiarkan `/portfolio` untuk sekarang agar tidak mendahului spec agent.
 
 ---
 
@@ -221,43 +252,62 @@ Sudah ditegakkan tipe (§3.3). Dinyatakan di sini karena ia aturan produk, bukan
 
 ---
 
-## 6. Tiket order
+## 6. Mesin kuotasi milik SDK, bukan halaman
 
-Bagian paling sulit didesain benar: ia harus memuat kuotasi, dampak harga, batas slippage, payout, dan peringatan dilusi tanpa jadi menakutkan atau justru menyesatkan.
+Manusia tidak mengeksekusi, jadi tiket order keluar dari halaman market. Yang **tidak** boleh ikut hilang adalah logikanya — kuotasi, dampak harga, batas slippage, dan pengungkapan dilusi tetap wajib, hanya pindah ke pihak yang benar-benar memakainya: `@0g-delphi/agent-kit`.
 
-```
-┌─ Beli · Jual ────────────────────────────────┐
-│  [ YES  59.0% ]  [ NO  41.0% ]               │
-│                                              │
-│  Belanjakan   [        100.00 ] mUSDC        │
-│                    atau lembar ⇄              │
-│  ────────────────────────────────────────    │
-│  Terima              126.32 lembar YES       │
-│  Harga rata-rata     0.7838 mUSDC / lembar   │
-│  Fee (1.00%)         0.99 mUSDC              │
-│  Ke pool             99.01 mUSDC             │
-│                                              │
-│  P(YES)  59.0%  →  63.8%     (+4.7 pt)       │
-│  Payout jika YES     1.30×  →  1.25×         │
-│                                              │
-│  Maks dibayar  100.50 mUSDC   slippage 0.5%  │
-│                                              │
-│  ⚠ Payout mengambang; pembeli berikutnya di  │
-│    sisi ini menurunkan payout per lembarmu.  │
-│                                              │
-│  [           Setujui mUSDC           ]       │
-│  [            Beli YES                ]      │
-└──────────────────────────────────────────────┘
+### 6.1 Permukaan yang dicerminkan dari Delphi
+
+Bentuk berikut diambil dari SDK Delphi karena penulis agent sudah mengenalnya, dan keakraban itu mengurangi kesalahan:
+
+```ts
+quoteBuy ({ market, outcome, sharesOut })          -> { tokensIn }
+quoteSell({ market, outcome, sharesIn  })          -> { tokensOut }
+ensureTokenApproval({ market, minimumAmount })     -> { approvalNeeded }
+buyShares ({ market, outcome, sharesOut, maxTokensIn  }) -> { transactionHash }
+sellShares({ market, outcome, sharesIn,  minTokensOut }) -> { transactionHash }
+getMarket ({ address, pricesAndImpliedProbabilities }) -> { spotPrices[], spotImpliedProbabilities[], ... }
 ```
 
-Empat keputusan di balik susunan ini:
+Dua detail dari SDK itu kita adopsi apa adanya karena keduanya benar:
 
-- **Nominal dulu, lembar sebagai alternatif.** Orang berpikir "seratus dolar", bukan "135,31 lembar". Tombol `⇄` menukar mode input.
-- **Dampak harga ditampilkan sebagai transisi, bukan angka tunggal.** `59.0% → 59.4%` memberi tahu apa yang perbuatanmu lakukan pada market; "+0,4 pt" saja tidak.
-- **Payout ditampilkan sebagai transisi juga**, dan itu justru yang membuat dilusi terlihat konkret: pembelianmu sendiri menurunkan payout-mu dari 1,30× ke 1,25×. Peringatan teks di bawahnya menggeneralisasi apa yang sudah pengguna lihat terjadi.
-- **Approve dan Beli sebagai dua tombol terpisah**, bukan satu tombol yang diam-diam mengirim dua transaksi. Tombol approve hilang begitu allowance mencukupi.
+- **Approve `maxTokensIn`, bukan hasil kuotasi.** Harga bisa bergerak ke mana saja sampai batas itu sebelum transaksinya mendarat; approve sebesar kuotasi membuat trade gagal justru pada saat harga bergerak.
+- **`spotPrices` dan `spotImpliedProbabilities` dikembalikan terpisah**, meski di LMSR keduanya identik. Di sistem kita keduanya **berbeda secara fundamental**, jadi bentuk yang sudah memisahkannya membawa perbedaan itu dengan benar.
 
-Perilaku status: kuotasi dihitung lokal saat mengetik (tanpa debounce, tanpa RPC); `quoteBuy` on-chain dipanggil sekali saat blur atau sebelum konfirmasi; bila keduanya berbeda lebih dari toleransi, tiket menampilkan angka rantai dan menandainya diperbarui.
+### 6.2 Jebakan porting: LMSR bukan DPM Pennock
+
+**Ini bagian terpenting di seluruh dokumen bagi penulis agent.** Delphi memakai LMSR. Kita memakai DPM Pennock `C(q) = √(Σqᵢ²)`. Perbedaannya bukan detail implementasi:
+
+| | Delphi (LMSR) | 0G-Delphi (DPM Pennock) |
+|---|---|---|
+| Normalisasi | `Σpᵢ = 1` | `Σpᵢ² = 1` |
+| Probabilitas implisit | `Pᵢ = pᵢ` | `Pᵢ = pᵢ²` |
+| Payout per lembar menang | **1** (tetap sejak beli) | **`1/pᵢ`** (mengambang sampai tutup) |
+| Kelly | `f* = (P̂ − p)/(1 − p)` | `f* = (P̂ − P)/(1 − P)` |
+
+Pada `P = 59%`: market kita membayar **1,30×**, market LMSR membayar **1,69×**. Agent yang di-port tanpa penyesuaian akan **melebih-lebihkan payout sekitar 30%** — dan ia akan tetap "bekerja", cuma rugi pelan-pelan.
+
+Perhatikan bentuk Kelly-nya: rumusnya sama, tapi **variabelnya probabilitas, bukan harga**. Turunannya: odds bersih `b = payout/cost − 1 = (1/p)/p − 1 = (1−P)/P`, sehingga `f* = (P̂ − P)/(1 − P)`. Agent yang memasukkan `price` kita (yang bernilai `√P`) ke rumus bergaya Delphi salah ukuran secara sistematis, bukan sesekali.
+
+Konsekuensi API: **`agent-kit` tidak boleh mengekspos field bernama `price` yang bisa disangka probabilitas.** Namai `marginalPrice` dan `impliedProbability`, dan biarkan tipe menolak pertukarannya.
+
+### 6.3 Dilusi adalah dimensi risiko yang tak dimiliki LMSR
+
+Di LMSR lembar menang membayar tepat 1, terkunci saat pembelian. Di DPM kita payout adalah `1/p_final`, dan **setiap pembelian berikutnya di sisi yang sama menurunkannya**. Artinya Kelly yang dihitung pada harga sekarang melebih-lebihkan edge — bukan karena estimasi probabilitasnya keliru, melainkan karena hadiahnya menyusut setelah agent masuk.
+
+`quoteBuy` karena itu wajib mengembalikan **payout sebelum dan sesudah**, sebagaimana panel payout menampilkannya untuk manusia:
+
+```ts
+{ tokensIn, sharesOut, avgPrice,
+  probBefore, probAfter,
+  payoutBefore, payoutAfter }   // payoutAfter < payoutBefore, selalu, untuk buy
+```
+
+Mengembalikan `tokensIn` saja akan menyembunyikan satu-satunya hal yang membedakan market ini dari yang sudah dikenal penulis agent.
+
+### 6.4 Ukuran dibatasi dampak, bukan hanya modal
+
+Pola dari agent produksi yang layak ditiru: kuotasi ukuran target, lalu **paruh terus sampai dampaknya di bawah ambang**, dan tolak trade bila market terlalu tipis untuk menyerap ukuran terkecil sekalipun. Lalu periksa ulang edge terhadap **harga yang benar-benar dibayar**, bukan harga spot — edge 0,8% melawan biaya eksekusi 3,7% adalah kerugian dengan langkah tambahan.
 
 ---
 
@@ -345,12 +395,13 @@ frontend/
 │  │  ├─ chain.ts                ChainSource (viem)
 │  │  ├─ indexer.ts              IndexerSource (membungkus ChainSource)
 │  │  └─ index.ts                pemilih mode dari env
-│  ├─ hooks/                     useMarkets, useMarket, useCandles, usePositions, useQuote
+│  ├─ hooks/                     useMarkets, useMarket, useCandles, usePositions
 │  └─ format.ts                  seluruh aturan §7.2, satu tempat
 ├─ components/
 │  ├─ primitives/                Table, Badge, Unavailable, CopyAddress, Countdown
-│  ├─ market/                    ProbabilityPanel, PayoutPanel, OrderTicket, TradeTape, SpecViewer
-│  └─ settlement/                TeeBadge, ReceiptViewer
+│  ├─ market/                    ProbabilityPanel, PayoutPanel, ProbabilityChart,
+│  │                             MarketStats, PositionsTable, TradeTape, SpecViewer
+│  └─ settlement/                FinalOutcome, ResolutionEvidence, TeeBadge, ReceiptViewer
 └─ test/                         vitest + playwright
 ```
 
@@ -363,7 +414,8 @@ frontend/
 | Lapisan | Isi | Alat |
 |---|---|---|
 | Lapisan data | tiap sumber memenuhi kontrak; kemampuan absen **melempar**, bukan mengembalikan kosong | vitest |
-| Dekorasi | `IndexerSource` mendelegasikan kuotasi/eksekusi ke `ChainSource` — dibuktikan lewat spy, bukan inspeksi | vitest |
+| Dekorasi | `IndexerSource` mendelegasikan pembacaan status ke `ChainSource` — dibuktikan lewat spy, bukan inspeksi | vitest |
+| Batas tulis | `DataSource` **tidak punya** metode yang menulis rantai; diuji sebagai properti tipe dan sebagai grep terhadap `buy\|sell\|redeem\|liquidate` di `lib/data/` | vitest |
 | Format | tabel §7.2 sebagai kasus uji | vitest |
 | Komponen | tiap konsumen `Query<T>` merender keempat status | vitest + Testing Library |
 | e2e | tiga rute melawan anvil di mode `chain`; termasuk buy sungguhan dan verifikasi `unavailable` muncul di kolom sejarah | Playwright |
@@ -379,12 +431,15 @@ Satu uji yang wajib ada dan mudah terlupa: **render setiap komponen di mode `cha
 | Fase | Isi | Prasyarat | Selesai bila |
 |---|---|---|---|
 | **F0** | workspace, token, `lib/format`, `types.ts`, `MockSource`, primitif | — | vitest hijau; storybook-less demo halaman token |
-| **F1** | `/market/[address]` + `ChainSource` + tiket order | Task 13 (`sell`) | beli & jual sungguhan di anvil dari browser |
-| **F2** | `/` daftar market | Task 17 (factory) | daftar terisi dari enumerasi factory |
-| **F3** | `/portfolio` + redeem/liquidate | Task 16 | siklus penuh: beli → settle → redeem, dari UI |
-| **F4** | `IndexerSource` | P3 | grafik, tape, PnL terisi; `unavailable` menghilang |
+| **F1** | Halaman market diperkaya di mode mock: grafik probabilitas, statistik market, tabel posisi, outcome final, bukti resolusi. `OrderTicket` dikeluarkan. | F0 | halaman detail setara referensi Delphi, seluruhnya dari `MockSource` |
+| **F2** | `ChainSource` + `/` daftar market | Task 17 (factory) | daftar terisi dari enumerasi factory; kolom sejarah `unavailable` dengan jujur |
+| **F3** | `/portfolio` hanya-baca | Task 16 | buku agent terbaca dari rantai |
+| **F4** | `IndexerSource` | P3 | grafik, tape, harga masuk terisi; `unavailable` menghilang |
+| **F5** | `@0g-delphi/agent-kit` — kuotasi, dilusi, eksekusi (§6) | Task 13, 16, 17 | agent membeli dan menjual sungguhan di anvil lewat SDK |
 
-F1 adalah pertama kalinya kurva DPM terlihat bergerak di browser, dan pertama kalinya seluruh disiplin pembulatan protokol diuji oleh manusia yang mengetik angka sembarang.
+Perhatikan urutannya berubah: dulu F1 adalah "beli & jual dari browser". Sekarang **tidak ada** fase yang membuat browser membeli apa pun. Momen "kurva DPM terlihat bergerak" pindah ke F5, dan penggeraknya agent, bukan manusia yang mengetik.
+
+Kerja `OrderTicket` dari F0 tidak dibuang: logika `useQuote` — inversi fee dengan penyebut `10_000n + bps`, dampak harga lewat evaluasi ulang `dpm` pada `qAfter`, dan transisi payout — adalah implementasi rujukan yang dicerminkan `agent-kit` di F5. Yang dihapus komponennya, bukan matematikanya.
 
 ---
 
