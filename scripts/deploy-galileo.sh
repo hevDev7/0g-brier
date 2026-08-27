@@ -29,7 +29,12 @@ die() { echo "✗ $1" >&2; exit 1; }
 command -v forge >/dev/null || die "forge not on PATH"
 command -v cast  >/dev/null || die "cast not on PATH"
 
-[[ -n "${DEPLOYER_KEY:-}"   ]] || die "DEPLOYER_KEY is unset (a funded Galileo key)"
+# Shape-checked, not merely non-empty: a `DEPLOYER_KEY=0x` left over from the
+# template is non-empty and would sail past a `-n` test, then fail further down
+# inside `cast` with "Failed to decode private key", which names neither the
+# variable nor the file to fix.
+[[ "${DEPLOYER_KEY:-}" =~ ^0x[0-9a-fA-F]{64}$ ]] \
+  || die "DEPLOYER_KEY must be a 0x-prefixed 32-byte hex key — got ${#DEPLOYER_KEY} characters. Fill it in $ROOT/.env"
 [[ -n "${TREASURY:-}"       ]] || die "TREASURY is unset — see DeployLib.resolveOperationalAddresses"
 [[ -n "${CURATOR_SIGNER:-}" ]] || die "CURATOR_SIGNER is unset — the only key that can approve a market"
 
@@ -37,12 +42,19 @@ command -v cast  >/dev/null || die "cast not on PATH"
 # script may fall back to the deployer; here it may not, and this is the friendlier
 # half of that refusal — it fires before any gas is spent.
 DEPLOYER="$(cast wallet address --private-key "$DEPLOYER_KEY")"
-if [[ "${TREASURY,,}" == "${DEPLOYER,,}" ]]; then
-  echo "⚠  TREASURY is the deployer itself. Intended? (Ctrl-C to stop, Enter to continue)"; read -r
-fi
-if [[ "${CURATOR_SIGNER,,}" == "${DEPLOYER,,}" ]]; then
-  echo "⚠  CURATOR_SIGNER is the deployer itself. Intended? (Ctrl-C to stop, Enter to continue)"; read -r
-fi
+
+# Pointing all three at one key is a legitimate testnet setup and a bad mainnet
+# one, so it is confirmed rather than refused. `ASSUME_YES=1` is the
+# non-interactive escape hatch: without it, `read` at EOF returns non-zero and
+# `set -e` would abort a piped or CI run for the wrong reason.
+confirm() {
+  echo "⚠  $1"
+  if [[ "${ASSUME_YES:-}" == "1" ]]; then echo "   ASSUME_YES=1 — continuing."; return 0; fi
+  echo "   Ctrl-C to stop, Enter to continue."
+  read -r || die "no terminal to confirm on; re-run with ASSUME_YES=1 if this is intended"
+}
+[[ "${TREASURY,,}"       == "${DEPLOYER,,}" ]] && confirm "TREASURY is the deployer itself."
+[[ "${CURATOR_SIGNER,,}" == "${DEPLOYER,,}" ]] && confirm "CURATOR_SIGNER is the deployer itself."
 
 CHAIN_ID="$(cast chain-id --rpc-url "$RPC")"
 [[ "$CHAIN_ID" == "$EXPECTED_CHAIN_ID" ]] \

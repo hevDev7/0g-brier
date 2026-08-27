@@ -24,7 +24,8 @@ if [[ -f "$ROOT/.env" ]]; then
 fi
 
 RPC="${RPC:-${ZERO_G_TESTNET_RPC:-http://127.0.0.1:8545}}"
-[[ -n "${DEPLOYER_KEY:-}" ]] || { echo "✗ DEPLOYER_KEY is unset" >&2; exit 1; }
+[[ "${DEPLOYER_KEY:-}" =~ ^0x[0-9a-fA-F]{64}$ ]] \
+  || { echo "✗ DEPLOYER_KEY must be a 0x-prefixed 32-byte hex key — fill it in $ROOT/.env" >&2; exit 1; }
 CURATOR_KEY="${CURATOR_KEY:-$DEPLOYER_KEY}"
 
 # The trading window has to be short enough to sit through. On anvil we move the
