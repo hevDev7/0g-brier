@@ -140,7 +140,11 @@ function fixtureTrades(m: MarketDetail): Trade[] {
     trades.push({
       id: `${m.address}-${i}`,
       timestamp: NOW - (24 - i) * HOUR,
-      trader: `0xbb${i.toString(16).padStart(2, "0")}${"0".repeat(34)}` as `0x${string}`,
+      // 36 zeros, not 34: "0x" + "bb" + 2 index digits + 36 = 40 hex characters,
+      // the real width of an address. The old value was two characters short —
+      // a shape the `0x${string}` type cannot catch, and one that any genuine
+      // address validation (the portfolio address field, for one) rejects.
+      trader: `0xbb${i.toString(16).padStart(2, "0")}${"0".repeat(36)}` as `0x${string}`,
       outcome,
       sharesDelta: shares,
       tokens,
