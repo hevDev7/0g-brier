@@ -4,7 +4,10 @@ import {afterEach, describe, expect, it} from "vitest";
 import {Badge} from "@/components/primitives/Badge";
 import {Countdown} from "@/components/primitives/Countdown";
 import {CopyAddress} from "@/components/primitives/CopyAddress";
-import {Unavailable} from "@/components/primitives/Unavailable";
+import {Unavailable, WHY} from "@/components/primitives/Unavailable";
+import {ChainSource} from "@/lib/data/chain";
+import {LogSource} from "@/lib/data/logs";
+import {CAPABILITIES, type DataMode} from "@/lib/data/types";
 
 const FULL_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678";
 
@@ -31,6 +34,50 @@ describe("Unavailable", () => {
     expect(text.trim()).not.toBe("—");
     expect(text.length).toBeGreaterThan(10);
   });
+
+  /**
+   * A live page printed "Resolution evidence not available in indexer mode —
+   * … Available in indexer mode." Two entries in the table named a mode that
+   * does not in fact supply them, and one of those was the mode the reader was
+   * already in. The rule is not about those two capabilities: no message may
+   * ever send a reader to where they already are, so it is asserted across every
+   * capability and every mode rather than at the two that happened to break.
+   */
+  it.each(
+    CAPABILITIES.flatMap((capability) =>
+      (["mock", "chain", "indexer"] as const).map((mode) => [capability, mode] as const),
+    ),
+  )("never points %s at the mode the reader is already in (%s)", (capability, mode: DataMode) => {
+    const {container} = render(<Unavailable capability={capability} mode={mode} />);
+    expect(container.textContent ?? "").not.toMatch(new RegExp(`Available in ${mode} mode`));
+  });
+
+  /**
+   * The other half of the same defect, and the half the guard above HIDES: two
+   * entries named `indexer` for capabilities `LogSource` does not declare. The
+   * guard stops the sentence pointing at the reader's own mode, so a wrong entry
+   * goes silent instead of wrong — which is worse, because it also stops
+   * pointing anyone at the mode that would work.
+   *
+   * A component cannot check a claim about another mode, so the check belongs
+   * here: whatever mode a message names must really supply the capability.
+   */
+  it.each(Object.entries(WHY).filter(([, w]) => w.provider !== null))(
+    "%s names a mode that really supplies it",
+    (capability, {provider}) => {
+      const config = {
+        rpcUrl: "http://stub",
+        chainId: 16602,
+        factory: "0xfacadefacadefacadefacadefacadefacadefac0" as const,
+        fromBlock: 0n,
+      };
+      // Capabilities are settled in the constructor, so neither source touches
+      // the network here.
+      const source = provider === "chain" ? new ChainSource(config) : new LogSource(config);
+      expect(source.mode).toBe(provider);
+      expect([...source.capabilities]).toContain(capability);
+    },
+  );
 
   /**
    * This is a status change a screen-reader user needs to hear, just as a sighted

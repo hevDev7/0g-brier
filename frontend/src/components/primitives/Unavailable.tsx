@@ -18,28 +18,64 @@ export const CAPABILITY_LABELS: Record<Capability, string> = {
   SETTLEMENT_RECEIPT: "Resolution evidence",
 };
 
-/** The lightest mode that provides this capability. */
-const PROVIDED_BY: Record<Capability, DataMode> = {
-  LIST_MARKETS: "chain",
-  MARKET_STATE: "chain",
-  PRICE_HISTORY: "indexer",
-  TRADE_TAPE: "indexer",
+/**
+ * Why a capability can be missing, and the lightest mode that supplies it.
+ *
+ * `provider: null` means NO implemented mode supplies it, and the sentence then
+ * stops after the reason instead of promising a mode. Exported so a test can
+ * check each `provider` against what that mode's DataSource actually declares —
+ * a claim about another mode is the one thing this component cannot verify for
+ * itself. Two entries here used to
+ * name `indexer`, which produced the flatly self-contradicting line a live page
+ * showed: "Resolution evidence not available in indexer mode … Available in
+ * indexer mode."
+ */
+export const WHY: Record<Capability, {reason: string; provider: DataMode | null}> = {
+  LIST_MARKETS: {reason: "this source cannot reach the chain", provider: "chain"},
+  MARKET_STATE: {reason: "this source cannot reach the chain", provider: "chain"},
+  PRICE_HISTORY: {reason: "this source keeps no history", provider: "indexer"},
+  TRADE_TAPE: {reason: "this source keeps no history", provider: "indexer"},
   // AGENT_POSITIONS was listed as `chain` here, and in the spec's §2 table, on the
   // grounds that `OutcomeShares.balanceOfOutcome` is a plain view. That holds for
   // ONE KNOWN account — but `DataSource.getPositions(market)` returns every agent's
   // position, and enumerating holders is precisely what a view cannot do. The set
   // of holders lives in transfer events, so this needs an indexer like the rest.
-  AGENT_POSITIONS: "indexer",
+  AGENT_POSITIONS: {reason: "this source keeps no history", provider: "indexer"},
   // The mirror image of the note above, and the reason this one really is
   // `chain`: `IERC20.balanceOf(agent)` is a view, so ONE KNOWN agent's balance
   // needs no indexer. Discovering WHICH agents exist still does — which is why a
   // leaderboard is indexer-tier as a whole even though this column is not.
-  AGENT_BALANCE: "chain",
-  COST_BASIS: "indexer",
-  // Only `specRoot` is on chain; the text it commits to is a 0G Storage blob.
-  MARKET_SPEC_BLOB: "indexer",
-  SETTLEMENT_RECEIPT: "indexer",
+  AGENT_BALANCE: {reason: "this source cannot reach the chain", provider: "chain"},
+  COST_BASIS: {reason: "this source keeps no history", provider: "indexer"},
+  // Not a matter of mode at all, which is why there is no mode to point at. Only
+  // `specRoot` is on chain; the question and rules are a 0G Storage document, and
+  // either no storage indexer is configured or nothing was ever stored at that
+  // root. The second case is a market that genuinely has no readable question —
+  // no mode can fix it.
+  MARKET_SPEC_BLOB: {
+    reason: "no 0G Storage indexer is configured, or nothing is stored at this market's specRoot",
+    provider: null,
+  },
+  // No mode supplies this yet: the receipt is a 0G Storage document and the
+  // contract holds no root to fetch it by. `mock` has one because a fixture can
+  // invent anything.
+  SETTLEMENT_RECEIPT: {
+    reason: "the settlement receipt is a 0G Storage document and no root for it is on chain yet",
+    provider: null,
+  },
 };
+
+/**
+ * One sentence, built once. The compact badge puts it in a `title` and the panel
+ * renders it, and the two saying different things is how a reader gets a
+ * different explanation depending on where they hover.
+ */
+function explain(capability: Capability, mode: DataMode): string {
+  const {reason, provider} = WHY[capability];
+  const sentence = `${CAPABILITY_LABELS[capability]} is not available in ${mode} mode — ${reason}.`;
+  // Never point at the mode the reader is already in.
+  return provider && provider !== mode ? `${sentence} Available in ${provider} mode.` : sentence;
+}
 
 /**
  * The visual form of the rule that the UI never renders a number the current
@@ -66,7 +102,7 @@ export function Unavailable({
     return (
       <span
         role="status"
-        title={`${CAPABILITY_LABELS[capability]} is not available in ${mode} mode — this source keeps no history. Available in ${PROVIDED_BY[capability]} mode.`}
+        title={explain(capability, mode)}
         // `whitespace-nowrap` kept the badge on one line and let it spill into the
         // next grid column — "Trade history not available" printed straight across
         // the depth figure beside it. A badge may wrap; overlapping a neighbouring
@@ -91,8 +127,13 @@ export function Unavailable({
           not descend into children — so a phrase that must match together as a
           single string may not be split across elements. */}
       <span className="font-medium text-text">{CAPABILITY_LABELS[capability]} not available</span> in{" "}
-      <span className="font-mono">{mode}</span> mode — this source keeps no history. Available in{" "}
-      <span className="font-mono">{PROVIDED_BY[capability]}</span> mode.
+      <span className="font-mono">{mode}</span> mode — {WHY[capability].reason}.
+      {WHY[capability].provider && WHY[capability].provider !== mode && (
+        <>
+          {" "}
+          Available in <span className="font-mono">{WHY[capability].provider}</span> mode.
+        </>
+      )}
     </div>
   );
 }
