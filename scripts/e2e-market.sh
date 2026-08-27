@@ -67,15 +67,28 @@ echo "chain $CHAIN_ID · actor $ACTOR · curator $CURATOR"
 # ── the clock ────────────────────────────────────────────────────────────────
 # A market cannot close before `tradingEnd`, and no cheatcode exists on a public
 # chain. anvil gets `evm_increaseTime`; everything else waits in real time.
-advance() {
-  if [[ "$CHAIN_ID" == "31337" ]]; then
-    cast rpc --rpc-url "$RPC" evm_increaseTime "$1" >/dev/null
-    cast rpc --rpc-url "$RPC" evm_mine >/dev/null
-  else
-    echo "   waiting ${1}s for the chain clock..."; sleep "$1"
-  fi
-}
 now() { cast block latest --rpc-url "$RPC" --field timestamp; }
+
+# Waits until the chain's own clock passes a target, rather than sleeping a fixed
+# span. On a real chain the buy and sell above have already consumed wall time, so
+# a fixed sleep would overshoot; and the thing that gates `close()` is the chain's
+# timestamp, not ours.
+advance_to() {
+  local target="$1" left
+  if [[ "$CHAIN_ID" == "31337" ]]; then
+    left=$(( target - $(now) + 2 ))
+    if (( left > 0 )); then
+      cast rpc --rpc-url "$RPC" evm_increaseTime "$left" >/dev/null
+      cast rpc --rpc-url "$RPC" evm_mine >/dev/null
+    fi
+    return
+  fi
+  while (( $(now) < target )); do
+    left=$(( target - $(now) ))
+    echo "   chain clock $left s short of tradingEnd..."
+    sleep $(( left > 15 ? 15 : left ))
+  done
+}
 
 # ── settlement authority ─────────────────────────────────────────────────────
 # `settle` is `onlyResolutionModule`, and a fresh deployment leaves
@@ -146,7 +159,7 @@ echo "   P(YES) now $(pct "$(p 1)")"
 echo "   shares held: $(call "$SHARES" "balanceOfOutcome(address,address,uint8)(uint256)" "$ACTOR" "$MARKET" 1)"
 
 step "5/8 cross tradingEnd and close"
-advance $(( WINDOW + 5 ))
+advance_to "$TRADING_END"
 send "$MARKET" "close()"
 echo "   status $(call "$MARKET" "status()(uint8)")  (1 = Closed)"
 
