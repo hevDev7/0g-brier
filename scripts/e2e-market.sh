@@ -157,8 +157,25 @@ TRADING_END=$(( $(now) + WINDOW ))
 SETTLEMENT_DEADLINE=$(( TRADING_END + WINDOW ))
 TIER=1
 AGENT_ID=1
-SPEC_ROOT="$(cast keccak "0g-delphi-live-e2e")"
 CATEGORY="$(cast format-bytes32-string crypto)"
+
+# The MarketSpec, and the root that commits to it.
+#
+# This used to be `cast keccak "0g-delphi-live-e2e"` — a hash of a string, with no
+# document behind it. The market it produced is readable in every respect EXCEPT
+# the question it asks, because `specRoot` is a 0G Storage content address and
+# that one addressed nothing. The document below is what the UI reads and what a
+# resolver is meant to judge against, so it is built FROM the same values the
+# market is created with rather than beside them.
+SPEC_DOC="$(python3 "$ROOT/scripts/market-spec.py" "$TRADING_END" "$SETTLEMENT_DEADLINE" "$TIER" "$AGENT_ID")"
+# Uploading writes to 0G Chain, so a local anvil run computes the root without
+# storing anything and says so, rather than pretending.
+if [[ "$CHAIN_ID" == "16602" || "${ZG_UPLOAD:-0}" == "1" ]]; then
+  echo "   uploading the MarketSpec to 0G Storage"
+  SPEC_ROOT="$(printf '%s' "$SPEC_DOC" | UPLOADER_KEY="$DEPLOYER_KEY" node "$ROOT/scripts/upload-spec.mjs")"
+else
+  SPEC_ROOT="$(printf '%s' "$SPEC_DOC" | node "$ROOT/scripts/upload-spec.mjs" --dry-run)"
+fi
 NONCE=$(( $(now) ))
 
 TYPEHASH="$(call "$FACTORY" "MARKET_APPROVAL_TYPEHASH()(bytes32)")"

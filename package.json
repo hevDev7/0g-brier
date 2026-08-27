@@ -9,5 +9,9 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "gen:vectors": "npm run gen:vectors -w @0g-delphi/protocol"
+  },
+  "devDependencies": {
+    "@0gfoundation/0g-storage-ts-sdk": "^1.2.11",
+    "ethers": "^6.13.1"
   }
 }
