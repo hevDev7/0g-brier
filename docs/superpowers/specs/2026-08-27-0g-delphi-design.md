@@ -876,11 +876,22 @@ INV-8  Σ probability(i) == WAD (± 2 wei)
 INV-9  addLiquidity proporsional tidak mengubah probability (± 2 wei)
 INV-10 sell/redeem/liquidate/withdraw berhasil walau paused == true
 
-**Catatan INV-7 — koreksi, ditemukan suite invarian Task 18.** Angka 29,29% berasal dari seed
-creator yang SIMETRIS, q = (s, s), di mana p₀ = p₁ = 1/√2. Ia bukan batas universal untuk
-penyedia likuiditas. Seorang LP yang menambah secara proporsional ke buku yang sudah miring
-menghadapi batas `1 − min(p₀, p₁)` pada harga saat ia masuk: pada buku dengan p_min ≈ 0,11
-(probabilitas ≈ 1,2%), ruginya bisa mencapai ~89% setoran.
+**Catatan INV-7 — koreksi, ditemukan suite invarian Task 18 lalu diperkuat reviewernya.**
+Angka 29,29% berasal dari seed creator yang SIMETRIS, q = (s, s), di mana p₀ = p₁ = 1/√2. Ia bukan
+batas universal untuk penyedia likuiditas.
+
+Turunannya, diverifikasi langsung dari kontrak. LP yang menyetor `D` wad pada keadaan `q` menerima
+`λ = ⌊D·WAD/poolWad⌋` dan posisi `λq`, dengan biaya `D = λ·C(q)`.
+- **Settled:** payout `= λq_w · C(q_f)/q_{f,w}`. Karena `C(q_f) ≥ q_{f,w}`, payout `≥ λq_w = D·p_w`.
+- **Failed/Voided:** payout `= Σᵢ λqᵢ·p'ᵢ = D·(p·p')`, dengan `p` dan `p'` vektor satuan di kuadran
+  positif (`Σpᵢ² = 1`). Minimum ketika `p'` merapat ke sumbu → `min(p₀, p₁)`.
+
+Kedua rezim memberi **pemulihan ≥ setoran × min(p₀, p₁) pada saat masuk**.
+
+**Ruginya tidak terbatas di bawah 100%, bukan berhenti di angka tertentu.** Pada `q = (10, 1000)`,
+`min(p₀,p₁) ≈ 0,0099995`, sehingga lantai pemulihannya `setoran × 0,01` — **rugi ~99%**. Semakin
+timpang bukunya, `1 − min(p₀,p₁) → 100%`. Tidak ada konstanta yang bisa menyatakannya; yang ada
+hanyalah harga marginal terendah pada saat penyedia masuk.
 Rumus umum itu menurun persis ke 29,29% saat buku simetris, jadi ia generalisasi yang benar,
 bukan angka yang bersaing. Yang salah adalah menyatakan kasus khusus sebagai kalau-kalau ia berlaku
 umum. Konsekuensinya nyata: UI atau SDK yang memberi tahu LP "rugi maksimal 29,3%" akan berbohong
