@@ -9,3 +9,9 @@ contracts/lib/
 *.log
 coverage/
 lcov.info
+
+# Next 16.3.3 regenerates these on every `next dev` run
+# (next/dist/server/lib/generate-agent-files.js) — ignore rather than
+# fight the tool.
+frontend/AGENTS.md
+frontend/CLAUDE.md

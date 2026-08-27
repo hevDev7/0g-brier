@@ -1,26 +1,65 @@
 @import "tailwindcss";
 
+/* Tailwind v4 tidak punya berkas config JS. Mode gelap berbasis kelas
+   dideklarasikan di sini, dan token tema diekspor lewat @theme inline. */
+@custom-variant dark (&:is(.dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Satu tangga netral menanggung semua permukaan dan teks. */
+  --n-0:#ffffff; --n-1:#fafafa; --n-2:#f4f4f5; --n-3:#e4e4e7;
+  --n-4:#d4d4d8; --n-6:#a1a1aa; --n-8:#52525b; --n-10:#27272a; --n-12:#09090b;
+
+  --bg:var(--n-0);
+  --bg-sunken:var(--n-1);
+  --border:var(--n-3);
+  --text:var(--n-12);
+  --text-muted:var(--n-8);
+  --text-faint:var(--n-6);
+
+  /* Satu aksen. Dipakai untuk aksi utama dan cincin fokus, tidak untuk dekorasi. */
+  --accent:#2563eb;
+
+  /* Semantik: sebuah elemen boleh berwarna HANYA bila warnanya membawa
+     informasi yang tidak ada di tempat lain. */
+  --pos:#15803d;
+  --neg:#b91c1c;
+  --warn:#a16207;
+  --verified:#15803d;
+}
+
+.dark {
+  --bg:var(--n-12);
+  --bg-sunken:#050507;
+  --border:#27272a;
+  --text:var(--n-1);
+  --text-muted:var(--n-6);
+  --text-faint:var(--n-8);
+  --accent:#3b82f6;
+  --pos:#4ade80;
+  --neg:#f87171;
+  --warn:#fbbf24;
+  --verified:#4ade80;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg:var(--bg);
+  --color-bg-sunken:var(--bg-sunken);
+  --color-border:var(--border);
+  --color-text:var(--text);
+  --color-text-muted:var(--text-muted);
+  --color-text-faint:var(--text-faint);
+  --color-accent:var(--accent);
+  --color-pos:var(--pos);
+  --color-neg:var(--neg);
+  --color-warn:var(--warn);
+  --color-verified:var(--verified);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  /* Angka berjajar di hampir setiap layar produk ini. Tanpa tabular-nums
+     kolom bergoyang saat diperbarui dan tabel jadi sulit dipindai — ini
+     persyaratan fungsional, bukan preferensi estetika. */
+  font-variant-numeric: tabular-nums;
 }
