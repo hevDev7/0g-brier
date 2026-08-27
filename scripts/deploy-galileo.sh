@@ -14,7 +14,15 @@ if [[ -f "$ROOT/.env" ]]; then
   if [[ -n "$perms" && "${perms:1}" != "00" ]]; then
     echo "⚠  $ROOT/.env is mode $perms — it holds a private key. chmod 600 it."
   fi
+  # The environment wins over the file, which is the convention everywhere else
+  # and the only thing that makes `RPC=... bash scripts/e2e-market.sh` mean
+  # anything. Done by snapshotting the exported environment and restoring it
+  # after sourcing, so `.env` keeps full shell semantics — quoting, expansion —
+  # rather than being re-parsed by hand.
+  _pre_env="$(export -p)"
   set -a; . "$ROOT/.env"; set +a
+  eval "$_pre_env" 2>/dev/null || true
+  unset _pre_env
 fi
 
 RPC="${ZERO_G_TESTNET_RPC:-https://evmrpc-testnet.0g.ai}"
