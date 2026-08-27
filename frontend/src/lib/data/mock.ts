@@ -1,4 +1,4 @@
-import {WAD, dpm} from "@0g-delphi/protocol";
+import {WAD, dpm, scaleFor} from "@0g-delphi/protocol";
 import {
   CapabilityUnavailableError,
   type Candle,
@@ -91,7 +91,7 @@ function fixtureTrades(m: MarketDetail): Trade[] {
     const shares = BigInt(12 + ((i * 37) % 90)) * WAD;
     const before = dpm.costUp(q);
     q = outcome === 0 ? [q[0] + shares, q[1]] : [q[0], q[1] + shares];
-    const tokens = (dpm.costUp(q) - before) / 10n ** 12n;
+    const tokens = (dpm.costUp(q) - before) / scaleFor(m.collateral.decimals);
     trades.push({
       id: `${m.address}-${i}`,
       timestamp: NOW - (24 - i) * HOUR,
@@ -146,15 +146,35 @@ export class MockSource implements DataSource {
 
   async getCandles(address: `0x${string}`, interval: Interval): Promise<Candle[]> {
     this.require("PRICE_HISTORY");
+    // fixtureTrades() adalah terbaru-dulu; balikkan ke urutan waktu naik supaya
+    // trade pertama yang diproses per bucket benar-benar trade paling awal.
     const trades = [...fixtureTrades(this.find(address))].reverse();
     const step = interval === "1d" ? 24 * HOUR : interval === "1h" ? HOUR : 5 * 60;
-    return trades.map((t, i) => ({
-      bucketStart: t.timestamp - (t.timestamp % step),
-      open: i === 0 ? t.probAfterWad : trades[i - 1]!.probAfterWad,
-      high: t.probAfterWad,
-      low: t.probAfterWad,
-      close: t.probAfterWad,
-      volume: t.tokens,
-    }));
+
+    // Kelompokkan trade ke bucket berdasarkan bucketStart — SATU candle per
+    // bucket, bukan satu candle per trade. open/close berasal dari trade
+    // pertama/terakhir dalam bucket itu sendiri; high/low dari rentang bucket.
+    const buckets = new Map<number, Candle>();
+    for (const t of trades) {
+      const bucketStart = t.timestamp - (t.timestamp % step);
+      const candle = buckets.get(bucketStart);
+      if (candle === undefined) {
+        buckets.set(bucketStart, {
+          bucketStart,
+          open: t.probAfterWad,
+          high: t.probAfterWad,
+          low: t.probAfterWad,
+          close: t.probAfterWad,
+          volume: t.tokens,
+        });
+      } else {
+        if (t.probAfterWad > candle.high) candle.high = t.probAfterWad;
+        if (t.probAfterWad < candle.low) candle.low = t.probAfterWad;
+        candle.close = t.probAfterWad;
+        candle.volume += t.tokens;
+      }
+    }
+
+    return [...buckets.values()].sort((a, b) => a.bucketStart - b.bucketStart);
   }
 }

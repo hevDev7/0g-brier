@@ -80,4 +80,67 @@ describe("MockSource", () => {
     });
     expect.assertions(2);
   });
+
+  /**
+   * getCandles harus MENGAGREGASI trade ke dalam bucket, bukan memetakan satu
+   * candle per trade. Dengan jadwal fixture (24 trade, satu per jam), interval
+   * "1d" membuktikannya: 24 trade jatuh ke hanya 2 bucket harian, jadi harus
+   * kembali sebagai 2 candle — bukan 24 candle dengan bucketStart berulang.
+   */
+  describe("getCandles", () => {
+    it("setiap candle punya bucketStart unik, untuk setiap interval", async () => {
+      const [first] = await source.listMarkets();
+      for (const interval of ["1m", "5m", "1h", "1d"] as const) {
+        const candles = await source.getCandles(first!.address, interval);
+        const bucketStarts = candles.map((c) => c.bucketStart);
+        expect(new Set(bucketStarts).size).toBe(bucketStarts.length);
+      }
+    });
+
+    it("interval 1d menggabungkan 24 trade per-jam menjadi 2 candle, bukan 24", async () => {
+      const [first] = await source.listMarkets();
+      const daily = await source.getCandles(first!.address, "1d");
+      expect(daily.length).toBe(2);
+    });
+
+    it("candle terurut naik berdasarkan bucketStart, dan high >= low", async () => {
+      const [first] = await source.listMarkets();
+      const daily = await source.getCandles(first!.address, "1d");
+      for (const c of daily) {
+        expect(c.high).toBeGreaterThanOrEqual(c.low);
+      }
+      for (let i = 1; i < daily.length; i++) {
+        expect(daily[i]!.bucketStart).toBeGreaterThan(daily[i - 1]!.bucketStart);
+      }
+    });
+
+    /**
+     * open/close harus berasal dari trade PERTAMA/TERAKHIR di dalam bucket itu
+     * sendiri — bukan trade dari bucket sebelumnya. Nilai berikut dihitung
+     * independen dari trade tape (bukan dari implementasi getCandles), supaya
+     * refactor yang mengacak agregasi (mis. tertukar open/close atau high/low)
+     * tertangkap alih-alih diam-diam lolos karena kebetulan cocok.
+     */
+    it("open/close berasal dari ujung bucket, high/low dari rentang bucket", async () => {
+      const [first] = await source.listMarkets();
+      const [bucket1, bucket2] = await source.getCandles(first!.address, "1d");
+
+      expect(bucket1).toEqual({
+        bucketStart: 1_789_862_400,
+        open: 578_644_172_410_245_859n,
+        high: 715_959_126_093_847_223n,
+        low: 578_644_172_410_245_859n,
+        close: 665_648_274_019_505_739n,
+        volume: 384_598_038n,
+      });
+      expect(bucket2).toEqual({
+        bucketStart: 1_789_948_800,
+        open: 675_749_908_101_684_148n,
+        high: 743_063_497_078_439_176n,
+        low: 642_384_089_982_411_739n,
+        close: 730_815_432_720_936_047n,
+        volume: 596_033_022n,
+      });
+    });
+  });
 });
