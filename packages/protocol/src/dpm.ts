@@ -1,4 +1,4 @@
-import { WAD } from './units.js';
+import { WAD } from './units';
 
 /** Cermin persis dari contracts/src/math/DPMMath.sol. Setiap perubahan di satu sisi
  *  harus diikuti sisi lain — uji diferensial di contracts/test/differential menegakkannya. */

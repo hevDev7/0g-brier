@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 export interface DeploymentManifest {
   chainId: number;
   deploymentBlock: number;
@@ -52,9 +49,4 @@ export function requireContracts(m: DeploymentManifest, names: readonly string[]
   if (missing.length > 0) {
     throw new Error(`manifest chainId ${m.chainId} kekurangan kontrak: ${missing.join(', ')}`);
   }
-}
-
-export function loadDeployment(chainId: number, dir = join(process.cwd(), 'deployments')): DeploymentManifest {
-  const path = join(dir, `${chainId}.json`);
-  return parseDeployment(JSON.parse(readFileSync(path, 'utf8')), chainId);
 }

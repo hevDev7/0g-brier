@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadModes } from '../src/modes.js';
+import { loadModes } from '../src/modes';
 
 describe('loadModes', () => {
   it('default aman: anvil + memory + stub', () => {

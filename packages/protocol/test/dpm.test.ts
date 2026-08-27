@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { WAD } from '../src/units.js';
-import { cost, costUp, isqrt, isqrtCeil, price, probability, seedShares, sharesForSpend, MAX_Q } from '../src/dpm.js';
+import { WAD } from '../src/units';
+import { cost, costUp, isqrt, isqrtCeil, price, probability, seedShares, sharesForSpend, MAX_Q } from '../src/dpm';
 
 const E18 = WAD;
 

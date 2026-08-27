@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDeployment, requireContracts } from '../src/deployments.js';
+import { parseDeployment, requireContracts } from '../src/deployments';
 
 const valid = {
   chainId: 16602,

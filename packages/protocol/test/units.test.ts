@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WAD, scaleFor, toWad, toTokensFloor, toTokensCeil } from '../src/units.js';
+import { WAD, scaleFor, toWad, toTokensFloor, toTokensCeil } from '../src/units';
 
 describe('units', () => {
   it('WAD adalah 1e18', () => {

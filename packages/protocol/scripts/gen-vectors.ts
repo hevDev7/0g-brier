@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { cost, costUp, price, probability, seedShares, MAX_Q, type Q } from '../src/dpm.js';
+import { cost, costUp, price, probability, seedShares, MAX_Q, type Q } from '../src/dpm';
 
 const OUT = join(process.cwd(), '../../contracts/test/vectors/dpm.json');
 const COUNT = 512;

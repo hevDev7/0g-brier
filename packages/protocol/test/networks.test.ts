@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { networkFor } from '../src/networks.js';
+import { networkFor } from '../src/networks';
 
 describe('networkFor', () => {
   it('anvil memakai chain id 31337 dan RPC lokal', () => {
