@@ -70,7 +70,7 @@ Paket: **`@0gfoundation/0g-compute-ts-sdk`** (v0.8.0+).
 const broker = await createZGComputeNetworkBroker(wallet);
 await broker.ledger.depositFund(10);                                   // min 3 0G to create a ledger
 await broker.ledger.transferFund(provider, 'inference', 1n * 10n**18n); // min 1 0G per provider
-const services = await broker.inference.listService();                 // katalog berubah-ubah: JANGAN hardcode
+const services = await broker.inference.listService();                 // the catalogue shifts: DO NOT hardcode
 const { endpoint, model } = await broker.inference.getServiceMetadata(provider);
 const headers = await broker.inference.getRequestHeaders(provider);    // single-use, per request
 const res  = await fetch(`${endpoint}/chat/completions`, { method:'POST', headers:{...headers,'Content-Type':'application/json'}, body: JSON.stringify({ messages, model, temperature: 0 }) });
@@ -149,7 +149,7 @@ Rounding policy — **always in the pool's favour**:
 uint256 target = DPMMath.costUp(qNew);   // sqrt rounded UP
 cost      = target - poolBalance;         // buy   (≥ biaya matematis)
 proceeds  = poolBalance - target;         // sell  (≤ the mathematical result)
-poolBalance = target;                     // invarian poolBalance == costUp(q) berlaku by construction
+poolBalance = target;                     // the poolBalance == costUp(q) invariant holds by construction
 ```
 
 At the token boundary (6 decimals): money in is rounded **up**, money out is rounded **down**.
@@ -292,7 +292,7 @@ interface IMarket {
     function buy (uint8 outcome, uint256 sharesOut, uint256 maxTokensIn, address to) external returns (uint256 tokensIn);
     function sell(uint8 outcome, uint256 sharesIn,  uint256 minTokensOut, address to) external returns (uint256 tokensOut);
 
-    // ── likuiditas proporsional (netral terhadap probabilitas) ──────────────
+    // ── proportional liquidity (probability-neutral) ────────────────────────
     function addLiquidity(uint256 tokensIn, uint256 minSharesOut, address to)
         external returns (uint256[2] memory seedSharesMinted);
     /// @param lambdaWad the wad fraction of the current q being withdrawn; withdrawal[i] = q[i]*lambdaWad/WAD.
@@ -693,12 +693,12 @@ client.health(); client.listMarkets(params); client.getMarket({ address });
 client.listPositions({ wallet }); client.getMarketStatus(address);
 client.getCandles({ address, interval });
 
-// kuotasi (on-chain view)
+// quotes (on-chain views)
 client.quoteBuy({ address, outcomeIdx, sharesOut });
 client.quoteBuySpend({ address, outcomeIdx, tokensIn });   // ← agents think in notional
 client.quoteSell({ address, outcomeIdx, sharesIn });
 
-// tulis (on-chain)
+// writes (on-chain)
 client.buyShares({ address, outcomeIdx, sharesOut, maxTokensIn });
 client.sellShares({ address, outcomeIdx, sharesIn, minTokensOut });
 client.addLiquidity({ address, tokensIn, minSharesOut });
@@ -725,7 +725,7 @@ Next.js 15 (App Router), viem + wagmi, data from the indexer.
 |---|---|
 | `/` | daftar market: probabilitas, volume, kedalaman, tier, waktu tutup; filter kategori/status/tier |
 | `/market/[address]` | the probability chart, an order ticket (buy/sell + slippage), the trade tape, **a running payout panel + a dilution warning**, a MarketSpec viewer, a settlement receipt viewer |
-| `/portfolio` | posisi, PnL, tombol redeem/liquidate, riwayat |
+| `/portfolio` | positions, PnL, the redeem/liquidate buttons, history |
 | `/agents` | leaderboard (PnL, akurasi resolusi, market dibuat) |
 | `/agents/[id]` | the profile, the policy, and the **decision log** with the reasoning behind each trade |
 | `/agents/new` | a wizard: pick a persona → set the Policy → deploy an `AgentAccount` → deposit → `grant` |
@@ -914,7 +914,7 @@ whole design sets out to prevent.
 
 ```
  1. Deploy semua kontrak; daftarkan 1 creator, 1 curator, 5 resolver, 3 trader agent; danai stake.
- 2. Creator Agent merancang market → Curator menolak sekali (ambigu) → revisi → disetujui.
+ 2. The Creator Agent designs a market → the Curator rejects it once (ambiguous) → revision → approved.
  3. createMarket(seed=1000 mUSDC) → cek q₀=q₁=707.11, P(YES)=50%.
  4. Three trader agents trade for 20 ticks → check INV-1..2 every tick.
  5. Satu pengguna addLiquidity → cek probabilitas tak bergeser (INV-9).
@@ -966,7 +966,7 @@ The critical path to "the workflow can be tested": **P0 → P1 → P2 → P3 →
 | R2 | Committee sampling uses `blockhash` | Accepted for v1 | P7 → VRF/beacon |
 | R3 | An LLM re-run is not bit-exact | Claims are bounded by TEE attestation (§7.5) | — (final) |
 | R4 | Front-running trade | Slippage bound saja | P7 → commit–reveal order besar |
-| R5 | Katalog provider 0G Compute berubah | Penemuan runtime + fallback berurut | — (final) |
+| R5 | The 0G Compute provider catalogue changes | Runtime discovery + an ordered fallback | — (final) |
 | R6 | The 0G Compute ledger can run dry (a 0.1/day faucet) | `settlementDeposit` + a balance alarm | Monitored in P4 |
 | R7 | The Creator Agent's signal sources | Not concretely chosen yet | Early P4 |
 | R8 | Jurisdiction & access | Configuration, not code | Before mainnet |

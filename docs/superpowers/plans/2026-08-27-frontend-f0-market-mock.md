@@ -1,10 +1,10 @@
-# Frontend F0 + Halaman Market (mode mock) — Rencana Implementasi
+# Frontend F0 + The Market Page (mock mode) — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** `npm run dev -w frontend` menyala dan `/market/0x…` merender halaman detail market yang lengkap dan bisa diklik — panel probabilitas, panel payout berjalan, tiket order, tape trade — seluruhnya dari fixture, tanpa perlu anvil maupun market yang ter-deploy.
+**Goal:** `npm run dev -w frontend` comes up and `/market/0x…` renders a complete, clickable market detail page — the probability panel, the running payout panel, the order ticket, the trade tape — entirely from fixtures, with no anvil and no deployed market needed.
 
-**Architecture:** Aplikasi Next.js 16 (App Router) sebagai workspace npm ketiga. Seluruh data mengalir lewat satu antarmuka `DataSource`; F0 hanya mengimplementasikan `MockSource`, dan komponen tidak pernah tahu mode mana yang aktif. Matematika probabilitas dan payout diambil dari `@0g-delphi/protocol` — cermin TypeScript yang sudah disematkan ke `DPMMath.sol` lewat uji diferensial 512 vektor — sehingga angka di layar berasal dari sumber yang sama dengan angka di rantai.
+**Architecture:** A Next.js 16 (App Router) application as a third npm workspace. All data flows through a single `DataSource` interface; F0 implements only `MockSource`, and components never know which mode is active. The probability and payout maths comes from `@0g-delphi/protocol` — the TypeScript mirror already pinned to `DPMMath.sol` by a 512-vector differential test — so the numbers on screen come from the same source as the numbers on chain.
 
 **Tech Stack:** Next.js 16.3.3 (App Router) · React 19.2.8 · TypeScript ^5 · Tailwind CSS v4 (CSS-first, `@theme inline`) · TanStack Query 5 · Vitest 4 + Testing Library · `@0g-delphi/protocol` (workspace)
 
@@ -14,31 +14,31 @@
 
 ## Global Constraints
 
-- **Next.js 16.3.3**, React **19.2.8**, TypeScript **^5** — versi yang benar-benar dihasilkan `create-next-app@16.3.3`, diverifikasi dengan scaffold nyata. Spec induk menyebut "Next.js 15"; itu sudah tertinggal satu mayor dan digantikan (lihat Ruling di §Penyimpangan).
-- **Tailwind v4 tidak memakai `tailwind.config.js`.** Token tema didefinisikan di CSS lewat `@theme inline`, dan mode gelap lewat `@custom-variant`. Jangan membuat berkas konfigurasi JS Tailwind.
-- **Probabilitas adalah `pᵢ²`.** Setiap nilai berlabel `%` berasal dari `dpm.probability`. Tidak boleh ada `dpm.price` yang diberi label persen.
-- **Payout per lembar adalah `1/pᵢ`, bukan `1/Pᵢ`.** Setiap nilai berlabel `×` berasal dari `1/dpm.price`. **Tidak boleh ada `1/probability` di mana pun di basis kode.**
-- **Konversi desimal mengimpor `@0g-delphi/protocol`** (`WAD`, `scaleFor`, `toWad`, `toTokensFloor`, `toTokensCeil`). Frontend tidak boleh punya konstanta `1e12` atau `1e18` sendiri di luar `lib/format.ts`.
-- **Seluruh angka disimpan sebagai `bigint`.** Tidak ada `Number()` pada nilai moneter, tidak ada `parseFloat` pada nilai wad. Pemformatan bekerja dari `bigint` ke string secara langsung.
-- **`unavailable` adalah anggota union `Query<T>`.** Komponen yang tidak menanganinya tidak boleh mengompilasi. Jangan pernah merender `0` atau `—` untuk data yang mode saat ini tidak bisa ketahui.
-- Semua uji hijau sebelum commit; `npx tsc --noEmit` bersih; Conventional Commits; satu commit per tugas.
+- **Next.js 16.3.3**, React **19.2.8**, TypeScript **^5** — the versions `create-next-app@16.3.3` actually produces, verified with a real scaffold. The parent spec says "Next.js 15"; that is one major behind and has been superseded (see the Ruling in §Deviations).
+- **Tailwind v4 does not use a `tailwind.config.js`.** Theme tokens are defined in CSS through `@theme inline`, and dark mode through `@custom-variant`. Do not create a Tailwind JS config file.
+- **Probability is `pᵢ²`.** Every value labelled `%` comes from `dpm.probability`. No `dpm.price` may be labelled as a percentage.
+- **Payout per share is `1/pᵢ`, not `1/Pᵢ`.** Every value labelled `×` comes from `1/dpm.price`. **There must be no `1/probability` anywhere in the codebase.**
+- **Decimal conversion imports `@0g-delphi/protocol`** (`WAD`, `scaleFor`, `toWad`, `toTokensFloor`, `toTokensCeil`). The frontend must not have its own `1e12` or `1e18` constants outside `lib/format.ts`.
+- **Every number is held as a `bigint`.** No `Number()` on a monetary value, no `parseFloat` on a wad value. Formatting goes from `bigint` to string directly.
+- **`unavailable` is a member of the `Query<T>` union.** A component that does not handle it must not compile. Never render `0` or `—` for data the current mode cannot know.
+- All tests green before committing; `npx tsc --noEmit` clean; Conventional Commits; one commit per task.
 
-### Penyimpangan dari spec, disengaja
+### Deviations from the spec, deliberate
 
 | Spec | Rencana | Alasan |
 |---|---|---|
-| §3 "Next.js 15 (App Router)" | **Next.js 16.3.3** | Next 15 bukan lagi mayor terkini. Memulai proyek baru pada mayor yang sudah tertinggal berarti berhutang migrasi sejak hari pertama. Diverifikasi lewat scaffold nyata. |
-| §3 "Tailwind" (implisit v3, dengan berkas config) | **Tailwind v4**, CSS-first | v4 adalah yang dipasang `create-next-app` dan tidak lagi memakai `tailwind.config.js`. Token tema pindah ke `@theme inline` di `globals.css`. |
-| §3 "Radix untuk dialog/select/tooltip" | **tidak ada di F0** | F0 + halaman market tidak butuh satu pun dari ketiganya. YAGNI; ditambahkan saat ada yang benar-benar membutuhkannya. |
+| §3 "Next.js 15 (App Router)" | **Next.js 16.3.3** | Next 15 is no longer the current major. Starting a new project on a major already behind means owing a migration from day one. Verified with a real scaffold. |
+| §3 "Tailwind" (implicitly v3, with a config file) | **Tailwind v4**, CSS-first | v4 is what `create-next-app` installs and it no longer uses `tailwind.config.js`. Theme tokens move into `@theme inline` in `globals.css`. |
+| §3 "Radix for dialog/select/tooltip" | **absent in F0** | F0 plus the market page needs none of the three. YAGNI; add it when something genuinely needs it. |
 
 ---
 
-## Struktur Berkas
+## File Structure
 
 ```
 frontend/
 ├─ package.json                    workspace ketiga: @0g-delphi/frontend
-├─ next.config.ts                  transpilePackages untuk paket workspace TS
+├─ next.config.ts                  transpilePackages for the TS workspace package
 ├─ postcss.config.mjs              @tailwindcss/postcss
 ├─ tsconfig.json                   alias @/*
 ├─ vitest.config.ts                jsdom + plugin react
@@ -47,43 +47,43 @@ frontend/
 │  ├─ app/
 │  │  ├─ layout.tsx                shell + QueryProvider + kelas tema
 │  │  ├─ globals.css               token warna, @theme inline, @custom-variant dark
-│  │  ├─ page.tsx                  placeholder yang menautkan ke market fixture
-│  │  └─ market/[address]/page.tsx halaman detail
+│  │  ├─ page.tsx                  a placeholder linking to the fixture markets
+│  │  └─ market/[address]/page.tsx the detail page
 │  ├─ lib/
-│  │  ├─ format.ts                 SELURUH aturan format angka, satu tempat
-│  │  ├─ dpm-view.ts               turunan tampilan: probabilitas, payout per lembar
+│  │  ├─ format.ts                 ALL the number-formatting rules, in one place
+│  │  ├─ dpm-view.ts               display derivations: probability, payout per share
 │  │  └─ data/
 │  │     ├─ types.ts               Capability, Query, DataSource, model domain
 │  │     ├─ mock.ts                MockSource + fixture
-│  │     └─ index.ts               pemilih mode dari env
+│  │     └─ index.ts               mode selector from env
 │  ├─ hooks/
 │  │  ├─ provider.tsx              DataSourceProvider + QueryClientProvider
 │  │  ├─ useMarket.ts              Query<MarketDetail>
 │  │  ├─ useTrades.ts              Query<Trade[]>
-│  │  └─ useQuote.ts               kuotasi lokal langsung, tanpa RPC
+│  │  └─ useQuote.ts               a direct local quote, with no RPC
 │  └─ components/
 │     ├─ primitives/               Unavailable, Badge, CopyAddress, Countdown, Stat
 │     └─ market/                   ProbabilityPanel, PayoutPanel, OrderTicket, TradeTape
-└─ test/                           uji vitest, dicerminkan dari struktur src
+└─ test/                           vitest tests, mirroring the src structure
 ```
 
-`lib/format.ts` adalah satu-satunya tempat aturan pemformatan hidup. Komponen tidak boleh memformat angka sendiri — perbedaan format antar layar adalah cara tercepat sebuah UI angka kehilangan kredibilitas.
+`lib/format.ts` is the only place the formatting rules live. Components must not format numbers themselves — differing formats between screens is the fastest way for a numbers UI to lose its credibility.
 
 ---
 
-## Task 1: Workspace Next.js dan integrasi monorepo
+## Task 1: The Next.js workspace and monorepo integration
 
 **Files:**
-- Create: seluruh `frontend/` lewat `create-next-app`, lalu `frontend/vitest.config.ts`, `frontend/vitest.setup.ts`, `frontend/test/smoke.test.ts`
-- Modify: `package.json` (akar), `frontend/package.json`, `frontend/next.config.ts`, `.github/workflows/ci.yml`, `Makefile`
+- Create: all of `frontend/` through `create-next-app`, then `frontend/vitest.config.ts`, `frontend/vitest.setup.ts`, `frontend/test/smoke.test.ts`
+- Modify: `package.json` (root), `frontend/package.json`, `frontend/next.config.ts`, `.github/workflows/ci.yml`, `Makefile`
 
 **Interfaces:**
 - Consumes: `@0g-delphi/protocol` (`WAD`, `toWad`, `toTokensFloor`, `toTokensCeil`, `dpm`)
-- Produces: workspace `@0g-delphi/frontend` dengan `dev`/`build`/`test`/`typecheck`; impor lintas-workspace yang terbukti bekerja
+- Produces: the `@0g-delphi/frontend` workspace with `dev`/`build`/`test`/`typecheck`; a cross-workspace import proven to work
 
 - [ ] **Step 1: Scaffold aplikasi**
 
-Dari akar repo:
+From the repo root:
 
 ```bash
 npx --yes create-next-app@16.3.3 frontend \
@@ -91,34 +91,34 @@ npx --yes create-next-app@16.3.3 frontend \
   --use-npm --no-turbopack --yes
 ```
 
-Ini menghasilkan Next 16.3.3, React 19.2.8, Tailwind v4 lewat `@tailwindcss/postcss`, dan **tidak ada** `tailwind.config.js` — itu benar untuk v4, jangan menambahkannya.
+This produces Next 16.3.3, React 19.2.8, Tailwind v4 through `@tailwindcss/postcss`, and **no** `tailwind.config.js` — which is correct for v4; do not add one.
 
-Hapus berkas contoh yang tidak dipakai:
+Delete the unused example files:
 
 ```bash
 rm -f frontend/public/*.svg frontend/README.md frontend/AGENTS.md frontend/CLAUDE.md
 rm -rf frontend/.git
 ```
 
-`create-next-app` menginisialisasi repo git sendiri di dalam `frontend/`; itu harus dibuang atau ia menjadi submodule tak sengaja.
+`create-next-app` initializes its own git repo inside `frontend/`; that must be removed or it becomes an accidental submodule.
 
 - [ ] **Step 2: Daftarkan sebagai workspace**
 
-Di `package.json` akar, ubah:
+In the root `package.json`, change:
 
 ```json
   "workspaces": ["packages/*"],
 ```
 
-menjadi:
+to:
 
 ```json
   "workspaces": ["packages/*", "frontend"],
 ```
 
-- [ ] **Step 3: Namai paket dan tambahkan skrip**
+- [ ] **Step 3: Name the package and add the scripts**
 
-Di `frontend/package.json`, ubah `"name"` menjadi `"@0g-delphi/frontend"` dan ganti blok `"scripts"` menjadi:
+In `frontend/package.json`, change `"name"` to `"@0g-delphi/frontend"` and replace the `"scripts"` block with:
 
 ```json
   "scripts": {
@@ -131,13 +131,13 @@ Di `frontend/package.json`, ubah `"name"` menjadi `"@0g-delphi/frontend"` dan ga
   },
 ```
 
-Tambahkan `@0g-delphi/protocol` ke `"dependencies"`:
+Add `@0g-delphi/protocol` to `"dependencies"`:
 
 ```json
     "@0g-delphi/protocol": "*",
 ```
 
-dan tambahkan ke `"devDependencies"`:
+and add to `"devDependencies"`:
 
 ```json
     "@testing-library/dom": "^10.4.0",
@@ -150,14 +150,14 @@ dan tambahkan ke `"devDependencies"`:
 
 - [ ] **Step 4: Ajarkan Next mentranspilasi paket workspace**
 
-`@0g-delphi/protocol` menerbitkan TypeScript mentah (`"main": "./src/index.ts"`), jadi Next harus mentranspilasinya. Ubah `frontend/next.config.ts` menjadi:
+`@0g-delphi/protocol` publishes raw TypeScript (`"main": "./src/index.ts"`), so Next must transpile it. Change `frontend/next.config.ts` to:
 
 ```ts
 import type {NextConfig} from "next";
 
 const nextConfig: NextConfig = {
-  // @0g-delphi/protocol mengekspor .ts mentah, bukan JS terkompilasi.
-  // Tanpa ini, build gagal saat mengimpor cermin DPM.
+  // @0g-delphi/protocol exports raw .ts, not compiled JS. Without this, the
+  // build fails when importing the DPM mirror.
   transpilePackages: ["@0g-delphi/protocol"],
 };
 
@@ -192,9 +192,9 @@ export default defineConfig({
 import "@testing-library/jest-dom/vitest";
 ```
 
-- [ ] **Step 6: Tulis uji asap yang membuktikan impor lintas-workspace bekerja**
+- [ ] **Step 6: Write the smoke test that proves the cross-workspace import works**
 
-Ini bukan uji formalitas. Ia membuktikan hal yang paling mungkin gagal di penyiapan monorepo: apakah frontend benar-benar bisa memanggil cermin DPM.
+This is not a formality test. It proves the thing most likely to break in a monorepo setup: whether the frontend can genuinely call the DPM mirror.
 
 `frontend/test/smoke.test.ts`:
 
@@ -203,17 +203,17 @@ import {describe, expect, it} from "vitest";
 import {WAD, dpm} from "@0g-delphi/protocol";
 
 describe("integrasi workspace", () => {
-  it("mengimpor WAD dari @0g-delphi/protocol", () => {
+  it("imports WAD from @0g-delphi/protocol", () => {
     expect(WAD).toBe(1_000_000_000_000_000_000n);
   });
 
-  it("cermin DPM menghitung probabilitas 3-4-5 yang benar", () => {
-    // P_i = q_i^2 / (q_0^2 + q_1^2); untuk (3,4): 9/25 dan 16/25
+  it("the DPM mirror computes the correct 3-4-5 probabilities", () => {
+    // P_i = q_i^2 / (q_0^2 + q_1^2); for (3,4): 9/25 and 16/25
     expect(dpm.probability([3n * WAD, 4n * WAD], 0)).toBe(360_000_000_000_000_000n);
     expect(dpm.probability([3n * WAD, 4n * WAD], 1)).toBe(640_000_000_000_000_000n);
   });
 
-  it("harga marginal BUKAN probabilitas — keduanya berbeda", () => {
+  it("the marginal price is NOT the probability — the two differ", () => {
     const q: readonly [bigint, bigint] = [3n * WAD, 4n * WAD];
     expect(dpm.price(q, 1)).toBe(800_000_000_000_000_000n);   // 0.8
     expect(dpm.probability(q, 1)).toBe(640_000_000_000_000_000n); // 0.64
@@ -222,16 +222,16 @@ describe("integrasi workspace", () => {
 });
 ```
 
-- [ ] **Step 7: Pasang dan jalankan**
+- [ ] **Step 7: Install and run**
 
 ```bash
 npm install
 npm test -w @0g-delphi/frontend
 npx tsc --noEmit -p frontend
 ```
-Expected: 3 uji lulus, tsc bersih.
+Expected: 3 tests pass, tsc clean.
 
-- [ ] **Step 8: Verifikasi server dev menyala**
+- [ ] **Step 8: Verify server dev menyala**
 
 ```bash
 cd frontend && timeout 60 npx next dev --port 3100 &
@@ -239,9 +239,9 @@ sleep 25 && curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3100/
 ```
 Expected: `200`. Hentikan server setelahnya.
 
-- [ ] **Step 9: Tambahkan ke CI dan Makefile**
+- [ ] **Step 9: Add it to CI and the Makefile**
 
-Di `.github/workflows/ci.yml`, di dalam job `typescript`, setelah langkah `npm test --workspaces --if-present`, tambahkan:
+In `.github/workflows/ci.yml`, inside the `typescript` job, after the `npm test --workspaces --if-present` step, add:
 
 ```yaml
       - name: typecheck frontend
@@ -250,7 +250,7 @@ Di `.github/workflows/ci.yml`, di dalam job `typescript`, setelah langkah `npm t
         run: npm run build -w @0g-delphi/frontend
 ```
 
-Di `Makefile`, tambahkan target dan sertakan `fe fe-build` di baris `.PHONY`:
+In the `Makefile`, add the targets and include `fe fe-build` on the `.PHONY` line:
 
 ```makefile
 fe:       ; npm run dev -w @0g-delphi/frontend
@@ -261,12 +261,12 @@ fe-build: ; npm run build -w @0g-delphi/frontend && npx tsc --noEmit -p frontend
 
 ```bash
 git add -A
-git commit -m "feat(frontend): workspace Next.js 16 dengan impor lintas-workspace terbukti"
+git commit -m "feat(frontend): Next.js 16 workspace with a proven cross-workspace import"
 ```
 
 ---
 
-## Task 2: Token visual dan `lib/format.ts`
+## Task 2: Visual tokens and `lib/format.ts`
 
 **Files:**
 - Modify: `frontend/src/app/globals.css`, `frontend/src/app/layout.tsx`
@@ -274,10 +274,10 @@ git commit -m "feat(frontend): workspace Next.js 16 dengan impor lintas-workspac
 - Test: `frontend/test/format.test.ts`
 
 **Interfaces:**
-- Consumes: `WAD` dari `@0g-delphi/protocol`
+- Consumes: `WAD` from `@0g-delphi/protocol`
 - Produces: `formatProbability(probWad)`, `formatProbabilityDelta(fromWad, toWad)`, `formatPayout(payoutWad)`, `formatCollateral(amount, decimals)`, `formatShares(sharesWad)`, `formatPricePerShare(priceWad)`, `shortAddress(address)`, `formatCountdown(secondsRemaining)`; token CSS `--bg --bg-sunken --border --text --text-muted --text-faint --accent --pos --neg --warn --verified`
 
-- [ ] **Step 1: Tulis uji yang gagal**
+- [ ] **Step 1: Write the failing tests**
 
 `frontend/test/format.test.ts`:
 
@@ -291,13 +291,13 @@ import {
 const WAD = 10n ** 18n;
 
 describe("formatProbability", () => {
-  it("memformat probabilitas wad jadi persen 1 desimal", () => {
+  it("formats a wad probability as a percentage with 1 decimal", () => {
     expect(formatProbability(590_000_000_000_000_000n)).toBe("59.0%");
     expect(formatProbability(410_000_000_000_000_000n)).toBe("41.0%");
     expect(formatProbability(WAD / 2n)).toBe("50.0%");
   });
 
-  it("membulatkan setengah ke atas, bukan memotong", () => {
+  it("rounds half up rather than truncating", () => {
     // 0.6385 -> 63.85% -> 63.9%
     expect(formatProbability(638_500_000_000_000_000n)).toBe("63.9%");
   });
@@ -309,7 +309,7 @@ describe("formatProbability", () => {
 });
 
 describe("formatProbabilityDelta", () => {
-  it("selalu bertanda, dalam poin", () => {
+  it("is always signed, in points", () => {
     expect(formatProbabilityDelta(590_000_000_000_000_000n, 638_000_000_000_000_000n)).toBe("+4.8 pt");
     expect(formatProbabilityDelta(638_000_000_000_000_000n, 590_000_000_000_000_000n)).toBe("-4.8 pt");
     expect(formatProbabilityDelta(WAD / 2n, WAD / 2n)).toBe("+0.0 pt");
@@ -317,14 +317,14 @@ describe("formatProbabilityDelta", () => {
 });
 
 describe("formatPayout", () => {
-  it("2 desimal dengan tanda kali", () => {
+  it("uses 2 decimals with a multiplication sign", () => {
     expect(formatPayout(1_301_700_000_000_000_000n)).toBe("1.30×");
     expect(formatPayout(1_562_000_000_000_000_000n)).toBe("1.56×");
   });
 });
 
 describe("formatCollateral", () => {
-  it("menghormati desimal token dan mengelompokkan ribuan", () => {
+  it("respects the token decimals and groups thousands", () => {
     expect(formatCollateral(1_234_560_000n, 6)).toBe("1,234.56");
     expect(formatCollateral(100_000_000n, 6)).toBe("100.00");
     expect(formatCollateral(990_000n, 6)).toBe("0.99");
@@ -335,58 +335,58 @@ describe("formatCollateral", () => {
   });
 });
 
-describe("formatShares dan formatPricePerShare", () => {
-  it("lembar 2 desimal, harga 4 desimal", () => {
+describe("formatShares and formatPricePerShare", () => {
+  it("shows shares to 2 decimals and prices to 4", () => {
     expect(formatShares(126_320_000_000_000_000_000n)).toBe("126.32");
     expect(formatPricePerShare(783_800_000_000_000_000n)).toBe("0.7838");
   });
 });
 
 describe("shortAddress", () => {
-  it("memotong di tengah", () => {
+  it("elides the middle", () => {
     expect(shortAddress("0x1234567890abcdef1234567890abcdef12345678")).toBe("0x1234…5678");
   });
 });
 
 describe("formatCountdown", () => {
-  it("memilih dua satuan terbesar", () => {
+  it("picks the two largest units", () => {
     expect(formatCountdown(2 * 3600 + 14 * 60)).toBe("2j 14m");
     expect(formatCountdown(3 * 86400 + 5 * 3600)).toBe("3h 5j");
     expect(formatCountdown(45 * 60)).toBe("45m");
   });
 
-  it("menyatakan tutup saat waktu habis", () => {
+  it("says closed once time is up", () => {
     expect(formatCountdown(0)).toBe("tutup");
     expect(formatCountdown(-10)).toBe("tutup");
   });
 });
 ```
 
-- [ ] **Step 2: Jalankan dan pastikan gagal**
+- [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
 npm test -w @0g-delphi/frontend
 ```
-Expected: FAIL — modul `@/lib/format` tidak ditemukan.
+Expected: FAIL — the `@/lib/format` module is not found.
 
 - [ ] **Step 3: Implementasikan `frontend/src/lib/format.ts`**
 
 ```ts
 /**
  * Satu-satunya tempat aturan pemformatan angka hidup (spec §7.2).
- * Komponen tidak boleh memformat angka sendiri: format yang berbeda antar
- * layar adalah cara tercepat sebuah UI angka kehilangan kredibilitas.
+ * Components must not format numbers themselves: differing formats between
+ * screens is the fastest way for a numbers UI to lose its credibility.
  *
- * Semua fungsi bekerja dari bigint ke string secara langsung. Tidak ada
- * Number() maupun parseFloat pada nilai moneter — presisi ganda tidak bisa
- * mewakili nilai wad, dan pembulatan diam-diam pada uang tidak dapat diterima.
+ * Every function goes from bigint to string directly. No Number() and no
+ * parseFloat on monetary values — double precision cannot represent a wad
+ * value, and silent rounding on money is unacceptable.
  */
 
 function groupThousands(digits: string): string {
   return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-/** Membulatkan setengah-ke-atas ke `places` desimal, murni bigint. */
+/** Rounds half-up to `places` decimals, purely in bigint. */
 function formatFixed(value: bigint, decimals: number, places: number): string {
   const negative = value < 0n;
   const magnitude = negative ? -value : value;
@@ -398,34 +398,34 @@ function formatFixed(value: bigint, decimals: number, places: number): string {
   return negative ? `-${body}` : body;
 }
 
-/** Probabilitas implisit (p_i^2) dalam wad → "59.0%". */
+/** Implied probability (p_i^2) in wad → "59.0%". */
 export function formatProbability(probWad: bigint): string {
   return `${formatFixed(probWad * 100n, 18, 1)}%`;
 }
 
-/** Pergeseran probabilitas dalam poin persentase, selalu bertanda. */
+/** Probability shift in percentage points, always signed. */
 export function formatProbabilityDelta(fromWad: bigint, toWad: bigint): string {
   const delta = (toWad - fromWad) * 100n;
   const body = formatFixed(delta, 18, 1);
   return delta < 0n ? `${body} pt` : `+${body} pt`;
 }
 
-/** Payout per lembar (1/p_i) dalam wad → "1.30×". */
+/** Payout per share (1/p_i) in wad → "1.30×". */
 export function formatPayout(payoutWad: bigint): string {
   return `${formatFixed(payoutWad, 18, 2)}×`;
 }
 
-/** Jumlah collateral dalam satuan token terkecil → "1,234.56". */
+/** A collateral amount in the smallest token unit → "1,234.56". */
 export function formatCollateral(amount: bigint, decimals: number): string {
   return formatFixed(amount, decimals, 2);
 }
 
-/** Lembar outcome (18 desimal) → "126.32". */
+/** Outcome shares (18 decimals) → "126.32". */
 export function formatShares(sharesWad: bigint): string {
   return formatFixed(sharesWad, 18, 2);
 }
 
-/** Harga per lembar dalam wad → "0.7838". Empat desimal: pada rentang 0..1 dua tidak cukup. */
+/** Price per share in wad → "0.7838". Four decimals: over the 0..1 range, two are not enough. */
 export function formatPricePerShare(priceWad: bigint): string {
   return formatFixed(priceWad, 18, 4);
 }
@@ -434,7 +434,7 @@ export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-/** Dua satuan terbesar; tanpa detik — presisi detik menyiratkan ketepatan yang tak dimiliki blok. */
+/** The two largest units; no seconds — second precision implies an accuracy blocks do not have. */
 export function formatCountdown(secondsRemaining: number): string {
   if (secondsRemaining <= 0) return "tutup";
   const days = Math.floor(secondsRemaining / 86_400);
@@ -446,26 +446,26 @@ export function formatCountdown(secondsRemaining: number): string {
 }
 ```
 
-- [ ] **Step 4: Jalankan dan pastikan lulus**
+- [ ] **Step 4: Run them and confirm they pass**
 
 ```bash
 npm test -w @0g-delphi/frontend
 ```
 Expected: PASS — 14 lulus (3 asap + 11 format).
 
-- [ ] **Step 5: Tulis token visual**
+- [ ] **Step 5: Write the visual tokens**
 
-Ganti seluruh isi `frontend/src/app/globals.css` dengan:
+Replace the entire contents of `frontend/src/app/globals.css` with:
 
 ```css
 @import "tailwindcss";
 
-/* Tailwind v4 tidak punya berkas config JS. Mode gelap berbasis kelas
-   dideklarasikan di sini, dan token tema diekspor lewat @theme inline. */
+/* Tailwind v4 has no JS config file. The class-based dark mode is declared
+   here, and the theme tokens are exported through @theme inline. */
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Satu tangga netral menanggung semua permukaan dan teks. */
+  /* One neutral ramp carries every surface and every piece of text. */
   --n-0:#ffffff; --n-1:#fafafa; --n-2:#f4f4f5; --n-3:#e4e4e7;
   --n-4:#d4d4d8; --n-6:#a1a1aa; --n-8:#52525b; --n-10:#27272a; --n-12:#09090b;
 
@@ -476,11 +476,11 @@ Ganti seluruh isi `frontend/src/app/globals.css` dengan:
   --text-muted:var(--n-8);
   --text-faint:var(--n-6);
 
-  /* Satu aksen. Dipakai untuk aksi utama dan cincin fokus, tidak untuk dekorasi. */
+  /* One accent. Used for the primary action and the focus ring, never for decoration. */
   --accent:#2563eb;
 
-  /* Semantik: sebuah elemen boleh berwarna HANYA bila warnanya membawa
-     informasi yang tidak ada di tempat lain. */
+  /* Semantic: an element may be coloured ONLY when its colour carries
+     information that exists nowhere else. */
   --pos:#15803d;
   --neg:#b91c1c;
   --warn:#a16207;
@@ -518,16 +518,16 @@ Ganti seluruh isi `frontend/src/app/globals.css` dengan:
 body {
   background: var(--bg);
   color: var(--text);
-  /* Angka berjajar di hampir setiap layar produk ini. Tanpa tabular-nums
-     kolom bergoyang saat diperbarui dan tabel jadi sulit dipindai — ini
-     persyaratan fungsional, bukan preferensi estetika. */
+  /* Numbers line up on nearly every screen in this product. Without
+     tabular-nums, columns jitter as they update and tables become hard to
+     scan — this is a functional requirement, not an aesthetic preference. */
   font-variant-numeric: tabular-nums;
 }
 ```
 
 - [ ] **Step 6: Sederhanakan layout**
 
-Ganti `frontend/src/app/layout.tsx` menjadi:
+Replace `frontend/src/app/layout.tsx` with:
 
 ```tsx
 import type {Metadata} from "next";
@@ -535,7 +535,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "0G-Delphi",
-  description: "Pasar prediksi biner di 0G Chain",
+  description: "Binary prediction markets on 0G Chain",
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
@@ -547,40 +547,40 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
 }
 ```
 
-- [ ] **Step 7: Verifikasi build masih bersih**
+- [ ] **Step 7: Verify build masih bersih**
 
 ```bash
 npm run build -w @0g-delphi/frontend && npx tsc --noEmit -p frontend
 ```
-Expected: build sukses, tsc bersih. Bila Tailwind mengeluh soal `@custom-variant`, periksa versi `tailwindcss` benar-benar v4 — sintaks itu tidak ada di v3.
+Expected: the build succeeds, tsc clean. If Tailwind complains about `@custom-variant`, check that the `tailwindcss` version really is v4 — that syntax does not exist in v3.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add frontend package.json package-lock.json
-git commit -m "feat(frontend): token visual dan pemformatan angka berbasis bigint"
+git commit -m "feat(frontend): visual tokens and bigint-based number formatting"
 ```
 
 ---
 
-## Task 3: Lapisan data — tipe, `dpm-view`, dan `MockSource`
+## Task 3: The data layer — types, `dpm-view`, and `MockSource`
 
 **Files:**
 - Create: `frontend/src/lib/dpm-view.ts`, `frontend/src/lib/data/types.ts`, `frontend/src/lib/data/mock.ts`, `frontend/src/lib/data/index.ts`
 - Test: `frontend/test/dpm-view.test.ts`, `frontend/test/mock-source.test.ts`
 
 **Interfaces:**
-- Consumes: `WAD`, `dpm` dari `@0g-delphi/protocol`
+- Consumes: `WAD`, `dpm` from `@0g-delphi/protocol`
 - Produces:
   - `probabilityWad(q, outcome)`, `payoutPerShareWad(q, outcome)`, `qAfterBuy(q, outcome, shares)`
   - `type Outcome = 0 | 1`, `DataMode`, `Capability`, `CapabilityUnavailableError`, `Query<T>`, `MarketStatus`, `Tier`, `CollateralInfo`, `MarketSummary`, `MarketDetail`, `Trade`, `Candle`, `DataSource`
   - `MockSource` (menerima `{omit?: Capability[]}`), `FIXTURE_MARKETS`, `getDataSource()`
 
-**Catatan cakupan.** Spec §3.1 mendaftar sepuluh kemampuan dan tujuh metode baca. F0 mengimplementasikan empat metode yang halaman market butuhkan — `listMarkets`, `getMarket`, `getTrades`, `getCandles`. Posisi, blob MarketSpec, dan receipt settlement ditambahkan bersama rute yang memakainya (F3/F4). Menambahkan metode sekarang berarti menulis tipe untuk bentuk data yang belum ada konsumennya.
+**A note on scope.** Spec §3.1 lists ten capabilities and seven read methods. F0 implements the four the market page needs — `listMarkets`, `getMarket`, `getTrades`, `getCandles`. Positions, the MarketSpec blob, and the settlement receipt arrive alongside the routes that use them (F3/F4). Adding a method now means writing types for a data shape that has no consumer yet.
 
-- [ ] **Step 1: Tulis uji `dpm-view` yang gagal**
+- [ ] **Step 1: Write the failing `dpm-view` tests**
 
-Uji ini yang menjaga jebakan `1/P` versus `1/p` dari spec §5.1.
+These are the tests that guard the `1/P` versus `1/p` trap from spec §5.1.
 
 `frontend/test/dpm-view.test.ts`:
 
@@ -592,12 +592,12 @@ import {payoutPerShareWad, probabilityWad, qAfterBuy} from "@/lib/dpm-view";
 const q: readonly [bigint, bigint] = [1000n * WAD, 1200n * WAD];
 
 describe("probabilityWad", () => {
-  it("mengembalikan p_i^2, bukan p_i", () => {
+  it("returns p_i^2, not p_i", () => {
     expect(probabilityWad(q, 0)).toBe(409_836_065_573_770_491n);
     expect(probabilityWad(q, 1)).toBe(590_163_934_426_229_508n);
   });
 
-  it("berjumlah satu dalam batas debu floor", () => {
+  it("sums to one within floor dust", () => {
     const sum = probabilityWad(q, 0) + probabilityWad(q, 1);
     expect(WAD - sum).toBeLessThanOrEqual(2n);
     expect(sum).toBeLessThanOrEqual(WAD);
@@ -605,46 +605,46 @@ describe("probabilityWad", () => {
 });
 
 describe("payoutPerShareWad", () => {
-  it("adalah 1/p_i", () => {
+  it("is 1/p_i", () => {
     expect(payoutPerShareWad(q, 1)).toBe(1_301_708_279_317_775_732n);
     expect(payoutPerShareWad(q, 0)).toBe(1_562_049_935_181_330_879n);
   });
 
-  it("BUKAN 1/P_i — jebakan yang melebihkan payout ~30%", () => {
+  it("is NOT 1/P_i — the trap that overstates payout by ~30%", () => {
     const wrong = (WAD * WAD) / probabilityWad(q, 1);
     expect(wrong).toBe(1_694_444_444_444_444_445n);
     expect(payoutPerShareWad(q, 1)).not.toBe(wrong);
   });
 
-  it("payout dikali harga marginal mendekati satu", () => {
+  it("payout times marginal price lands within dust of one", () => {
     const product = (payoutPerShareWad(q, 1) * dpm.price(q, 1)) / WAD;
     expect(WAD - product).toBeLessThanOrEqual(2n);
   });
 
-  it("aman pada market kosong", () => {
+  it("is safe on an empty market", () => {
     expect(payoutPerShareWad([0n, 0n], 0)).toBe(0n);
   });
 });
 
 describe("qAfterBuy", () => {
-  it("hanya menambah kaki yang dibeli", () => {
+  it("adds only to the leg that was bought", () => {
     expect(qAfterBuy(q, 1, 100n * WAD)).toEqual([1000n * WAD, 1300n * WAD]);
     expect(qAfterBuy(q, 0, 100n * WAD)).toEqual([1100n * WAD, 1200n * WAD]);
   });
 });
 ```
 
-- [ ] **Step 2: Jalankan dan pastikan gagal**
+- [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
 npm test -w @0g-delphi/frontend
 ```
-Expected: FAIL — modul `@/lib/dpm-view` tidak ditemukan.
+Expected: FAIL — the `@/lib/dpm-view` module is not found.
 
 - [ ] **Step 3: Implementasikan `frontend/src/lib/data/types.ts` LEBIH DULU**
 
-`dpm-view.ts` di langkah berikutnya mengimpor `Outcome` dari berkas ini, jadi ia harus ada duluan.
-Isinya ada di Step 6 di bawah — tulis berkas itu sekarang, lalu lanjut.
+`dpm-view.ts` in the next step imports `Outcome` from this file, so it has to exist first.
+Its contents are in Step 6 below — write that file now, then carry on.
 
 - [ ] **Step 4: Implementasikan `frontend/src/lib/dpm-view.ts`**
 
@@ -655,24 +655,24 @@ import type {Outcome} from "@/lib/data/types";
 type Q = readonly [bigint, bigint];
 
 /**
- * Turunan tampilan dari keadaan market. Setiap nilai di sini berasal dari
- * cermin TypeScript yang sudah disematkan ke DPMMath.sol lewat uji diferensial
- * 512 vektor — jadi angka di layar berasal dari sumber yang sama dengan angka
- * di rantai, bukan dari reimplementasi.
+ * Display-side derivations of market state. Every value here comes from the
+ * TypeScript mirror already pinned to DPMMath.sol by the 512-vector
+ * differential test — so the numbers on screen come from the same source as
+ * the numbers on chain, not from a reimplementation.
  */
 
-/** Probabilitas implisit P_i = p_i^2. Ini satu-satunya sumber untuk nilai berlabel %. */
+/** Implied probability P_i = p_i^2. This is the only source for any value labelled %. */
 export function probabilityWad(q: Q, outcome: Outcome): bigint {
   return dpm.probability(q, outcome);
 }
 
 /**
- * Payout per lembar menang = 1/p_i, dalam wad.
+ * Payout per winning share = 1/p_i, in wad.
  *
- * BUKAN 1/P_i. Keduanya menghasilkan angka yang terlihat masuk akal, dan
- * memakai yang salah melebih-lebihkan payout sekitar 30% pada skew biasa —
- * persis arah yang merugikan pengguna bila ia mempercayainya. Draf pertama
- * spec ini sendiri melakukan kesalahan itu.
+ * NOT 1/P_i. Both produce numbers that look plausible, and using the wrong
+ * one overstates the payout by around 30% at ordinary skew — exactly the
+ * direction that hurts anyone who trusts it. This spec's own first draft made
+ * that mistake.
  */
 export function payoutPerShareWad(q: Q, outcome: Outcome): bigint {
   const price = dpm.price(q, outcome);
@@ -680,13 +680,13 @@ export function payoutPerShareWad(q: Q, outcome: Outcome): bigint {
   return (WAD * WAD) / price;
 }
 
-/** Keadaan q setelah `shares` lembar `outcome` dicetak. */
+/** The state of q after `shares` shares of `outcome` are minted. */
 export function qAfterBuy(q: Q, outcome: Outcome, shares: bigint): Q {
   return outcome === 0 ? [q[0] + shares, q[1]] : [q[0], q[1] + shares];
 }
 ```
 
-- [ ] **Step 5: Tulis uji `MockSource` yang gagal**
+- [ ] **Step 5: Write the failing `MockSource` tests**
 
 `frontend/test/mock-source.test.ts`:
 
@@ -702,42 +702,42 @@ describe("MockSource", () => {
     source = new MockSource();
   });
 
-  it("melaporkan mode dan seluruh kemampuan secara bawaan", () => {
+  it("reports its mode and every capability by default", () => {
     expect(source.mode).toBe("mock");
     expect(source.capabilities.has("PRICE_HISTORY")).toBe(true);
     expect(source.capabilities.has("TRADE_TAPE")).toBe(true);
   });
 
-  it("mengembalikan market fixture", async () => {
+  it("returns the fixture markets", async () => {
     const markets = await source.listMarkets();
     expect(markets.length).toBeGreaterThanOrEqual(2);
     expect(markets[0]!.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 
-  it("mengambil satu market berdasarkan alamat", async () => {
+  it("fetches a single market by address", async () => {
     const [first] = await source.listMarkets();
     const detail = await source.getMarket(first!.address);
     expect(detail.address).toBe(first!.address);
     expect(detail.question).toBe(first!.question);
   });
 
-  it("melempar untuk alamat yang tidak dikenal", async () => {
+  it("throws for an unknown address", async () => {
     await expect(source.getMarket("0x0000000000000000000000000000000000000009")).rejects.toThrow(
-      /tidak ditemukan/,
+      /not found/,
     );
   });
 
   /**
-   * Fixture yang tidak konsisten merender keadaan yang tidak mungkin ada di
-   * rantai. poolWad DITURUNKAN dari q, tidak pernah diketik tangan.
+   * An inconsistent fixture renders a state that could not exist on chain.
+   * poolWad is DERIVED from q, never typed by hand.
    */
-  it("setiap fixture memenuhi invarian pool protokol", async () => {
+  it("every fixture satisfies the protocol pool invariant", async () => {
     for (const m of await source.listMarkets()) {
       expect(m.poolWad).toBe(dpm.costUp(m.q));
     }
   });
 
-  it("mengembalikan tape trade", async () => {
+  it("returns the trade tape", async () => {
     const [first] = await source.listMarkets();
     const trades = await source.getTrades(first!.address, 50);
     expect(trades.length).toBeGreaterThan(0);
@@ -745,12 +745,12 @@ describe("MockSource", () => {
   });
 
   /**
-   * Mekanisme pusat spec: kemampuan yang absen MELEMPAR, bukan mengembalikan
-   * larik kosong. Larik kosong berarti "tidak ada data" — klaim yang berbeda
-   * dari "aku tidak bisa tahu". MockSource bisa mensimulasikan mode terbatas
-   * supaya perilaku ini teruji tanpa menunggu ChainSource ada.
+   * The spec's central mechanism: an absent capability THROWS rather than
+   * returning an empty array. An empty array means "there is no data" — a
+   * different claim from "I cannot know". MockSource can simulate a limited
+   * mode so this behaviour is tested without waiting for ChainSource to exist.
    */
-  it("melempar CapabilityUnavailableError untuk kemampuan yang dihilangkan", async () => {
+  it("throws CapabilityUnavailableError for an omitted capability", async () => {
     const limited = new MockSource({omit: ["PRICE_HISTORY", "TRADE_TAPE"]});
     const [first] = await limited.listMarkets();
 
@@ -763,7 +763,7 @@ describe("MockSource", () => {
     );
   });
 
-  it("error membawa kemampuan dan mode yang gagal", async () => {
+  it("the error carries the capability and the mode that failed", async () => {
     const limited = new MockSource({omit: ["TRADE_TAPE"]});
     const [first] = await limited.listMarkets();
     await limited.getTrades(first!.address, 10).catch((error: unknown) => {
@@ -776,7 +776,7 @@ describe("MockSource", () => {
 });
 ```
 
-- [ ] **Step 6: Isi `frontend/src/lib/data/types.ts` (dibuat di Step 3)**
+- [ ] **Step 6: Fill in `frontend/src/lib/data/types.ts` (created in Step 3)**
 
 ```ts
 export type Outcome = 0 | 1;
@@ -795,15 +795,15 @@ export class CapabilityUnavailableError extends Error {
     readonly capability: Capability,
     readonly mode: DataMode,
   ) {
-    super(`${capability} tidak tersedia di mode ${mode}`);
+    super(`${capability} is not available in ${mode} mode`);
     this.name = "CapabilityUnavailableError";
   }
 }
 
 /**
- * `unavailable` adalah anggota union, bukan kasus khusus. Karena ia ada di
- * sini, TypeScript memaksa setiap konsumen menanganinya — komponen yang lupa
- * tidak akan mengompilasi. Kejujuran UI ditegakkan compiler, bukan disiplin.
+ * `unavailable` is a member of the union, not a special case. Because it
+ * lives here, TypeScript forces every consumer to handle it — a component
+ * that forgets will not compile. The UI's honesty is enforced by the compiler,
  */
 export type Query<T> =
   | {status: "loading"}
@@ -829,9 +829,9 @@ export interface MarketSummary {
   category: string;
   tier: Tier;
   status: MarketStatus;
-  /** Pasokan lembar per outcome, wad. Indeks 0 = NO, 1 = YES. */
+  /** Share supply per outcome, wad. Index 0 = NO, 1 = YES. */
   q: readonly [bigint, bigint];
-  /** Selalu sama dengan dpm.costUp(q). Tidak pernah diketik tangan. */
+  /** Always equal to dpm.costUp(q). Never typed by hand. */
   poolWad: bigint;
   tradingEnd: number;
   collateral: CollateralInfo;
@@ -850,7 +850,7 @@ export interface Trade {
   timestamp: number;
   trader: `0x${string}`;
   outcome: Outcome;
-  /** Positif untuk beli, negatif untuk jual. */
+  /** Positive for a buy, negative for a sell. */
   sharesDelta: bigint;
   tokens: bigint;
   fee: bigint;
@@ -906,7 +906,7 @@ const MUSDC: CollateralInfo = {
 const HOUR = 3_600;
 const NOW = 1_790_000_000;
 
-/** poolWad diturunkan, tidak pernah diketik — fixture tak boleh melanggar invarian rantai. */
+/** poolWad is derived, never typed — a fixture must not break a chain invariant. */
 function market(
   partial: Omit<MarketDetail, "poolWad" | "collateral">,
 ): MarketDetail {
@@ -916,12 +916,12 @@ function market(
 export const FIXTURE_MARKETS: MarketDetail[] = [
   market({
     address: "0x1111111111111111111111111111111111111111",
-    question: "Apakah harga penutupan ETH/USD pada 30 September 2026 berada di atas $4.000?",
+    question: "Will the ETH/USD closing price on 30 September 2026 be above $4,000?",
     rules:
-      "Diselesaikan YES bila harga penutupan harian ETH/USD pada 2026-09-30 23:59 UTC menurut " +
-      "sumber yang terdaftar berada di atas $4.000,00. Diselesaikan NO bila di bawah atau sama " +
-      "dengan. Bila tidak ada sumber yang menerbitkan harga penutupan pada hari itu, market " +
-      "dianggap UNRESOLVABLE dan dilikuidasi.",
+      "Resolves YES if the daily ETH/USD closing price at 2026-09-30 23:59 UTC, per the listed " +
+      "sources, is above $4,000.00. Resolves NO if it is at or below that. If no source " +
+      "publishes a closing price on that day, the market is deemed UNRESOLVABLE and is wound " +
+      "down.",
     category: "crypto",
     tier: "VERIFIED",
     status: "Open",
@@ -934,10 +934,10 @@ export const FIXTURE_MARKETS: MarketDetail[] = [
   }),
   market({
     address: "0x2222222222222222222222222222222222222222",
-    question: "Apakah 0G Chain akan mengumumkan mainnet v2 sebelum 1 Desember 2026?",
+    question: "Will 0G Chain announce mainnet v2 before 1 December 2026?",
     rules:
-      "Diselesaikan YES bila pengumuman resmi terbit di kanal resmi 0G Labs sebelum " +
-      "2026-12-01 00:00 UTC. Pengumuman pihak ketiga tidak dihitung.",
+      "Resolves YES if an official announcement is published on an official 0G Labs channel " +
+      "before 2026-12-01 00:00 UTC. Third-party announcements do not count.",
     category: "crypto",
     tier: "FAST",
     status: "Open",
@@ -950,8 +950,8 @@ export const FIXTURE_MARKETS: MarketDetail[] = [
   }),
   market({
     address: "0x3333333333333333333333333333333333333333",
-    question: "Apakah inflasi tahunan zona euro turun di bawah 2,0% pada rilis Oktober 2026?",
-    rules: "Diselesaikan menurut rilis HICP Eurostat untuk Oktober 2026, angka flash.",
+    question: "Will euro-area annual inflation fall below 2.0% in the October 2026 release?",
+    rules: "Resolves according to the Eurostat HICP release for October 2026, the flash figure.",
     category: "economics",
     tier: "DETERMINISTIC",
     status: "Closed",
@@ -1006,7 +1006,7 @@ export class MockSource implements DataSource {
     const found = FIXTURE_MARKETS.find(
       (m) => m.address.toLowerCase() === address.toLowerCase(),
     );
-    if (!found) throw new Error(`Market ${address} tidak ditemukan`);
+    if (!found) throw new Error(`Market ${address} not found`);
     return found;
   }
 
@@ -1048,14 +1048,14 @@ import {MockSource} from "./mock";
 import type {DataMode, DataSource} from "./types";
 
 /**
- * F0 hanya punya MockSource. ChainSource (F1) dan IndexerSource (F4) masuk di
- * sini; IndexerSource akan MEMBUNGKUS ChainSource, bukan menduplikasinya,
- * sehingga "kuotasi selalu dari rantai" jadi sifat struktural.
+ * F0 has only MockSource. ChainSource (F1) and IndexerSource (F4) plug in
+ * here; IndexerSource will WRAP ChainSource rather than duplicate it, which
+ * makes "quotes always come from the chain" a structural property.
  */
 export function getDataSource(): DataSource {
   const mode = (process.env.NEXT_PUBLIC_DATA_MODE ?? "mock") as DataMode;
   if (mode !== "mock") {
-    throw new Error(`DATA_MODE=${mode} belum diimplementasikan; F0 hanya mendukung "mock"`);
+    throw new Error(`DATA_MODE=${mode} is not implemented yet; F0 supports only "mock"`);
   }
   return new MockSource();
 }
@@ -1063,7 +1063,7 @@ export function getDataSource(): DataSource {
 export * from "./types";
 ```
 
-- [ ] **Step 9: Jalankan dan pastikan lulus**
+- [ ] **Step 9: Run them and confirm they pass**
 
 ```bash
 npm test -w @0g-delphi/frontend && npx tsc --noEmit -p frontend
@@ -1074,7 +1074,7 @@ Expected: PASS — 29 lulus (3 asap + 11 format + 7 dpm-view + 8 mock).
 
 ```bash
 git add frontend
-git commit -m "feat(frontend): lapisan data dengan kemampuan eksplisit dan MockSource"
+git commit -m "feat(frontend): the data layer with explicit capabilities and MockSource"
 ```
 
 ---
@@ -1086,12 +1086,12 @@ git commit -m "feat(frontend): lapisan data dengan kemampuan eksplisit dan MockS
 - Test: `frontend/test/primitives.test.tsx`
 
 **Interfaces:**
-- Consumes: `Capability`, `DataMode` dari `@/lib/data/types`; `shortAddress`, `formatCountdown` dari `@/lib/format`
+- Consumes: `Capability`, `DataMode` from `@/lib/data/types`; `shortAddress`, `formatCountdown` from `@/lib/format`
 - Produces: `<Unavailable capability mode />`, `<Badge tone label />`, `<CopyAddress address />`, `<Countdown until />`, `<Stat label value hint />`
 
-`Unavailable` adalah primitif terpenting di berkas ini. Ia adalah wujud visual dari aturan bahwa UI tidak pernah merender angka yang mode saat ini tidak bisa ketahui.
+`Unavailable` is the most important primitive in this file. It is the visual form of the rule that the UI never renders a number the current mode cannot know.
 
-- [ ] **Step 1: Tulis uji yang gagal**
+- [ ] **Step 1: Write the failing tests**
 
 `frontend/test/primitives.test.tsx`:
 
@@ -1105,14 +1105,14 @@ import {Stat} from "@/components/primitives/Stat";
 import {Unavailable} from "@/components/primitives/Unavailable";
 
 describe("Unavailable", () => {
-  it("menamai kemampuan yang hilang dan mode yang menyediakannya", () => {
+  it("names the missing capability and the mode that provides it", () => {
     render(<Unavailable capability="PRICE_HISTORY" mode="chain" />);
     expect(screen.getByText(/riwayat harga/i)).toBeInTheDocument();
     expect(screen.getByText(/indexer/i)).toBeInTheDocument();
   });
 
-  /** Inti aturannya: ketidaktahuan tidak boleh menyamar jadi angka. */
-  it("tidak pernah merender nol atau strip telanjang", () => {
+  /** The heart of the rule: not knowing must not disguise itself as a number. */
+  it("never renders a zero or a bare dash", () => {
     const {container} = render(<Unavailable capability="TRADE_TAPE" mode="chain" />);
     const text = container.textContent ?? "";
     expect(text.trim()).not.toBe("0");
@@ -1122,14 +1122,14 @@ describe("Unavailable", () => {
 });
 
 describe("Badge", () => {
-  it("merender labelnya", () => {
+  it("renders its label", () => {
     render(<Badge tone="neutral" label="VERIFIED" />);
     expect(screen.getByText("VERIFIED")).toBeInTheDocument();
   });
 });
 
 describe("CopyAddress", () => {
-  it("menampilkan bentuk terpotong tapi menyimpan alamat penuh di title", () => {
+  it("shows the elided form but keeps the full address in the title", () => {
     const full = "0x1234567890abcdef1234567890abcdef12345678";
     render(<CopyAddress address={full} />);
     const button = screen.getByRole("button");
@@ -1139,13 +1139,13 @@ describe("CopyAddress", () => {
 });
 
 describe("Countdown", () => {
-  it("memformat sisa waktu dari stempel waktu absolut", () => {
+  it("formats the time remaining from an absolute timestamp", () => {
     const now = 1_790_000_000;
     render(<Countdown until={now + 2 * 3600 + 14 * 60} nowSeconds={now} />);
     expect(screen.getByText("2j 14m")).toBeInTheDocument();
   });
 
-  it("menyatakan tutup saat sudah lewat", () => {
+  it("says closed once it has passed", () => {
     const now = 1_790_000_000;
     render(<Countdown until={now - 60} nowSeconds={now} />);
     expect(screen.getByText("tutup")).toBeInTheDocument();
@@ -1153,7 +1153,7 @@ describe("Countdown", () => {
 });
 
 describe("Stat", () => {
-  it("memasangkan label dengan nilai", () => {
+  it("pairs a label with a value", () => {
     render(<Stat label="P(YES)" value="59.0%" />);
     expect(screen.getByText("P(YES)")).toBeInTheDocument();
     expect(screen.getByText("59.0%")).toBeInTheDocument();
@@ -1161,12 +1161,12 @@ describe("Stat", () => {
 });
 ```
 
-- [ ] **Step 2: Jalankan dan pastikan gagal**
+- [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
 npm test -w @0g-delphi/frontend
 ```
-Expected: FAIL — modul komponen tidak ditemukan.
+Expected: FAIL — the component modules are not found.
 
 - [ ] **Step 3: Implementasikan `Unavailable.tsx`**
 
@@ -1176,13 +1176,13 @@ import type {Capability, DataMode} from "@/lib/data/types";
 const LABELS: Record<Capability, string> = {
   LIST_MARKETS: "Daftar market",
   MARKET_STATE: "Keadaan market",
-  QUOTE: "Kuotasi",
+  QUOTE: "Quote",
   EXECUTE: "Eksekusi",
   PRICE_HISTORY: "Riwayat harga",
   TRADE_TAPE: "Riwayat transaksi",
 };
 
-/** Mode paling ringan yang menyediakan kemampuan ini. */
+/** The lightest mode that provides this capability. */
 const PROVIDED_BY: Record<Capability, DataMode> = {
   LIST_MARKETS: "chain",
   MARKET_STATE: "chain",
@@ -1193,15 +1193,15 @@ const PROVIDED_BY: Record<Capability, DataMode> = {
 };
 
 /**
- * Wujud visual dari aturan bahwa UI tidak pernah merender angka yang mode saat
- * ini tidak bisa ketahui. Bukan spinner (data tidak sedang datang), bukan nol
- * (itu klaim yang salah), bukan strip telanjang (itu tidak menjelaskan apa pun).
+ * The visual form of the rule that the UI never renders a number the current
+ * mode cannot know. Not a spinner (no data is on its way), not a zero (that is
+ * a false claim), not a bare dash (that explains nothing).
  */
 export function Unavailable({capability, mode}: {capability: Capability; mode: DataMode}) {
   return (
     <div className="rounded-md border border-dashed border-border px-3 py-2 text-[13px] text-text-muted">
-      <span className="text-text">{LABELS[capability]}</span> tidak tersedia di mode{" "}
-      <span className="font-mono">{mode}</span> — sumber ini tidak menyimpan riwayat. Tersedia di
+      <span className="text-text">{LABELS[capability]}</span> not available in{" "}
+      <span className="font-mono">{mode}</span> mode — this source keeps no history. Available in
       mode <span className="font-mono">{PROVIDED_BY[capability]}</span>.
     </div>
   );
@@ -1267,8 +1267,8 @@ export function CopyAddress({address}: {address: string}) {
 import {formatCountdown} from "@/lib/format";
 
 /**
- * `nowSeconds` disuntik agar bisa diuji secara deterministik. Tanpa itu, uji
- * hitung mundur bergantung pada jam dinding dan akan flaky.
+ * `nowSeconds` is injected so this can be tested deterministically. Without it,
+ * a countdown test depends on the wall clock and will be flaky.
  */
 export function Countdown({until, nowSeconds}: {until: number; nowSeconds?: number}) {
   const now = nowSeconds ?? Math.floor(Date.now() / 1000);
@@ -1292,7 +1292,7 @@ export function Stat({label, value, hint}: {label: string; value: ReactNode; hin
 }
 ```
 
-- [ ] **Step 5: Jalankan dan pastikan lulus**
+- [ ] **Step 5: Run them and confirm they pass**
 
 ```bash
 npm test -w @0g-delphi/frontend && npx tsc --noEmit -p frontend
@@ -1303,12 +1303,12 @@ Expected: PASS — 36 lulus.
 
 ```bash
 git add frontend
-git commit -m "feat(frontend): primitif UI dengan Unavailable sebagai status kelas satu"
+git commit -m "feat(frontend): UI primitives with Unavailable as a first-class status"
 ```
 
 ---
 
-## Task 5: Provider dan hook
+## Task 5: The provider and the hooks
 
 **Files:**
 - Create: `frontend/src/hooks/provider.tsx`, `frontend/src/hooks/toQuery.ts`, `frontend/src/hooks/useMarket.ts`, `frontend/src/hooks/useTrades.ts`, `frontend/src/hooks/useQuote.ts`
@@ -1319,17 +1319,17 @@ git commit -m "feat(frontend): primitif UI dengan Unavailable sebagai status kel
 - Consumes: `DataSource`, `Query<T>`, `CapabilityUnavailableError`, `MockSource`
 - Produces: `<AppProviders source>`, `useDataSource()`, `useMarket(address): Query<MarketDetail>`, `useTrades(address, limit): Query<Trade[]>`, `useQuote({q, outcome, spendWad, feeBps})`
 
-- [ ] **Step 1: Tambahkan dependensi**
+- [ ] **Step 1: Add dependensi**
 
-Di `frontend/package.json`, tambahkan ke `"dependencies"`:
+In `frontend/package.json`, add to `"dependencies"`:
 
 ```json
     "@tanstack/react-query": "^5.102.6",
 ```
 
-lalu `npm install` dari akar repo.
+then `npm install` from the repo root.
 
-- [ ] **Step 2: Tulis uji yang gagal**
+- [ ] **Step 2: Write the failing tests**
 
 `frontend/test/hooks.test.tsx`:
 
@@ -1353,7 +1353,7 @@ function wrapper(source: MockSource) {
 }
 
 describe("useMarket", () => {
-  it("berpindah dari loading ke ready", async () => {
+  it("moves from loading to ready", async () => {
     const {result} = renderHook(() => useMarket(ADDRESS), {wrapper: wrapper(new MockSource())});
     expect(result.current.status).toBe("loading");
     await waitFor(() => expect(result.current.status).toBe("ready"));
@@ -1363,13 +1363,13 @@ describe("useMarket", () => {
 });
 
 describe("useTrades", () => {
-  it("mengembalikan tape saat kemampuan ada", async () => {
+  it("returns the tape when the capability is present", async () => {
     const {result} = renderHook(() => useTrades(ADDRESS, 10), {wrapper: wrapper(new MockSource())});
     await waitFor(() => expect(result.current.status).toBe("ready"));
   });
 
-  /** Kontrak inti: kemampuan yang absen jadi status `unavailable`, bukan `error`. */
-  it("memetakan kemampuan yang hilang jadi unavailable, bukan error", async () => {
+  /** The core contract: an absent capability becomes status `unavailable`, not `error`. */
+  it("maps a missing capability to unavailable, not to error", async () => {
     const limited = new MockSource({omit: ["TRADE_TAPE"]});
     const {result} = renderHook(() => useTrades(ADDRESS, 10), {wrapper: wrapper(limited)});
     await waitFor(() => expect(result.current.status).toBe("unavailable"));
@@ -1382,7 +1382,7 @@ describe("useTrades", () => {
 describe("useQuote", () => {
   const q: readonly [bigint, bigint] = [1000n * WAD, 1200n * WAD];
 
-  it("menghitung lembar dan probabilitas secara sinkron, tanpa RPC", () => {
+  it("computes shares and probability in step, with no RPC", () => {
     const {result} = renderHook(
       () => useQuote({q, outcome: 1, spendWad: 100n * WAD, feeBps: 100}),
       {wrapper: wrapper(new MockSource())},
@@ -1392,8 +1392,8 @@ describe("useQuote", () => {
     expect(result.current.probAfterWad).toBeGreaterThan(result.current.probBeforeWad);
   });
 
-  /** Pembelian menaikkan harga, jadi rata-rata WAJIB di atas marginal awal. */
-  it("harga rata-rata di atas harga marginal sebelum trade", () => {
+  /** A purchase raises the price, so the average MUST be above the opening marginal price. */
+  it("the average price is above the marginal price before the trade", () => {
     const {result} = renderHook(
       () => useQuote({q, outcome: 1, spendWad: 100n * WAD, feeBps: 100}),
       {wrapper: wrapper(new MockSource())},
@@ -1401,8 +1401,8 @@ describe("useQuote", () => {
     expect(result.current.avgPriceWad).toBeGreaterThan(768_221_279_597_375_842n);
   });
 
-  /** Membeli sisi ini menurunkan payout sisi ini — dilusi, terlihat sebagai angka. */
-  it("payout sisi yang dibeli turun setelah trade", () => {
+  /** Buying this side lowers this side's payout — dilution, visible as a number. */
+  it("the payout on the side bought falls after the trade", () => {
     const {result} = renderHook(
       () => useQuote({q, outcome: 1, spendWad: 100n * WAD, feeBps: 100}),
       {wrapper: wrapper(new MockSource())},
@@ -1410,7 +1410,7 @@ describe("useQuote", () => {
     expect(result.current.payoutAfterWad).toBeLessThan(result.current.payoutBeforeWad);
   });
 
-  it("mengembalikan nol untuk belanja nol tanpa melempar", () => {
+  it("returns zero for zero spend without throwing", () => {
     const {result} = renderHook(
       () => useQuote({q, outcome: 1, spendWad: 0n, feeBps: 100}),
       {wrapper: wrapper(new MockSource())},
@@ -1433,7 +1433,7 @@ const DataSourceContext = createContext<DataSource | null>(null);
 
 export function useDataSource(): DataSource {
   const source = useContext(DataSourceContext);
-  if (!source) throw new Error("useDataSource dipakai di luar AppProviders");
+  if (!source) throw new Error("useDataSource was used outside AppProviders");
   return source;
 }
 
@@ -1443,8 +1443,8 @@ export function AppProviders({source, children}: {source: DataSource; children: 
       new QueryClient({
         defaultOptions: {
           queries: {
-            // Kemampuan yang absen bukan kegagalan sementara — mengulanginya
-            // hanya menunda status `unavailable` yang sudah pasti.
+            // An absent capability is not a transient failure — retrying only
+            // delays an `unavailable` status that is already certain.
             retry: (count, error) =>
               !(error instanceof CapabilityUnavailableError) && count < 2,
             staleTime: 5_000,
@@ -1460,10 +1460,10 @@ export function AppProviders({source, children}: {source: DataSource; children: 
 }
 ```
 
-- [ ] **Step 4: Implementasikan `toQuery.ts`, `useMarket.ts`, dan `useTrades.ts`**
+- [ ] **Step 4: Implement `toQuery.ts`, `useMarket.ts`, and `useTrades.ts`**
 
-`toQuery` dipakai oleh setiap hook, jadi ia tinggal di berkasnya sendiri — mengimpornya dari
-`useMarket` akan membuat `useTrades` bergantung pada hook yang tidak ada hubungannya.
+`toQuery` is used by every hook, so it lives in a file of its own — importing it from
+`useMarket` would make `useTrades` depend on an unrelated hook.
 
 `frontend/src/hooks/toQuery.ts`:
 
@@ -1471,7 +1471,7 @@ export function AppProviders({source, children}: {source: DataSource; children: 
 import type {UseQueryResult} from "@tanstack/react-query";
 import {CapabilityUnavailableError, type DataMode, type Query} from "@/lib/data/types";
 
-/** Menerjemahkan keadaan TanStack jadi union kita, dengan `unavailable` sebagai cabang tersendiri. */
+/** Translates TanStack's states into our union, with `unavailable` as a branch of its own. */
 export function toQuery<T>(result: UseQueryResult<T>, mode: DataMode): Query<T> {
   if (result.isPending) return {status: "loading"};
   if (result.error) {
@@ -1548,9 +1548,9 @@ export interface QuotePreview {
 }
 
 /**
- * Pratinjau LOKAL, dihitung dari cermin TypeScript — sinkron, tanpa RPC, jadi
- * mengetik tidak memicu satu pun panggilan jaringan. Ini TAKSIRAN: sebelum
- * mengirim transaksi, F1 memanggil `quoteBuy` di rantai dan angka itulah yang
+ * A LOCAL preview, computed from the TypeScript mirror — synchronous, no RPC,
+ * so typing triggers no network call at all. This is an ESTIMATE: before
+ * sending a transaction, F1 calls `quoteBuy` on chain and that is the number
  * ditandatangani pengguna.
  */
 export function useQuote(input: {
@@ -1570,8 +1570,8 @@ export function useQuote(input: {
     };
     if (spendWad <= 0n) return empty;
 
-    // Kontrak mengenakan fee DI ATAS biaya pool, jadi membaliknya untuk
-    // anggaran kotor memakai penyebut 10000 + feeBps, bukan 10000.
+    // The contract charges the fee ON TOP OF the pool cost, so inverting it for
+    // a gross budget uses the denominator 10000 + feeBps, not 10000.
     const bps = BigInt(feeBps);
     const feeWad = (spendWad * bps) / (10_000n + bps);
     const poolInWad = spendWad - feeWad;
@@ -1599,7 +1599,7 @@ export function useQuote(input: {
 }
 ```
 
-- [ ] **Step 6: Jalankan dan pastikan lulus**
+- [ ] **Step 6: Run them and confirm they pass**
 
 ```bash
 npm test -w @0g-delphi/frontend && npx tsc --noEmit -p frontend
@@ -1610,12 +1610,12 @@ Expected: PASS — 43 lulus.
 
 ```bash
 git add frontend package.json package-lock.json
-git commit -m "feat(frontend): provider, hook data, dan kuotasi lokal tanpa RPC"
+git commit -m "feat(frontend): the provider, the data hooks, and local quoting with no RPC"
 ```
 
 ---
 
-## Task 6: Panel probabilitas dan panel payout
+## Task 6: The probability panel and the payout panel
 
 **Files:**
 - Create: `frontend/src/components/market/ProbabilityPanel.tsx`, `frontend/src/components/market/PayoutPanel.tsx`
@@ -1625,9 +1625,9 @@ git commit -m "feat(frontend): provider, hook data, dan kuotasi lokal tanpa RPC"
 - Consumes: `probabilityWad`, `payoutPerShareWad`; `formatProbability`, `formatPayout`
 - Produces: `<ProbabilityPanel q />`, `<PayoutPanel q />`
 
-`PayoutPanel` membawa pengungkapan dilusi yang spec sebut wajib. Ia bukan disclaimer hukum — ia menjelaskan sifat instrumen yang sedang dijual halaman ini.
+`PayoutPanel` carries the dilution disclosure the spec calls mandatory. It is not a legal disclaimer — it explains a property of the instrument this page is selling.
 
-- [ ] **Step 1: Tulis uji yang gagal**
+- [ ] **Step 1: Write the failing tests**
 
 `frontend/test/market-panels.test.tsx`:
 
@@ -1641,14 +1641,14 @@ import {ProbabilityPanel} from "@/components/market/ProbabilityPanel";
 const q: readonly [bigint, bigint] = [1000n * WAD, 1200n * WAD];
 
 describe("ProbabilityPanel", () => {
-  it("menampilkan kedua sisi sebagai p^2", () => {
+  it("shows both sides as p^2", () => {
     render(<ProbabilityPanel q={q} />);
     expect(screen.getByText("59.0%")).toBeInTheDocument();
     expect(screen.getByText("41.0%")).toBeInTheDocument();
   });
 
-  /** Harga marginal untuk q ini adalah 76.8% dan 64.0% — tidak boleh muncul sebagai persen. */
-  it("tidak menampilkan harga marginal sebagai probabilitas", () => {
+  /** The marginal prices for this q are 76.8% and 64.0% — neither may appear as a percentage. */
+  it("does not show the marginal price as a probability", () => {
     const {container} = render(<ProbabilityPanel q={q} />);
     expect(container.textContent).not.toContain("76.8%");
     expect(container.textContent).not.toContain("64.0%");
@@ -1656,33 +1656,33 @@ describe("ProbabilityPanel", () => {
 });
 
 describe("PayoutPanel", () => {
-  it("menampilkan payout 1/p, bukan 1/P", () => {
+  it("shows the 1/p payout, not 1/P", () => {
     render(<PayoutPanel q={q} />);
     expect(screen.getByText("1.30×")).toBeInTheDocument();
     expect(screen.getByText("1.56×")).toBeInTheDocument();
   });
 
-  it("tidak menampilkan angka 1/P yang keliru", () => {
+  it("does not show the mistaken 1/P numbers", () => {
     const {container} = render(<PayoutPanel q={q} />);
     expect(container.textContent).not.toContain("1.69×");
     expect(container.textContent).not.toContain("2.44×");
   });
 
   /** Pengungkapan wajib: payout mengambang sampai market tutup. */
-  it("mengungkap dilusi dengan istilah yang bisa ditindaklanjuti", () => {
+  it("discloses dilution in terms a reader can act on", () => {
     render(<PayoutPanel q={q} />);
     expect(screen.getByText(/mengambang/i)).toBeInTheDocument();
-    expect(screen.getByText(/jual kapan saja/i)).toBeInTheDocument();
+    expect(screen.getByText(/sell at any time/i)).toBeInTheDocument();
   });
 });
 ```
 
-- [ ] **Step 2: Jalankan dan pastikan gagal**
+- [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
 npm test -w @0g-delphi/frontend
 ```
-Expected: FAIL — modul panel tidak ditemukan.
+Expected: FAIL — the panel modules are not found.
 
 - [ ] **Step 3: Implementasikan `ProbabilityPanel.tsx`**
 
@@ -1691,8 +1691,8 @@ import {probabilityWad} from "@/lib/dpm-view";
 import {formatProbability} from "@/lib/format";
 
 /**
- * Menampilkan P_i = p_i^2. Harga marginal p_i TIDAK pernah muncul di sini —
- * ia hanya sah sebagai harga eksekusi per lembar, bukan sebagai persentase.
+ * Shows P_i = p_i^2. The marginal price p_i NEVER appears here — it is only valid
+ * it is only valid as an execution price per share, not as a percentage.
  */
 export function ProbabilityPanel({q}: {q: readonly [bigint, bigint]}) {
   return (
@@ -1719,10 +1719,10 @@ import {payoutPerShareWad} from "@/lib/dpm-view";
 import {formatPayout} from "@/lib/format";
 
 /**
- * Payout DPM didanai seluruhnya oleh pool, dan konsekuensinya payout milik
- * pembeli awal terdilusi oleh pembeli belakangan. Menyembunyikan itu membuat
- * halaman ini berbohong tentang instrumen yang dijualnya — karena itu
- * pengungkapannya ada di sini dan diulang di tiket order sebelum konfirmasi.
+ * A DPM payout is funded entirely by the pool, and the consequence is that an
+ * early buyer's payout is diluted by later buyers. Hiding that makes this page
+ * lie about the instrument it is selling — which is why the disclosure lives
+ * here and is repeated on the order ticket before confirmation.
  */
 export function PayoutPanel({q}: {q: readonly [bigint, bigint]}) {
   return (
@@ -1734,21 +1734,21 @@ export function PayoutPanel({q}: {q: readonly [bigint, bigint]}) {
               Payout jika {outcome === 1 ? "YES" : "NO"} menang
             </span>
             <span className="text-[15px] text-text">
-              {formatPayout(payoutPerShareWad(q, outcome))} per lembar
+              {formatPayout(payoutPerShareWad(q, outcome))} per share
             </span>
           </div>
         ))}
       </div>
       <p className="mt-3 border-t border-border pt-3 text-[12px] leading-relaxed text-warn">
-        Payout mengambang sampai market tutup. Semakin banyak yang membeli sisi yang sama denganmu,
-        semakin kecil payout per lembarmu. Jual kapan saja untuk mengunci harga saat ini.
+        Payout floats until the market closes. The more that is bought on the side you are on,
+        the smaller your payout per share. Sell at any time to lock in the current price.
       </p>
     </div>
   );
 }
 ```
 
-- [ ] **Step 5: Jalankan dan pastikan lulus**
+- [ ] **Step 5: Run them and confirm they pass**
 
 ```bash
 npm test -w @0g-delphi/frontend && npx tsc --noEmit -p frontend
@@ -1759,7 +1759,7 @@ Expected: PASS — 48 lulus.
 
 ```bash
 git add frontend
-git commit -m "feat(frontend): panel probabilitas dan payout dengan pengungkapan dilusi"
+git commit -m "feat(frontend): probability and payout panels with the dilution disclosure"
 ```
 
 ---
@@ -1774,9 +1774,9 @@ git commit -m "feat(frontend): panel probabilitas dan payout dengan pengungkapan
 - Consumes: `useQuote`, `formatShares`, `formatPricePerShare`, `formatCollateral`, `formatProbability`, `formatProbabilityDelta`, `formatPayout`, `toWad`, `toTokensCeil`
 - Produces: `<OrderTicket market />`
 
-Bagian paling sulit didesain benar: memuat kuotasi, dampak harga, batas slippage, payout, dan peringatan dilusi tanpa jadi menakutkan atau menyesatkan. F0 merender dan menghitung; tombol eksekusi dinonaktifkan dengan alasan yang jelas, karena mode mock tidak mengirim transaksi.
+The hardest part to design correctly: carrying the quote, the price impact, the slippage bound, the payout, and the dilution warning without becoming frightening or misleading. F0 renders and computes; the execution button is disabled with a clear reason, because mock mode sends no transaction.
 
-- [ ] **Step 1: Tulis uji yang gagal**
+- [ ] **Step 1: Write the failing tests**
 
 `frontend/test/order-ticket.test.tsx`:
 
@@ -1799,20 +1799,20 @@ function renderTicket() {
 }
 
 describe("OrderTicket", () => {
-  it("mulai kosong tanpa menampilkan kuotasi palsu", () => {
+  it("starts empty rather than showing a fake quote", () => {
     renderTicket();
     expect(screen.queryByTestId("quote-shares")).toBeNull();
   });
 
-  it("menghitung kuotasi saat mengetik", async () => {
+  it("computes a quote as you type", async () => {
     const user = userEvent.setup();
     renderTicket();
     await user.type(screen.getByLabelText(/belanjakan/i), "100");
     expect(screen.getByTestId("quote-shares").textContent).toMatch(/^\d/);
   });
 
-  /** Dampak harga ditampilkan sebagai transisi, bukan angka tunggal. */
-  it("menampilkan probabilitas sebelum dan sesudah", async () => {
+  /** Price impact is shown as a transition, not as a single number. */
+  it("shows the probability before and after", async () => {
     const user = userEvent.setup();
     renderTicket();
     await user.type(screen.getByLabelText(/belanjakan/i), "100");
@@ -1822,7 +1822,7 @@ describe("OrderTicket", () => {
   });
 
   /** Dilusi terlihat konkret: pembelianmu sendiri menurunkan payout-mu. */
-  it("menampilkan payout turun akibat pembelian sendiri", async () => {
+  it("shows the payout falling because of your own purchase", async () => {
     const user = userEvent.setup();
     renderTicket();
     await user.type(screen.getByLabelText(/belanjakan/i), "100");
@@ -1831,7 +1831,7 @@ describe("OrderTicket", () => {
     expect(parseFloat(after)).toBeLessThan(parseFloat(before));
   });
 
-  it("menampilkan batas maksimum yang akan dibayar, bukan hanya kuotasi", async () => {
+  it("shows the maximum that will be paid, not only the quote", async () => {
     const user = userEvent.setup();
     renderTicket();
     await user.type(screen.getByLabelText(/belanjakan/i), "100");
@@ -1839,7 +1839,7 @@ describe("OrderTicket", () => {
     expect(screen.getByText(/0\.5%/)).toBeInTheDocument();
   });
 
-  it("bisa berpindah sisi", async () => {
+  it("can switch sides", async () => {
     const user = userEvent.setup();
     renderTicket();
     await user.type(screen.getByLabelText(/belanjakan/i), "100");
@@ -1848,29 +1848,29 @@ describe("OrderTicket", () => {
     expect(screen.getByTestId("prob-before").textContent).not.toBe(yesProb);
   });
 
-  /** Mode mock tidak mengirim transaksi — dan harus mengatakannya, bukan diam. */
-  it("menonaktifkan eksekusi di mode mock dengan alasan yang terlihat", async () => {
+  /** Mock mode sends no transaction — and must say so rather than stay silent. */
+  it("disables execution in mock mode with a visible reason", async () => {
     const user = userEvent.setup();
     renderTicket();
     await user.type(screen.getByLabelText(/belanjakan/i), "100");
-    expect(screen.getByRole("button", {name: /beli/i})).toBeDisabled();
+    expect(screen.getByRole("button", {name: /buy/i})).toBeDisabled();
     expect(screen.getByText(/mode mock/i)).toBeInTheDocument();
   });
 });
 ```
 
-Tambahkan `@testing-library/user-event` ke `devDependencies` frontend:
+Add `@testing-library/user-event` to the frontend's `devDependencies`:
 
 ```json
     "@testing-library/user-event": "^14.6.1",
 ```
 
-- [ ] **Step 2: Jalankan dan pastikan gagal**
+- [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
 npm install && npm test -w @0g-delphi/frontend
 ```
-Expected: FAIL — modul `OrderTicket` tidak ditemukan.
+Expected: FAIL — the `OrderTicket` module is not found.
 
 - [ ] **Step 3: Implementasikan `OrderTicket.tsx`**
 
@@ -1889,7 +1889,7 @@ import type {MarketDetail, Outcome} from "@/lib/data/types";
 
 const SLIPPAGE_BPS = 50n; // 0,5%
 
-/** Mengurai input desimal pengguna jadi satuan token terkecil, tanpa float. */
+/** Parses the user's decimal input into the smallest token unit, without floats. */
 function parseAmount(text: string, decimals: number): bigint {
   const trimmed = text.trim();
   if (!/^\d*\.?\d*$/.test(trimmed) || trimmed === "" || trimmed === ".") return 0n;
@@ -1953,7 +1953,7 @@ export function OrderTicket({market}: {market: MarketDetail}) {
         <div className="flex flex-col gap-1.5 border-t border-border pt-3 text-[13px]">
           <Row label="Terima">
             <span data-testid="quote-shares">
-              {formatShares(quote.sharesOut)} lembar {outcome === 1 ? "YES" : "NO"}
+              {formatShares(quote.sharesOut)} {outcome === 1 ? "YES" : "NO"} shares
             </span>
           </Row>
           <Row label="Harga rata-rata">{formatPricePerShare(quote.avgPriceWad)}</Row>
@@ -1986,7 +1986,7 @@ export function OrderTicket({market}: {market: MarketDetail}) {
           </Row>
 
           <p className="mt-2 text-[12px] leading-relaxed text-warn">
-            Pembelian ini sendiri menurunkan payout-mu. Pembeli berikutnya di sisi ini
+            This purchase itself lowers your payout. The next buyer on this side
             menurunkannya lagi.
           </p>
         </div>
@@ -1997,11 +1997,11 @@ export function OrderTicket({market}: {market: MarketDetail}) {
         disabled
         className="rounded-md bg-accent px-3 py-2 text-[13px] font-medium text-white disabled:opacity-40"
       >
-        Beli {outcome === 1 ? "YES" : "NO"}
+        Buy {outcome === 1 ? "YES" : "NO"}
       </button>
       <p className="text-[11px] text-text-faint">
-        Mode mock — kuotasi dihitung dari cermin DPM, tetapi tidak ada transaksi yang dikirim.
-        Eksekusi menyala di mode <span className="font-mono">chain</span> ({source.mode} aktif).
+        Mock mode — the quote is computed from the DPM mirror, but no transaction is sent.
+        Execution is enabled in <span className="font-mono">chain</span> mode ({source.mode} active).
       </p>
     </div>
   );
@@ -2017,7 +2017,7 @@ function Row({label, children}: {label: string; children: React.ReactNode}) {
 }
 ```
 
-- [ ] **Step 4: Jalankan dan pastikan lulus**
+- [ ] **Step 4: Run them and confirm they pass**
 
 ```bash
 npm test -w @0g-delphi/frontend && npx tsc --noEmit -p frontend
@@ -2028,12 +2028,12 @@ Expected: PASS — 55 lulus.
 
 ```bash
 git add frontend package.json package-lock.json
-git commit -m "feat(frontend): tiket order dengan dampak harga dan dilusi sebagai transisi angka"
+git commit -m "feat(frontend): order ticket with price impact and dilution as a numeric transition"
 ```
 
 ---
 
-## Task 8: Rakit halaman dan verifikasi ujung-ke-ujung
+## Task 8: Assemble the page and verify end to end
 
 **Files:**
 - Create: `frontend/src/components/market/TradeTape.tsx`, `frontend/src/app/market/[address]/page.tsx`, `frontend/src/app/market/[address]/MarketView.tsx`
@@ -2041,10 +2041,10 @@ git commit -m "feat(frontend): tiket order dengan dampak harga dan dilusi sebaga
 - Test: `frontend/test/market-page.test.tsx`
 
 **Interfaces:**
-- Consumes: seluruh Task 1–7
-- Produces: rute `/market/[address]` yang berfungsi dan `/` yang menautkan ke fixture
+- Consumes: all of Tasks 1–7
+- Produces: a working `/market/[address]` route and a `/` that links to the fixtures
 
-- [ ] **Step 1: Tulis uji yang gagal**
+- [ ] **Step 1: Write the failing tests**
 
 `frontend/test/market-page.test.tsx`:
 
@@ -2066,7 +2066,7 @@ function renderView(source = new MockSource()) {
 }
 
 describe("MarketView", () => {
-  it("merender pertanyaan, probabilitas, payout, dan tiket", async () => {
+  it("renders the question, the probability, the payout, and the ticket", async () => {
     renderView();
     await waitFor(() => expect(screen.getByText(/ETH\/USD/)).toBeInTheDocument());
     expect(screen.getByText("59.0%")).toBeInTheDocument();
@@ -2074,31 +2074,31 @@ describe("MarketView", () => {
     expect(screen.getByLabelText(/belanjakan/i)).toBeInTheDocument();
   });
 
-  it("merender tape trade saat kemampuan ada", async () => {
+  it("renders the trade tape when the capability is present", async () => {
     renderView();
     await waitFor(() => expect(screen.getByTestId("trade-tape")).toBeInTheDocument());
   });
 
   /**
-   * Uji yang paling mudah terlupa dan paling penting: di mode terbatas, kolom
-   * sejarah menampilkan penjelasan, BUKAN nol.
+   * The easiest test to forget and the most important one: in a limited mode,
+   * the history column shows an explanation, NOT a zero.
    */
-  it("menampilkan Unavailable, bukan nol, saat tape tidak tersedia", async () => {
+  it("shows Unavailable rather than zero when the tape is unavailable", async () => {
     renderView(new MockSource({omit: ["TRADE_TAPE"]}));
     await waitFor(() =>
-      expect(screen.getByText(/riwayat transaksi.*tidak tersedia/i)).toBeInTheDocument(),
+      expect(screen.getByText(/trade history.*not available/i)).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("trade-tape")).toBeNull();
   });
 });
 ```
 
-- [ ] **Step 2: Jalankan dan pastikan gagal**
+- [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
 npm test -w @0g-delphi/frontend
 ```
-Expected: FAIL — modul `MarketView` tidak ditemukan.
+Expected: FAIL — the `MarketView` module is not found.
 
 - [ ] **Step 3: Implementasikan `TradeTape.tsx`**
 
@@ -2112,7 +2112,7 @@ export function TradeTape({trades, collateral}: {trades: Trade[]; collateral: Co
       <table className="w-full text-[13px]">
         <thead className="bg-bg-sunken text-[11px] uppercase tracking-wide text-text-faint">
           <tr>
-            {["Waktu", "Sisi", "Lembar", collateral.symbol, "P(YES)"].map((h) => (
+            {["Time", "Side", "Shares", collateral.symbol, "P(YES)"].map((h) => (
               <th key={h} className="px-3 py-2 text-left font-medium last:text-right">
                 {h}
               </th>
@@ -2184,7 +2184,7 @@ export function MarketView({address}: {address: `0x${string}`}) {
           <Badge tone={m.status === "Open" ? "positive" : "neutral"} label={m.status} />
           <span className="text-[12px] text-text-muted">{m.category}</span>
           <span className="text-[12px] text-text-muted">
-            tutup dalam <Countdown until={m.tradingEnd} />
+            closes in <Countdown until={m.tradingEnd} />
           </span>
           <CopyAddress address={m.address} />
         </div>
@@ -2224,7 +2224,7 @@ function Shell({children}: {children: React.ReactNode}) {
 }
 ```
 
-- [ ] **Step 5: Implementasikan rute dan beranda**
+- [ ] **Step 5: Implement the route and the home page**
 
 `frontend/src/app/market/[address]/page.tsx`:
 
@@ -2248,7 +2248,7 @@ export default function Home() {
     <main className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-8">
       <h1 className="text-[20px] text-text">0G-Delphi</h1>
       <p className="text-[13px] text-text-muted">
-        Mode mock. Daftar market penuh menyusul di F2, setelah MarketFactory mendarat.
+        Mock mode. The full market list follows in F2, once MarketFactory lands.
       </p>
       <ul className="flex flex-col gap-2">
         {FIXTURE_MARKETS.map((m) => (
@@ -2267,7 +2267,7 @@ export default function Home() {
 }
 ```
 
-Ganti `frontend/src/app/layout.tsx` untuk membungkus dengan provider:
+Replace `frontend/src/app/layout.tsx` to wrap everything in the provider:
 
 ```tsx
 import type {Metadata} from "next";
@@ -2276,7 +2276,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "0G-Delphi",
-  description: "Pasar prediksi biner di 0G Chain",
+  description: "Binary prediction markets on 0G Chain",
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
@@ -2305,14 +2305,14 @@ export function AppShell({children}: {children: React.ReactNode}) {
 }
 ```
 
-- [ ] **Step 6: Jalankan dan pastikan lulus**
+- [ ] **Step 6: Run them and confirm they pass**
 
 ```bash
 npm test -w @0g-delphi/frontend && npx tsc --noEmit -p frontend
 ```
 Expected: PASS — 58 lulus.
 
-- [ ] **Step 7: Verifikasi ujung-ke-ujung di server sungguhan**
+- [ ] **Step 7: Verify end to end on a real server**
 
 ```bash
 npm run build -w @0g-delphi/frontend
@@ -2323,45 +2323,45 @@ grep -c "59.0%" /tmp/market.html
 grep -c "1.30×" /tmp/market.html
 grep -c "mengambang" /tmp/market.html
 ```
-Expected: build sukses; ketiga `grep` mengembalikan ≥ 1. Hentikan server setelahnya.
+Expected: the build succeeds; all three `grep`s return ≥ 1. Stop the server afterwards.
 
-Ini bukan formalitas — ia membuktikan halaman benar-benar dirender oleh Next, bukan hanya oleh jsdom, dan bahwa nilai `bigint` selamat melewati batas server/klien.
+This is not a formality — it proves the page is genuinely rendered by Next and not only by jsdom, and that `bigint` values survive the server/client boundary.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add frontend
-git commit -m "feat(frontend): halaman market lengkap di mode mock"
+git commit -m "feat(frontend): the complete market page in mock mode"
 ```
 
 ---
 
-## Lampiran A — Peta cakupan spec
+## Appendix A — The spec coverage map
 
-| Bagian spec | Tugas |
+| Spec section | Task |
 |---|---|
-| §2 kemampuan per mode | 3 (`Capability`, `MockSource({omit})`) |
-| §3.1 kontrak `DataSource` | 3 — subset F0, lihat catatan cakupan di Task 3 |
-| §3.2 komposisi dekorator | belum — `ChainSource`/`IndexerSource` di F1/F4; jahitannya ada di `lib/data/index.ts` |
-| §3.3 `Query<T>` + `unavailable` | 3 (tipe), 5 (`toQuery`), 4 (`<Unavailable>`), 8 (dipakai di halaman) |
-| §3.4 matematika di klien | 3 (`dpm-view`), 5 (`useQuote`) |
-| §4.2 halaman detail market | 6, 7, 8 |
-| §5.1 probabilitas `pᵢ²`, payout `1/pᵢ` | 3 (uji jebakan), 6 (uji negatif di panel) |
-| §5.2 kuotasi taksiran, slippage mengikat | 7 (`max-paid`, 0,5%) |
-| §5.3 desimal lewat `@0g-delphi/protocol` | 1 (uji impor), 2, 7 |
-| §6 anatomi tiket order | 7 |
+| §2 capabilities per mode | 3 (`Capability`, `MockSource({omit})`) |
+| §3.1 the `DataSource` contract | 3 — the F0 subset, see the scope note in Task 3 |
+| §3.2 decorator composition | not yet — `ChainSource`/`IndexerSource` land in F1/F4; the seam is in `lib/data/index.ts` |
+| §3.3 `Query<T>` + `unavailable` | 3 (types), 5 (`toQuery`), 4 (`<Unavailable>`), 8 (used on the page) |
+| §3.4 maths on the client | 3 (`dpm-view`), 5 (`useQuote`) |
+| §4.2 the market detail page | 6, 7, 8 |
+| §5.1 probability `pᵢ²`, payout `1/pᵢ` | 3 (the trap tests), 6 (the negative tests in the panels) |
+| §5.2 estimated quotes, binding slippage | 7 (`max-paid`, 0.5%) |
+| §5.3 decimals through `@0g-delphi/protocol` | 1 (the import test), 2, 7 |
+| §6 the anatomy of the order ticket | 7 |
 | §7 sistem visual | 2 |
-| §8 struktur berkas | 1–8 |
-| §9 uji | tiap tugas; uji "tanpa nol saat unavailable" ada di Task 8 |
-| §10 fase F0 dan bagian F1 | seluruh rencana ini |
+| §8 file structure | 1–8 |
+| §9 tests | every task; the "no zero when unavailable" test lives in Task 8 |
+| §10 phase F0 and part of F1 | this whole plan |
 
-**Di luar cakupan, sesuai rencana:** grafik probabilitas SVG (butuh `PRICE_HISTORY` yang berarti — F4), `/` daftar market penuh (F2, butuh factory), `/portfolio` (F3), eksekusi transaksi (F1 dengan `ChainSource`), penampil MarketSpec dari 0G Storage dan badge TEE (butuh 0G Storage — F4).
+**Out of scope, by plan:** the SVG probability chart (needs a meaningful `PRICE_HISTORY` — F4), the full market list at `/` (F2, needs the factory), `/portfolio` (F3), transaction execution (F1 with `ChainSource`), the MarketSpec viewer from 0G Storage and the TEE badge (need 0G Storage — F4).
 
 ## Lampiran B — Gerbang
 
-| Perintah | Harus |
+| Command | Must |
 |---|---|
 | `npm test -w @0g-delphi/frontend` | 58 lulus |
 | `npx tsc --noEmit -p frontend` | bersih |
 | `npm run build -w @0g-delphi/frontend` | sukses |
-| `make fe` | server dev menyala di :3000 |
+| `make fe` | the dev server comes up on :3000 |

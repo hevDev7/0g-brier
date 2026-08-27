@@ -1,40 +1,40 @@
-# F1 — Halaman Market yang Diperkaya (Mode Observasi) Implementation Plan
+# F1 — The Enriched Market Page (Observation Mode) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Mengubah `/market/[address]` dari halaman transaksi menjadi halaman pemeriksaan — grafik riwayat probabilitas, statistik market, tabel posisi agent, outcome final, dan bukti resolusi — seluruhnya di mode `mock`, dengan `OrderTicket` dikeluarkan dan batas tulis ditegakkan secara struktural.
+**Goal:** Turn `/market/[address]` from a transaction page into an inspection page — a probability history chart, market statistics, the agent position table, the final outcome, and the resolution evidence — all in `mock` mode, with `OrderTicket` removed and the write boundary enforced structurally.
 
-**Architecture:** Lapisan data bertambah tiga kemampuan (`AGENT_POSITIONS`, `COST_BASIS`, `SETTLEMENT_RECEIPT`) dan kehilangan dua yang tak pernah dipakai (`QUOTE`, `EXECUTE`). Setiap panel baru adalah komponen presentasional murni yang menerima data sudah-teresolusi; `MarketView` tetap satu-satunya tempat `Query<T>` dibongkar. Grafik digambar sebagai SVG tanpa pustaka pihak ketiga.
+**Architecture:** The data layer gains three capabilities (`AGENT_POSITIONS`, `COST_BASIS`, `SETTLEMENT_RECEIPT`) and loses two that were never used (`QUOTE`, `EXECUTE`). Every new panel is a pure presentational component receiving already-resolved data; `MarketView` remains the only place a `Query<T>` is unwrapped. The chart is drawn as SVG with no third-party library.
 
-**Tech Stack:** Next.js 16.3.3, React 19.2.8, TypeScript ^5, Tailwind v4 (CSS-first, tanpa `tailwind.config.js`), TanStack Query 5, Vitest 4 + jsdom + Testing Library, `@0g-delphi/protocol` untuk DPM dan konversi desimal.
+**Tech Stack:** Next.js 16.3.3, React 19.2.8, TypeScript ^5, Tailwind v4 (CSS-first, no `tailwind.config.js`), TanStack Query 5, Vitest 4 + jsdom + Testing Library, `@0g-delphi/protocol` for DPM and decimal conversion.
 
 **Spec:** `docs/superpowers/specs/2026-08-27-0g-delphi-frontend-design.md` (§1 F3, §2, §4.2, §4.3, §6)
 
 ## Global Constraints
 
-Setiap tugas tunduk pada seluruh butir ini.
+Every task is subject to all of the following.
 
-- **Manusia tidak mengeksekusi apa pun.** `DataSource` tidak boleh punya satu pun metode yang menulis ke rantai, dan frontend tidak boleh menyimpan signer. Ini diuji, bukan diasumsikan (Task 1 Step 6).
-- **Probabilitas adalah `pᵢ²`.** Setiap nilai berlabel `%` berasal dari `dpm.probability`. Tidak boleh ada `dpm.price` yang diberi label persen — termasuk pada sumbu grafik.
-- **Payout per lembar adalah `1/pᵢ`, bukan `1/Pᵢ`.** Tidak boleh ada `1/probability` di mana pun di basis kode.
-- **Seluruh nilai moneter `bigint`.** Tidak ada `Number()` pada nilai moneter, tidak ada `parseFloat` pada nilai wad. Satu pengecualian eksplisit: koordinat SVG di `ProbabilityChart` (Task 2), yang dikonversi dari `bigint` tepat satu kali di batas render dan tidak pernah dipakai untuk menghitung nilai yang ditampilkan.
-- **Komponen tidak memformat angka sendiri.** Semua lewat `frontend/src/lib/format.ts`.
-- **Konversi desimal mengimpor `@0g-delphi/protocol`.** Tidak ada konstanta `1e12`/`1e18` di luar `lib/format.ts`.
-- **`unavailable` adalah anggota union `Query<T>`.** Komponen yang tidak menanganinya tidak boleh mengompilasi. Jangan pernah merender `0` atau `—` untuk data yang mode saat ini tidak bisa ketahui.
-- **Ketersediaan dievaluasi per baris, bukan per panel** (spec §2). Panel yang satu barisnya tak diketahui tetap merender baris-baris lain.
-- **Tailwind v4.** Token tema di `@theme inline` dalam `globals.css`. Jangan membuat `tailwind.config.js`.
-- Semua uji hijau sebelum commit; `npx tsc --noEmit -p frontend` bersih; Conventional Commits; satu commit per tugas.
+- **Humans execute nothing.** `DataSource` must not have a single method that writes to the chain, and the frontend must not hold a signer. This is tested, not assumed (Task 1 Step 6).
+- **Probability is `pᵢ²`.** Every value labelled `%` comes from `dpm.probability`. No `dpm.price` may be labelled as a percentage — including on a chart axis.
+- **Payout per share is `1/pᵢ`, not `1/Pᵢ`.** There must be no `1/probability` anywhere in the codebase.
+- **Every monetary value is a `bigint`.** No `Number()` on a monetary value, no `parseFloat` on a wad value. One explicit exception: the SVG coordinates in `ProbabilityChart` (Task 2), converted from `bigint` exactly once at the render boundary and never used to compute a displayed value.
+- **Components do not format numbers themselves.** Everything goes through `frontend/src/lib/format.ts`.
+- **Decimal conversion imports `@0g-delphi/protocol`.** No `1e12`/`1e18` constant outside `lib/format.ts`.
+- **`unavailable` is a member of the `Query<T>` union.** A component that does not handle it must not compile. Never render `0` or `—` for data the current mode cannot know.
+- **Availability is evaluated per row, not per panel** (spec §2). A panel with one unknown row still renders the others.
+- **Tailwind v4.** Theme tokens live in `@theme inline` inside `globals.css`. Do not create a `tailwind.config.js`.
+- All tests green before committing; `npx tsc --noEmit -p frontend` clean; Conventional Commits; one commit per task.
 
-### Pelajaran yang sudah dibayar mahal — jangan diulang
+### Lessons already paid for dearly — do not repeat them
 
-- **`getByText` hanya menggabungkan node teks LANGSUNG milik satu elemen.** Frasa yang terpecah lintas elemen (`<span>{nilai}</span> per lembar`) tidak akan pernah cocok. Sudah menggigit rencana F0 tiga kali. Bila sebuah assertion mencari frasa, pastikan frasa itu utuh di dalam satu elemen — atau pakai `toHaveTextContent`, yang membaca `.textContent` secara rekursif.
-- **`afterEach(cleanup)` wajib.** Vitest di proyek ini berjalan tanpa `globals`, jadi auto-cleanup Testing Library tidak pernah terpasang sendiri. Sudah ada di `vitest.setup.ts`; jangan hapus.
-- **Anotasi tipe kembalian eksplisit adalah penanggung beban eksaustivitas.** `switch` atas `Query.status` tanpa `default` hanya menegakkan kelengkapan bila fungsinya beranotasi tipe non-nullable. Tanpa anotasi, TypeScript menyimpulkan `| undefined` dan jaminannya lenyap.
-- **Penanganan tanda di `format.ts` sudah dua kali bocor** (bug "-0.0", lalu `formatFeeRate` negatif). Fungsi format baru yang menyentuh tanda wajib punya kasus uji negatif dan nol.
+- **`getByText` joins only an element's DIRECT text nodes.** A phrase split across elements (`<span>{value}</span> per share`) will never match. This bit the F0 plan three times. If an assertion looks for a phrase, make sure that phrase is whole inside a single element — or use `toHaveTextContent`, which reads `.textContent` recursively.
+- **`afterEach(cleanup)` is mandatory.** Vitest in this project runs without `globals`, so Testing Library's auto-cleanup never installs itself. It is already in `vitest.setup.ts`; do not remove it.
+- **An explicit return-type annotation is what carries the exhaustiveness guarantee.** A `switch` over `Query.status` with no `default` enforces completeness only when the function is annotated with a non-nullable type. Without the annotation, TypeScript infers `| undefined` and the guarantee evaporates.
+- **Sign handling in `format.ts` has leaked twice already** (the "-0.0" bug, then a negative `formatFeeRate`). Any new format function that touches a sign must have negative and zero test cases.
 
 ---
 
-## Struktur berkas
+## File structure
 
 ```
 frontend/src/
@@ -43,8 +43,8 @@ frontend/src/
 │  │  ├─ types.ts          + Position, SettlementReceipt, ResolverVote
 │  │  │                    + AGENT_POSITIONS/COST_BASIS/SETTLEMENT_RECEIPT
 │  │  │                    − QUOTE/EXECUTE
-│  │  │                    + getPositions(), getReceipt() di DataSource
-│  │  └─ mock.ts           + fixture posisi & receipt, generator koheren
+│  │  │                    + getPositions(), getReceipt() on DataSource
+│  │  └─ mock.ts           + position & receipt fixtures, a coherent generator
 │  ├─ format.ts            + formatTimestamp, formatDuration
 │  └─ chart.ts             BARU — geometri murni, tanpa JSX
 ├─ hooks/
@@ -62,11 +62,11 @@ frontend/src/
 └─ app/market/[address]/MarketView.tsx   dirakit ulang; OrderTicket dikeluarkan
 ```
 
-`lib/chart.ts` dipisah dari komponennya dengan sengaja: geometri grafik adalah aritmetika yang bisa diuji tanpa DOM, dan mencampurnya dengan JSX membuat satu-satunya bagian yang benar-benar bisa salah jadi sulit diuji.
+`lib/chart.ts` is deliberately separated from its component: chart geometry is arithmetic that can be tested without a DOM, and mixing it into JSX makes the one part that can genuinely be wrong the hard part to test.
 
 ---
 
-### Task 1: Lapisan data — kemampuan observasi, dan batas tulis yang ditegakkan
+### Task 1: The data layer — observation capabilities, and an enforced write boundary
 
 **Files:**
 - Modify: `frontend/src/lib/data/types.ts`
@@ -85,16 +85,16 @@ frontend/src/
   - `DataSource.getPositions(address): Promise<Position[]>`
   - `DataSource.getReceipt(address): Promise<SettlementReceipt>`
 
-- [ ] **Step 1: Tulis uji yang gagal — kemampuan absen melempar, tidak mengembalikan kosong**
+- [ ] **Step 1: Write the failing tests — an absent capability throws rather than returning empty**
 
-Tambahkan ke `frontend/test/mock-source.test.ts`:
+Add to `frontend/test/mock-source.test.ts`:
 
 ```ts
 import {describe, expect, it} from "vitest";
 import {MockSource, FIXTURE_MARKETS} from "@/lib/data/mock";
 import {CapabilityUnavailableError} from "@/lib/data/types";
 
-describe("kemampuan observasi", () => {
+describe("observation capabilities", () => {
   const addr = FIXTURE_MARKETS[0]!.address;
 
   it("getPositions melempar bila AGENT_POSITIONS diomit", async () => {
@@ -107,7 +107,7 @@ describe("kemampuan observasi", () => {
     await expect(src.getReceipt(addr)).rejects.toBeInstanceOf(CapabilityUnavailableError);
   });
 
-  it("posisi menjumlah ke q market, per outcome", async () => {
+  it("positions sum to the market q, per outcome", async () => {
     const src = new MockSource();
     for (const m of FIXTURE_MARKETS) {
       const pos = await src.getPositions(m.address);
@@ -120,7 +120,7 @@ describe("kemampuan observasi", () => {
     }
   });
 
-  it("harga masuk tiap posisi berada di antara 0 dan WAD", async () => {
+  it("every position's entry price lies between 0 and WAD", async () => {
     const src = new MockSource();
     const pos = await src.getPositions(FIXTURE_MARKETS[0]!.address);
     expect(pos.length).toBeGreaterThan(0);
@@ -131,17 +131,17 @@ describe("kemampuan observasi", () => {
     }
   });
 
-  it("COST_BASIS diomit -> posisi tetap ada, harga masuknya null", async () => {
+  it("COST_BASIS omitted -> the positions remain, their entry price is null", async () => {
     const src = new MockSource({omit: ["COST_BASIS"]});
     const pos = await src.getPositions(FIXTURE_MARKETS[0]!.address);
     expect(pos.length).toBeGreaterThan(0);
     for (const p of pos) expect(p.entryPriceWad).toBeNull();
   });
 
-  it("receipt market Settled menyebut outcome, dan yang Open tidak", async () => {
+  it("a Settled market's receipt names an outcome, and an Open one's does not", async () => {
     const src = new MockSource();
     const settled = FIXTURE_MARKETS.find((m) => m.status === "Settled");
-    expect(settled, "fixture wajib punya satu market Settled").toBeDefined();
+    expect(settled, "the fixtures must include one Settled market").toBeDefined();
     expect((await src.getReceipt(settled!.address)).outcome).not.toBeNull();
 
     const open = FIXTURE_MARKETS.find((m) => m.status === "Open")!;
@@ -150,14 +150,14 @@ describe("kemampuan observasi", () => {
 });
 ```
 
-- [ ] **Step 2: Jalankan uji, pastikan gagal**
+- [ ] **Step 2: Run the tests, confirm they fail**
 
 Run: `npm test -w @0g-delphi/frontend -- mock-source`
 Expected: FAIL — `src.getPositions is not a function`.
 
 - [ ] **Step 3: Perbarui `types.ts`**
 
-Ganti union `Capability`, hapus `QUOTE` dan `EXECUTE`:
+Replace the `Capability` union, dropping `QUOTE` and `EXECUTE`:
 
 ```ts
 export type Capability =
@@ -170,7 +170,7 @@ export type Capability =
   | "SETTLEMENT_RECEIPT";
 ```
 
-Tambahkan tipe baru:
+Add tipe baru:
 
 ```ts
 export interface Position {
@@ -178,40 +178,40 @@ export interface Position {
   outcome: Outcome;
   shares: bigint;
   /**
-   * Harga rata-rata masuk, wad. `null` berarti mode saat ini TIDAK BISA
-   * mengetahuinya — bukan nol, dan bukan "belum dimuat". Hanya event yang
-   * menyimpan apa yang dibayar, jadi mode `chain` mengembalikan null di sini
-   * dan tabel merender `<Unavailable capability="COST_BASIS">` di sel itu.
-   * Tipenya sengaja nullable supaya konsumen yang lupa tidak mengompilasi.
+   * Average entry price, wad. `null` means the current mode CANNOT know it —
+   * not zero, and not "not loaded yet". Only events record what was paid, so
+   * `chain` mode returns null here and the table renders
+   * `<Unavailable capability="COST_BASIS">` in that cell. The type is
+   * deliberately nullable so that a consumer which forgets will not compile.
    */
   entryPriceWad: bigint | null;
 }
 
 export interface ResolverVote {
   model: string;
-  /** null = resolver tidak memberi suara (belum reveal, atau abstain). */
+  /** null = the resolver cast no vote (not yet revealed, or abstained). */
   outcome: Outcome | null;
   teeVerified: boolean;
   simulated: boolean;
 }
 
 export interface SettlementReceipt {
-  /** null selama market belum diselesaikan. */
+  /** null while the market has not been resolved. */
   outcome: Outcome | null;
   votes: ResolverVote[];
   judgeModel: string | null;
-  /** Alasan apa adanya dari resolver. TIDAK diringkas — lihat spec §4.2. */
+  /** The resolver's reasoning verbatim. NOT summarized — see spec §4.2. */
   reasoning: string;
   criteria: string;
   sources: string[];
   provider: `0x${string}`;
   chatId: string;
-  /** true bila receipt berasal dari mode stub. Wajib mencolok di UI. */
+  /** true when the receipt came from stub mode. Must be conspicuous in the UI. */
   simulated: boolean;
 }
 ```
 
-Tambahkan `createdAt` ke `MarketDetail`:
+Add `createdAt` to `MarketDetail`:
 
 ```ts
 export interface MarketDetail extends MarketSummary {
@@ -224,14 +224,14 @@ export interface MarketDetail extends MarketSummary {
 }
 ```
 
-Tambahkan dua metode ke `DataSource`, **dan komentar yang menjelaskan kenapa tidak ada metode tulis**:
+Add two methods to `DataSource`, **and the comment that explains why there is no write method**:
 
 ```ts
 /**
- * Kontrak baca. Perhatikan tidak ada `buy`, `sell`, `redeem`, maupun
- * `liquidate` di sini, dan itu bukan kelalaian: UI manusia hanya mengamati
- * (spec §1 F3). Seluruh eksekusi hidup di `@0g-delphi/agent-kit`. Batas ini
- * ditegakkan uji, bukan hanya konvensi — lihat test/write-boundary.test.ts.
+ * The read contract. Note there is no `buy`, no `sell`, no `redeem`, and no
+ * `liquidate` here, and that is not an oversight: the human UI only observes
+ * (spec §1 F3). All execution lives in `@0g-delphi/agent-kit`. This boundary
+ * is enforced by a test, not merely by convention — see test/write-boundary.test.ts.
  */
 export interface DataSource {
   readonly mode: DataMode;
@@ -247,21 +247,21 @@ export interface DataSource {
 
 - [ ] **Step 4: Perbarui `mock.ts`**
 
-Tambahkan `createdAt` ke setiap entri `FIXTURE_MARKETS`, dan pastikan **minimal satu market berstatus `"Settled"`** (uji Step 1 menuntutnya; bila fixture saat ini semuanya `Open`, ubah market ketiga menjadi `Settled`).
+Add `createdAt` to every `FIXTURE_MARKETS` entry, and make sure **at least one market has status `"Settled"`** (the Step 1 tests demand it; if all the current fixtures are `Open`, change the third market to `Settled`).
 
-Posisi diturunkan dari transaksi yang sudah dibangkitkan, bukan diarang bebas — kalau tidak, tabel posisi akan bertentangan dengan tape persis seperti tape dulu bertentangan dengan harga:
+Positions are derived from the trades already generated rather than invented freely — otherwise the position table will contradict the tape exactly as the tape once contradicted the price:
 
 ```ts
 /**
- * Posisi diturunkan dari transaksi fixture, bukan ditulis terpisah. Menulisnya
- * terpisah adalah cara paling mudah membuat dua panel di halaman yang sama
- * saling membantah — dan itu sudah pernah terjadi di F0, saat tape berakhir di
+ * Positions are derived from the fixture trades, not written separately. Writing
+ * them separately is the easiest way to make two panels on the same page
+ * contradict each other — and that already happened in F0, when the tape ended at
  * 73,1% sementara market berharga 59,0%.
  */
 function fixturePositions(m: MarketSummary, trades: Trade[]): Position[] {
   const acc = new Map<string, {shares: bigint; tokens: bigint}>();
   for (const t of trades) {
-    if (t.sharesDelta <= 0n) continue; // hanya pembelian membentuk harga masuk
+    if (t.sharesDelta <= 0n) continue; // only purchases form an entry price
     const key = `${t.trader}:${t.outcome}`;
     const cur = acc.get(key) ?? {shares: 0n, tokens: 0n};
     acc.set(key, {shares: cur.shares + t.sharesDelta, tokens: cur.tokens + t.tokens});
@@ -274,8 +274,8 @@ function fixturePositions(m: MarketSummary, trades: Trade[]): Position[] {
       agent: agent as `0x${string}`,
       outcome: Number(outcomeStr) as Outcome,
       shares: v.shares,
-      // tokens sudah dalam satuan token; naikkan ke wad sebelum membagi supaya
-      // hasilnya harga per lembar dalam wad, bukan pecahan yang terpotong nol.
+      // tokens is already in token units; scale it up to wad before dividing so the
+      // result is a price per share in wad, not a fraction truncated to zero.
       entryPriceWad: (toWad(v.tokens, m.collateral.decimals) * WAD) / v.shares,
     });
   }
@@ -283,7 +283,7 @@ function fixturePositions(m: MarketSummary, trades: Trade[]): Position[] {
 }
 ```
 
-Receipt fixture untuk market `Settled` (yang lain mengembalikan `outcome: null`):
+The fixture receipt for the `Settled` market (the others return `outcome: null`):
 
 ```ts
 const FIXTURE_RECEIPT: SettlementReceipt = {
@@ -295,13 +295,13 @@ const FIXTURE_RECEIPT: SettlementReceipt = {
   ],
   judgeModel: "claude-opus-5",
   reasoning:
-    "Dua dari tiga resolver menyimpulkan YES. Resolver ketiga membaca rilis " +
-    "yang berbeda tanggal dan karena itu menjawab NO; bukti yang dikutipnya " +
-    "berada di luar jendela yang ditetapkan kriteria.",
+    "Two of three resolvers concluded YES. The third read a release from a " +
+    "different date and answered NO on that basis; the evidence it cited " +
+    "falls outside the window the criteria set.",
   criteria:
-    "YES bila harga penutupan ETH/USD pada 30 September 2026 di atas $4.000 " +
-    "menurut rilis harian CoinGecko. Sumber lain hanya dipakai bila CoinGecko " +
-    "tidak menerbitkan.",
+    "YES if the ETH/USD closing price on 30 September 2026 is above $4,000 " +
+    "per the daily CoinGecko release. Other sources are used only when " +
+    "CoinGecko does not publish.",
   sources: ["https://www.coingecko.com/en/coins/ethereum/historical_data"],
   provider: "0x0000000000000000000000000000000000000000",
   chatId: "stub-0001",
@@ -309,11 +309,11 @@ const FIXTURE_RECEIPT: SettlementReceipt = {
 };
 ```
 
-Implementasikan `getPositions` dan `getReceipt` memakai helper `require()` yang sudah ada, sehingga kemampuan yang diomit **melempar**, bukan mengembalikan kosong.
+Implement `getPositions` and `getReceipt` using the existing `require()` helper, so an omitted capability **throws** rather than returning empty.
 
 - [ ] **Step 5: Perbarui `Unavailable.tsx`**
 
-Hapus entri `QUOTE`/`EXECUTE` dari `LABELS` dan `PROVIDED_BY`, tambahkan tiga yang baru:
+Remove the `QUOTE`/`EXECUTE` entries from `LABELS` and `PROVIDED_BY`, and add the three new ones:
 
 ```ts
 const LABELS: Record<Capability, string> = {
@@ -321,17 +321,17 @@ const LABELS: Record<Capability, string> = {
   MARKET_STATE: "Status market",
   PRICE_HISTORY: "Riwayat harga",
   TRADE_TAPE: "Riwayat transaksi",
-  AGENT_POSITIONS: "Posisi agent",
+  AGENT_POSITIONS: "Agent positions",
   COST_BASIS: "Harga masuk",
   SETTLEMENT_RECEIPT: "Bukti resolusi",
 };
 ```
 
-`PROVIDED_BY` untuk ketiganya adalah `"indexer"` kecuali `AGENT_POSITIONS`, yang tersedia di `chain` juga (dibaca dari `OutcomeShares`).
+`PROVIDED_BY` for all three is `"indexer"` except `AGENT_POSITIONS`, which is available on `chain` too (read from `OutcomeShares`).
 
-Karena keduanya `Record<Capability, …>`, menghapus anggota union akan membuat entri lama gagal kompilasi — itulah tujuannya.
+Because both are `Record<Capability, …>`, removing a union member makes the old entries fail to compile — which is the point.
 
-- [ ] **Step 6: Tulis uji batas tulis**
+- [ ] **Step 6: Write the write-boundary test**
 
 Buat `frontend/test/write-boundary.test.ts`:
 
@@ -341,22 +341,22 @@ import {readFileSync, readdirSync} from "node:fs";
 import {join} from "node:path";
 
 /**
- * Batas ini adalah keputusan produk (spec §1 F3): manusia hanya mengamati.
- * Aturan yang hanya ditulis di dokumen akan dilanggar; yang gagal di CI tidak.
+ * This boundary is a product decision (spec §1 F3): humans only observe.
+ * A rule written only in a document gets broken; one that fails CI does not.
  */
-describe("lapisan data tidak menulis ke rantai", () => {
+describe("the data layer does not write to the chain", () => {
   const dir = join(process.cwd(), "src/lib/data");
 
-  it("tidak ada berkas di lib/data yang menyebut operasi tulis", () => {
+  it("no file in lib/data names a write operation", () => {
     const forbidden = /\b(buyShares|sellShares|redeem|liquidate|writeContract|sendTransaction|getSigner|privateKey)\b/;
     for (const file of readdirSync(dir).filter((f) => f.endsWith(".ts"))) {
       const src = readFileSync(join(dir, file), "utf8");
       const hit = src.match(forbidden);
-      expect(hit?.[0], `${file} menyebut operasi tulis: ${hit?.[0]}`).toBeUndefined();
+      expect(hit?.[0], `${file} names a write operation: ${hit?.[0]}`).toBeUndefined();
     }
   });
 
-  it("DataSource hanya mengekspos metode baca", async () => {
+  it("DataSource exposes only read methods", async () => {
     const {MockSource} = await import("@/lib/data/mock");
     const src = new MockSource();
     const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(src))
@@ -366,22 +366,22 @@ describe("lapisan data tidak menulis ke rantai", () => {
       "getPositions", "getReceipt", "require", "find",
     ]);
     for (const m of methods) {
-      expect(allowed.has(m), `metode tak terduga di MockSource: ${m}`).toBe(true);
+      expect(allowed.has(m), `unexpected method on MockSource: ${m}`).toBe(true);
     }
   });
 });
 ```
 
-- [ ] **Step 7: Jalankan seluruh uji**
+- [ ] **Step 7: Run the whole suite**
 
 Run: `npm test -w @0g-delphi/frontend && npx tsc --noEmit -p frontend`
-Expected: semua hijau. Uji lama yang menyebut `QUOTE`/`EXECUTE` akan gagal kompilasi — perbaiki dengan menghapus referensinya, jangan dengan memulihkan anggota union.
+Expected: all green. Older tests naming `QUOTE`/`EXECUTE` will fail to compile — fix them by deleting the references, not by restoring the union members.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add frontend/src/lib/data frontend/src/components/primitives/Unavailable.tsx frontend/test
-git commit -m "feat(frontend): kemampuan observasi di lapisan data, batas tulis ditegakkan uji"
+git commit -m "feat(frontend): observation capabilities in the data layer, write boundary enforced by test"
 ```
 
 ---
@@ -401,9 +401,9 @@ git commit -m "feat(frontend): kemampuan observasi di lapisan data, batas tulis 
   - `function xTicks(candles: Candle[], box: Box, extent: Extent, count: number): {x: number; label: string}[]`
   - `interface Box { width: number; height: number; padLeft: number; padRight: number; padTop: number; padBottom: number }`
 
-Sumbu Y **selalu 0–100%**, tidak pernah diskalakan ke rentang data. Grafik probabilitas yang sumbu-nya mengambang membuat pergerakan 2 poin terlihat seperti keruntuhan.
+The Y axis is **always 0–100%**, never scaled to the data range. A probability chart with a floating axis makes a 2-point move look like a collapse.
 
-- [ ] **Step 1: Tulis uji yang gagal**
+- [ ] **Step 1: Write the failing tests**
 
 Buat `frontend/test/chart.test.ts`:
 
@@ -420,24 +420,24 @@ function candle(t: number, closeWad: bigint): Candle {
 }
 
 describe("seriesPath", () => {
-  it("memetakan 0% ke dasar plot dan 100% ke puncaknya", () => {
+  it("maps 0% to the bottom of the plot and 100% to its top", () => {
     const cs = [candle(0, 0n), candle(100, WAD)];
     const d = seriesPath(cs, BOX, {minT: 0, maxT: 100}, (c) => c.close);
-    // y untuk 0% = height - padBottom = 276 ; y untuk 100% = padTop = 8
+    // y for 0% = height - padBottom = 276 ; y for 100% = padTop = 8
     expect(d).toBe("M40,276L592,8");
   });
 
-  it("mengembalikan string kosong untuk data kosong", () => {
+  it("returns an empty string for empty data", () => {
     expect(seriesPath([], BOX, {minT: 0, maxT: 1}, (c) => c.close)).toBe("");
   });
 
-  it("menempatkan satu titik tunggal, bukan garis rusak", () => {
+  it("places a single point rather than a broken line", () => {
     const d = seriesPath([candle(5, WAD / 2n)], BOX, {minT: 5, maxT: 5}, (c) => c.close);
     expect(d.startsWith("M")).toBe(true);
     expect(d).not.toContain("NaN");
   });
 
-  it("tidak pernah menghasilkan NaN saat rentang waktu nol", () => {
+  it("never produces NaN when the time span is zero", () => {
     const cs = [candle(7, 0n), candle(7, WAD)];
     const d = seriesPath(cs, BOX, {minT: 7, maxT: 7}, (c) => c.close);
     expect(d).not.toContain("NaN");
@@ -445,27 +445,27 @@ describe("seriesPath", () => {
 });
 
 describe("yTicks", () => {
-  it("selalu 0%..100%, tidak mengikuti data", () => {
+  it("is always 0%..100%, and does not follow the data", () => {
     expect(yTicks(BOX).map((t) => t.label)).toEqual(["0%", "25%", "50%", "75%", "100%"]);
   });
 });
 
 describe("xTicks", () => {
-  it("mengembalikan kosong untuk data kosong", () => {
+  it("returns nothing for empty data", () => {
     expect(xTicks([], BOX, {minT: 0, maxT: 1}, 4)).toEqual([]);
   });
 
-  it("tidak pernah melebihi jumlah yang diminta", () => {
+  it("never exceeds the requested count", () => {
     const cs = Array.from({length: 50}, (_, i) => candle(i * 60, WAD / 2n));
     expect(xTicks(cs, BOX, {minT: 0, maxT: 2940}, 4).length).toBeLessThanOrEqual(4);
   });
 });
 ```
 
-- [ ] **Step 2: Jalankan uji, pastikan gagal**
+- [ ] **Step 2: Run the tests, confirm they fail**
 
 Run: `npm test -w @0g-delphi/frontend -- chart`
-Expected: FAIL — modul `@/lib/chart` tidak ada.
+Expected: FAIL — the `@/lib/chart` module does not exist.
 
 - [ ] **Step 3: Implementasikan `lib/chart.ts`**
 
@@ -473,7 +473,7 @@ Expected: FAIL — modul `@/lib/chart` tidak ada.
 import type {Candle} from "@/lib/data/types";
 
 const WAD = 10n ** 18n;
-/** Presisi konversi wad→number untuk koordinat. Cukup untuk 600px. */
+/** Precision of the wad→number conversion for coordinates. Enough for 600px. */
 const COORD_SCALE = 10_000n;
 
 export interface Box {
@@ -496,9 +496,9 @@ const plotTop = (b: Box) => b.padTop;
 const plotBottom = (b: Box) => b.height - b.padBottom;
 
 /**
- * Satu-satunya tempat nilai wad menyeberang ke `number` di seluruh frontend,
- * dan hanya untuk koordinat piksel — tidak pernah untuk angka yang dibaca
- * pengguna. Konversi lewat bigint dulu supaya pembagiannya tidak kehilangan
+ * The only place a wad value crosses into `number` anywhere in the frontend, and
+ * only for pixel coordinates — never for a number a user reads. The conversion
+ * goes through bigint first so the division does not lose precision before being
  * presisi sebelum diskalakan.
  */
 function wadToUnit(v: bigint): number {
@@ -518,8 +518,8 @@ export function seriesPath(
   const h = plotBottom(box) - plotTop(box);
   return candles
     .map((c, i) => {
-      // Rentang waktu nol terjadi pada satu bucket; sebarkan merata alih-alih
-      // membagi dengan nol, yang akan menghasilkan NaN di atribut `d`.
+      // A zero time span happens with a single bucket; spread evenly instead of
+      // dividing by zero, which would put NaN in the `d` attribute.
       const tx = span === 0
         ? (candles.length === 1 ? 0 : i / (candles.length - 1))
         : (c.bucketStart - extent.minT) / span;
@@ -566,7 +566,7 @@ export function xTicks(
 }
 ```
 
-- [ ] **Step 4: Jalankan uji, pastikan lulus**
+- [ ] **Step 4: Run the tests, confirm they pass**
 
 Run: `npm test -w @0g-delphi/frontend -- chart`
 Expected: PASS, 7/7.
@@ -580,7 +580,7 @@ git commit -m "feat(frontend): geometri grafik probabilitas sebagai aritmetika m
 
 ---
 
-### Task 3: `ProbabilityChart` — dua seri, sumbu tetap 0–100%
+### Task 3: `ProbabilityChart` — two series, a fixed 0–100% axis
 
 **Files:**
 - Create: `frontend/src/components/market/ProbabilityChart.tsx`
@@ -593,9 +593,9 @@ git commit -m "feat(frontend): geometri grafik probabilitas sebagai aritmetika m
   - `function useCandles(address, interval): Query<Candle[]>`
   - `<ProbabilityChart candles={Candle[]} />`
 
-`Candle.close` menyimpan **probabilitas YES dalam wad** (bukan harga marginal). Seri NO adalah `WAD − close`, dijamin berjumlah 100% menurut spec §5.1.
+`Candle.close` holds the **YES probability in wad** (not the marginal price). The NO series is `WAD − close`, guaranteed to sum to 100% by spec §5.1.
 
-- [ ] **Step 1: Tulis uji yang gagal**
+- [ ] **Step 1: Write the failing tests**
 
 Buat `frontend/test/probability-chart.test.tsx`:
 
@@ -613,19 +613,19 @@ const cs: Candle[] = [
 ];
 
 describe("ProbabilityChart", () => {
-  it("menggambar dua seri", () => {
+  it("draws two series", () => {
     const {container} = render(<ProbabilityChart candles={cs} />);
     expect(container.querySelectorAll("path[data-series]").length).toBe(2);
   });
 
-  it("sumbu Y berlabel 0% sampai 100%, bukan rentang data", () => {
+  it("labels the Y axis 0% to 100%, not the data range", () => {
     render(<ProbabilityChart candles={cs} />);
     for (const label of ["0%", "25%", "50%", "75%", "100%"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
   });
 
-  it("seri NO adalah komplemen seri YES", () => {
+  it("the NO series is the complement of the YES series", () => {
     const {container} = render(<ProbabilityChart candles={cs} />);
     const yes = container.querySelector('path[data-series="yes"]')!.getAttribute("d")!;
     const no = container.querySelector('path[data-series="no"]')!.getAttribute("d")!;
@@ -634,22 +634,22 @@ describe("ProbabilityChart", () => {
     expect(no).not.toContain("NaN");
   });
 
-  it("menyebut sumbu sebagai probabilitas, bukan harga", () => {
+  it("names the axis as a probability, not a price", () => {
     render(<ProbabilityChart candles={cs} />);
     expect(screen.getByText(/P\(YES\)/)).toBeInTheDocument();
   });
 
-  it("data kosong merender pesan, bukan sumbu telanjang", () => {
+  it("empty data renders a message, not a bare axis", () => {
     render(<ProbabilityChart candles={[]} />);
-    expect(screen.getByText(/belum ada riwayat/i)).toBeInTheDocument();
+    expect(screen.getByText(/no history yet/i)).toBeInTheDocument();
   });
 });
 ```
 
-- [ ] **Step 2: Jalankan uji, pastikan gagal**
+- [ ] **Step 2: Run the tests, confirm they fail**
 
 Run: `npm test -w @0g-delphi/frontend -- probability-chart`
-Expected: FAIL — komponen belum ada.
+Expected: FAIL — the component does not exist yet.
 
 - [ ] **Step 3: Implementasikan `useCandles.ts`**
 
@@ -685,7 +685,7 @@ export function ProbabilityChart({candles}: {candles: Candle[]}) {
   if (candles.length === 0) {
     return (
       <div className="rounded-lg border border-border px-4 py-8 text-center text-[13px] text-text-muted">
-        Belum ada riwayat untuk market ini.
+        No history yet for this market.
       </div>
     );
   }
@@ -735,7 +735,7 @@ export function ProbabilityChart({candles}: {candles: Candle[]}) {
 }
 ```
 
-- [ ] **Step 5: Jalankan uji, pastikan lulus**
+- [ ] **Step 5: Run the tests, confirm they pass**
 
 Run: `npm test -w @0g-delphi/frontend -- probability-chart`
 Expected: PASS, 5/5.
@@ -744,12 +744,12 @@ Expected: PASS, 5/5.
 
 ```bash
 git add frontend/src/components/market/ProbabilityChart.tsx frontend/src/hooks/useCandles.ts frontend/test/probability-chart.test.tsx
-git commit -m "feat(frontend): grafik riwayat probabilitas dengan sumbu tetap 0-100%"
+git commit -m "feat(frontend): probability history chart with a fixed 0-100% axis"
 ```
 
 ---
 
-### Task 4: `MarketStats` — ketersediaan per baris
+### Task 4: `MarketStats` — per-row availability
 
 **Files:**
 - Create: `frontend/src/components/market/MarketStats.tsx`
@@ -762,9 +762,9 @@ git commit -m "feat(frontend): grafik riwayat probabilitas dengan sumbu tetap 0-
   - `function formatTimestamp(unixSeconds: number): string`
   - `<MarketStats market={MarketDetail} trades={Query<Trade[]>} />`
 
-Volume dihitung dari `trades`; bila `trades` tidak tersedia, **baris volume saja** yang merender `<Unavailable>` — enam baris lainnya tetap terisi. Itu penerapan langsung aturan per-baris di spec §2.
+Volume is computed from `trades`; when `trades` is unavailable, **only the volume row** renders `<Unavailable>` — the other six stay populated. That is the per-row rule of spec §2 applied directly.
 
-- [ ] **Step 1: Tulis uji yang gagal**
+- [ ] **Step 1: Write the failing tests**
 
 Buat `frontend/test/market-stats.test.tsx`:
 
@@ -784,43 +784,43 @@ const trades: Trade[] = [
 ];
 
 describe("MarketStats", () => {
-  it("menjumlahkan volume dari nilai absolut token, beli maupun jual", () => {
+  it("sums volume from absolute token values, buys and sells alike", () => {
     render(<MarketStats market={m} trades={{status: "ready", data: trades}} />);
     expect(screen.getByTestId("stat-volume")).toHaveTextContent("0.80");
   });
 
-  it("hanya baris volume yang unavailable; baris lain tetap terisi", () => {
+  it("only the volume row is unavailable; the other rows stay populated", () => {
     render(
       <MarketStats market={m} trades={{status: "unavailable", capability: "TRADE_TAPE", mode: "chain"}} />,
     );
-    expect(screen.getByTestId("stat-volume")).toHaveTextContent(/tidak tersedia/i);
-    expect(screen.getByTestId("stat-fee")).not.toHaveTextContent(/tidak tersedia/i);
-    expect(screen.getByTestId("stat-liquidity")).not.toHaveTextContent(/tidak tersedia/i);
+    expect(screen.getByTestId("stat-volume")).toHaveTextContent(/not available/i);
+    expect(screen.getByTestId("stat-fee")).not.toHaveTextContent(/not available/i);
+    expect(screen.getByTestId("stat-liquidity")).not.toHaveTextContent(/not available/i);
   });
 
-  it("menampilkan garis waktu siklus hidup lengkap", () => {
+  it("shows the complete lifecycle timeline", () => {
     render(<MarketStats market={m} trades={{status: "loading"}} />);
     for (const id of ["stat-created", "stat-closes", "stat-settles-by"]) {
       expect(screen.getByTestId(id)).toBeInTheDocument();
     }
   });
 
-  it("menampilkan tarif fee, bukan hanya nominalnya", () => {
+  it("shows the fee as a rate, not just as an amount", () => {
     render(<MarketStats market={m} trades={{status: "loading"}} />);
     expect(screen.getByTestId("stat-fee")).toHaveTextContent("%");
   });
 });
 ```
 
-- [ ] **Step 2: Jalankan uji, pastikan gagal**
+- [ ] **Step 2: Run the tests, confirm they fail**
 
 Run: `npm test -w @0g-delphi/frontend -- market-stats`
-Expected: FAIL — komponen belum ada.
+Expected: FAIL — the component does not exist yet.
 
-- [ ] **Step 3: Tambahkan `formatTimestamp` ke `format.ts`**
+- [ ] **Step 3: Add `formatTimestamp` to `format.ts`**
 
 ```ts
-/** Waktu absolut, zona lokal pembaca. Dipakai untuk garis waktu siklus hidup. */
+/** Absolute time, in the reader's local zone. Used for the lifecycle timeline. */
 export function formatTimestamp(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleString("id-ID", {
     day: "numeric",
@@ -840,8 +840,8 @@ Susun sebagai daftar baris `<Row>` lokal. Volume:
 function volumeRow(trades: Query<Trade[]>, m: MarketDetail) {
   switch (trades.status) {
     case "ready": {
-      // Jual juga volume. Menjumlahkan nilai bertanda akan membuat market
-      // yang ramai terlihat sepi karena beli dan jual saling meniadakan.
+      // Sells are volume too. Summing signed values would make a busy market look
+      // quiet, because buys and sells would cancel each other out.
       const total = trades.data.reduce((a, t) => a + (t.tokens < 0n ? -t.tokens : t.tokens), 0n);
       return <span>{formatCollateral(total, m.collateral.decimals)}</span>;
     }
@@ -855,11 +855,11 @@ function volumeRow(trades: Query<Trade[]>, m: MarketDetail) {
 }
 ```
 
-Perhatikan anotasi tipe kembalian pada `volumeRow` — beri `: React.JSX.Element`, sesuai pelajaran di Global Constraints.
+Note the return-type annotation on `volumeRow` — give it `: React.JSX.Element`, per the lesson in Global Constraints.
 
-Baris lain: Fee (`formatFeeRate(m.feeBps)`), Likuiditas (`formatCollateral(poolWad→token)`), Dibuat, Tutup, Batas settle. Setiap baris punya `data-testid="stat-…"`.
+The other rows: Fee (`formatFeeRate(m.feeBps)`), Liquidity (`formatCollateral(poolWad→token)`), Created, Closes, Settles by. Every row carries a `data-testid="stat-…"`.
 
-- [ ] **Step 5: Jalankan uji, pastikan lulus**
+- [ ] **Step 5: Run the tests, confirm they pass**
 
 Run: `npm test -w @0g-delphi/frontend -- market-stats`
 Expected: PASS, 4/4.
@@ -868,12 +868,12 @@ Expected: PASS, 4/4.
 
 ```bash
 git add frontend/src/components/market/MarketStats.tsx frontend/src/lib/format.ts frontend/test/market-stats.test.tsx
-git commit -m "feat(frontend): panel statistik market dengan ketersediaan per baris"
+git commit -m "feat(frontend): market statistics panel with per-row availability"
 ```
 
 ---
 
-### Task 5: `PositionsTable` — siapa memegang apa, pada harga berapa
+### Task 5: `PositionsTable` — who holds what, at what price
 
 **Files:**
 - Create: `frontend/src/components/market/PositionsTable.tsx`
@@ -886,11 +886,11 @@ git commit -m "feat(frontend): panel statistik market dengan ketersediaan per ba
   - `function usePositions(address): Query<Position[]>`
   - `<PositionsTable positions={Position[]} market={MarketDetail} mode={DataMode} />`
 
-Kolom: Agent · Sisi · Lembar · Harga masuk · Harga sekarang. **Harga sekarang adalah `dpm.price`, bukan probabilitas** — ia harga per lembar dalam satuan collateral, sebanding langsung dengan harga masuk. Memberi label persen padanya melanggar Global Constraints.
+Columns: Agent · Side · Shares · Entry price · Current price. **The current price is `dpm.price`, not the probability** — it is a price per share in collateral units, directly comparable to the entry price. Labelling it with a percent sign breaks the Global Constraints.
 
-Kolom **Harga masuk** adalah satu-satunya yang bisa tidak diketahui: `entryPriceWad === null` berarti mode ini tidak menyimpan apa yang dibayar. Sel itu merender `<Unavailable capability="COST_BASIS" mode={mode} />` sementara empat kolom lain tetap terisi — penerapan aturan per-baris spec §2 di tingkat sel. Karena itu komponen menerima prop `mode`.
+The **Entry price** column is the only one that can be unknown: `entryPriceWad === null` means this mode does not record what was paid. That cell renders `<Unavailable capability="COST_BASIS" mode={mode} />` while the other four columns stay populated — spec §2's per-row rule applied at cell level. That is why the component takes a `mode` prop.
 
-- [ ] **Step 1: Tulis uji yang gagal**
+- [ ] **Step 1: Write the failing tests**
 
 ```tsx
 import {describe, expect, it} from "vitest";
@@ -909,32 +909,32 @@ const positions: Position[] = [
 ];
 
 describe("PositionsTable", () => {
-  it("merender satu baris per posisi dengan sisinya", () => {
+  it("renders one row per position, with its side", () => {
     render(<PositionsTable positions={positions} market={m} mode="mock" />);
     expect(screen.getAllByRole("row")).toHaveLength(3); // kepala + 2
     expect(screen.getByText("YES")).toBeInTheDocument();
     expect(screen.getByText("NO")).toBeInTheDocument();
   });
 
-  it("harga masuk dan harga sekarang keduanya per lembar, tanpa label persen", () => {
+  it("entry price and current price are both per share, with no percent label", () => {
     render(<PositionsTable positions={positions} market={m} mode="mock" />);
     const row = screen.getAllByRole("row")[1]!;
     expect(within(row).getByTestId("entry")).not.toHaveTextContent("%");
     expect(within(row).getByTestId("current")).not.toHaveTextContent("%");
   });
 
-  it("daftar kosong menjelaskan, bukan tabel telanjang", () => {
+  it("an empty list explains itself rather than showing a bare table", () => {
     render(<PositionsTable positions={[]} market={m} mode="mock" />);
-    expect(screen.getByText(/belum ada posisi/i)).toBeInTheDocument();
+    expect(screen.getByText(/no positions/i)).toBeInTheDocument();
   });
 
-  it("harga masuk null merender penjelasan, bukan nol; kolom lain tetap terisi", () => {
+  it("a null entry price renders an explanation, not a zero; the other columns stay populated", () => {
     const unknown = positions.map((p) => ({...p, entryPriceWad: null}));
     render(<PositionsTable positions={unknown} market={m} mode="chain" />);
     const row = screen.getAllByRole("row")[1]!;
-    expect(within(row).getByTestId("entry")).toHaveTextContent(/tidak tersedia/i);
+    expect(within(row).getByTestId("entry")).toHaveTextContent(/not available/i);
     expect(within(row).getByTestId("entry")).not.toHaveTextContent("0.0000");
-    expect(within(row).getByTestId("current")).not.toHaveTextContent(/tidak tersedia/i);
+    expect(within(row).getByTestId("current")).not.toHaveTextContent(/not available/i);
   });
 
   it("memendekkan alamat agent", () => {
@@ -945,19 +945,19 @@ describe("PositionsTable", () => {
 });
 ```
 
-- [ ] **Step 2: Jalankan uji, pastikan gagal**
+- [ ] **Step 2: Run the tests, confirm they fail**
 
 Run: `npm test -w @0g-delphi/frontend -- positions-table`
 
 - [ ] **Step 3: Implementasikan `usePositions.ts`**
 
-Sama pola dengan `useCandles`, dengan `queryKey: ["positions", src.mode, address]`.
+The same pattern as `useCandles`, with `queryKey: ["positions", src.mode, address]`.
 
 - [ ] **Step 4: Implementasikan `PositionsTable.tsx`**
 
-Harga sekarang untuk sisi `p.outcome`: `dpm.price(market.q, p.outcome)`, diformat dengan `formatPricePerShare`. Pemendekan alamat memakai helper yang sama dengan `CopyAddress` — bila belum diekspor, ekspor dari sana alih-alih menulis ulang.
+The current price for side `p.outcome`: `dpm.price(market.q, p.outcome)`, formatted with `formatPricePerShare`. Address elision uses the same helper as `CopyAddress` — if it is not exported yet, export it from there rather than rewriting it.
 
-- [ ] **Step 5: Jalankan uji, pastikan lulus**
+- [ ] **Step 5: Run the tests, confirm they pass**
 
 Expected: PASS, 4/4.
 
@@ -965,12 +965,12 @@ Expected: PASS, 4/4.
 
 ```bash
 git add frontend/src/components/market/PositionsTable.tsx frontend/src/hooks/usePositions.ts frontend/test/positions-table.test.tsx
-git commit -m "feat(frontend): tabel posisi agent dengan harga masuk dan harga sekarang"
+git commit -m "feat(frontend): agent positions table with entry price and current price"
 ```
 
 ---
 
-### Task 6: `FinalOutcome` + `ResolutionEvidence` — bukti yang bisa diperiksa
+### Task 6: `FinalOutcome` + `ResolutionEvidence` — evidence one can inspect
 
 **Files:**
 - Create: `frontend/src/components/settlement/FinalOutcome.tsx`
@@ -985,14 +985,14 @@ git commit -m "feat(frontend): tabel posisi agent dengan harga masuk dan harga s
   - `<FinalOutcome receipt={SettlementReceipt} market={MarketDetail} />`
   - `<ResolutionEvidence receipt={SettlementReceipt} />`
 
-Dua aturan yang tidak boleh dilanggar:
+Two rules that must not be broken:
 
-1. **Alasan resolver ditampilkan verbatim.** Tidak diringkas, tidak dipotong di tengah kalimat. Meringkasnya berarti UI ikut menilai, dan pembaca kehilangan justru bagian yang ingin ia periksa. Boleh dilipat (`<details>`), tidak boleh dipangkas.
-2. **`simulated: true` wajib mencolok.** Hasil tersimulasi tidak boleh pernah tertukar dengan yang sungguhan.
+1. **The resolver's reasoning is shown verbatim.** Not summarized, not cut off mid-sentence. Summarizing it means the UI is passing judgement too, and the reader loses exactly the part they wanted to examine. It may be folded (`<details>`); it may not be trimmed.
+2. **`simulated: true` must be conspicuous.** A simulated result must never be mistaken for a real one.
 
-Kurs payout memakai `payoutPerShareWad` (`1/pᵢ`), **bukan** `1/Pᵢ`.
+The payout rate uses `payoutPerShareWad` (`1/pᵢ`), **not** `1/Pᵢ`.
 
-- [ ] **Step 1: Tulis uji yang gagal**
+- [ ] **Step 1: Write the failing tests**
 
 ```tsx
 import {describe, expect, it} from "vitest";
@@ -1011,8 +1011,8 @@ const receipt: SettlementReceipt = {
     {model: "qwen3-32b", outcome: 0, teeVerified: false, simulated: true},
   ],
   judgeModel: "claude-opus-5",
-  reasoning: "Dua dari tiga resolver menyimpulkan YES.",
-  criteria: "YES bila harga penutupan di atas $4.000.",
+  reasoning: "Two of three resolvers concluded YES.",
+  criteria: "YES if the closing price is above $4,000.",
   sources: ["https://example.org/data"],
   provider: "0x0000000000000000000000000000000000000000",
   chatId: "stub-0001",
@@ -1020,32 +1020,32 @@ const receipt: SettlementReceipt = {
 };
 
 describe("FinalOutcome", () => {
-  it("menyebut pemenang dan kurs payout-nya", () => {
+  it("names the winner and its payout rate", () => {
     render(<FinalOutcome receipt={receipt} market={m} />);
     expect(screen.getByTestId("winner")).toHaveTextContent("YES");
     expect(screen.getByTestId("payout")).toHaveTextContent("×");
   });
 
-  it("kurs payout memakai 1/p, bukan 1/P", () => {
+  it("the payout rate uses 1/p, not 1/P", () => {
     render(<FinalOutcome receipt={receipt} market={m} />);
-    // q fixture memberi P(YES)=59,0% -> p=0,7681 -> 1/p = 1,30x. 1/P akan 1,69x.
+    // The fixture q gives P(YES)=59.0% -> p=0.7681 -> 1/p = 1.30x. 1/P would be 1.69x.
     expect(screen.getByTestId("payout")).toHaveTextContent("1.30×");
     expect(screen.getByTestId("payout")).not.toHaveTextContent("1.69×");
   });
 });
 
 describe("ResolutionEvidence", () => {
-  it("menampilkan setiap model resolver dan suaranya", () => {
+  it("shows every resolver model and its vote", () => {
     render(<ResolutionEvidence receipt={receipt} />);
     for (const v of receipt.votes) expect(screen.getByText(v.model)).toBeInTheDocument();
   });
 
-  it("menampilkan alasan verbatim, tanpa dipangkas", () => {
+  it("shows the reasoning verbatim, untrimmed", () => {
     render(<ResolutionEvidence receipt={receipt} />);
     expect(screen.getByTestId("reasoning")).toHaveTextContent(receipt.reasoning);
   });
 
-  it("menampilkan kriteria resolusi dan sumber data", () => {
+  it("shows the resolution criteria and the data sources", () => {
     render(<ResolutionEvidence receipt={receipt} />);
     expect(screen.getByTestId("criteria")).toHaveTextContent(receipt.criteria);
     expect(screen.getByText(receipt.sources[0]!)).toBeInTheDocument();
@@ -1056,27 +1056,27 @@ describe("ResolutionEvidence", () => {
     expect(screen.getByTestId("simulated-badge")).toHaveTextContent(/simulasi/i);
   });
 
-  it("tidak menandai simulasi saat receipt sungguhan", () => {
+  it("does not flag simulation for a real receipt", () => {
     render(<ResolutionEvidence receipt={{...receipt, simulated: false}} />);
     expect(screen.queryByTestId("simulated-badge")).not.toBeInTheDocument();
   });
 
-  it("menandai resolver yang suaranya berbeda dari outcome final", () => {
+  it("flags a resolver whose vote differs from the final outcome", () => {
     render(<ResolutionEvidence receipt={receipt} />);
     expect(screen.getByTestId("vote-qwen3-32b")).toHaveTextContent(/NO/);
   });
 });
 ```
 
-- [ ] **Step 2: Jalankan uji, pastikan gagal**
+- [ ] **Step 2: Run the tests, confirm they fail**
 
 Run: `npm test -w @0g-delphi/frontend -- settlement`
 
 - [ ] **Step 3: Implementasikan `useReceipt.ts`, `FinalOutcome.tsx`, `ResolutionEvidence.tsx`**
 
-`ResolutionEvidence` menampilkan suara tiap resolver berikut sisinya, sehingga pembaca melihat komite itu **tidak bulat** ketika memang tidak bulat. Menyembunyikan suara minoritas membuat konsensus terlihat lebih kuat daripada kenyataannya, dan itu jenis kebohongan yang sama dengan merender nol untuk data yang tak diketahui.
+`ResolutionEvidence` shows each resolver's vote along with the side it took, so a reader sees that the committee was **not unanimous** when it was not. Hiding the minority vote makes the consensus look stronger than it was, and that is the same kind of lie as rendering zero for data that is not known.
 
-- [ ] **Step 4: Jalankan uji, pastikan lulus**
+- [ ] **Step 4: Run the tests, confirm they pass**
 
 Expected: PASS, 8/8.
 
@@ -1084,34 +1084,34 @@ Expected: PASS, 8/8.
 
 ```bash
 git add frontend/src/components/settlement frontend/src/hooks/useReceipt.ts frontend/test/settlement.test.tsx
-git commit -m "feat(frontend): panel outcome final dan bukti resolusi yang bisa diperiksa"
+git commit -m "feat(frontend): final outcome panel and inspectable resolution evidence"
 ```
 
 ---
 
-### Task 7: Rakit ulang `MarketView` — halaman pemeriksaan
+### Task 7: Reassemble `MarketView` — the inspection page
 
 **Files:**
 - Modify: `frontend/src/app/market/[address]/MarketView.tsx`
 - Delete: `frontend/src/components/market/OrderTicket.tsx`
-- Delete: `frontend/src/hooks/useQuote.ts` → **pindahkan**, jangan hapus (lihat Step 3)
+- Delete: `frontend/src/hooks/useQuote.ts` → **move it**, do not delete it (see Step 3)
 - Delete: `frontend/test/order-ticket.test.tsx`
 - Create: `packages/protocol/src/quote.ts`
 - Test: `frontend/test/market-page.test.tsx` (perbarui)
 
-- [ ] **Step 1: Perbarui uji halaman**
+- [ ] **Step 1: Update the page tests**
 
-Uji lama menegaskan tiket order ada. Ganti dengan yang menegaskan ia **tidak** ada, dan panel baru ada:
+The old tests asserted the order ticket exists. Replace them with ones asserting it does **not**, and that the new panels do:
 
 ```tsx
-it("tidak ada kontrol eksekusi di halaman manusia", async () => {
+it("has no execution control on the human page", async () => {
   renderMarket();
   expect(await screen.findByTestId("probability-panel")).toBeInTheDocument();
   expect(screen.queryByTestId("order-ticket")).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", {name: /beli|jual|approve|setujui/i})).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", {name: /buy|sell|approve|confirm/i})).not.toBeInTheDocument();
 });
 
-it("merender panel pemeriksaan", async () => {
+it("renders the inspection panels", async () => {
   renderMarket();
   for (const id of ["probability-panel", "payout-panel", "probability-chart",
                     "market-stats", "positions-table", "trade-tape"]) {
@@ -1119,33 +1119,33 @@ it("merender panel pemeriksaan", async () => {
   }
 });
 
-it("menjelaskan kapabilitas yang absen, bukan merender tabel kosong", async () => {
+it("explains an absent capability rather than rendering an empty table", async () => {
   renderMarket(new MockSource({omit: ["AGENT_POSITIONS"]}));
-  expect(await screen.findByText(/posisi agent.*tidak tersedia/i)).toBeInTheDocument();
+  expect(await screen.findByText(/agent positions.*not available/i)).toBeInTheDocument();
   expect(screen.queryByTestId("positions-table")).not.toBeInTheDocument();
 });
 ```
 
-- [ ] **Step 2: Jalankan uji, pastikan gagal**
+- [ ] **Step 2: Run the tests, confirm they fail**
 
 Run: `npm test -w @0g-delphi/frontend -- market-page`
 
-- [ ] **Step 3: Pindahkan mesin kuotasi, jangan buang**
+- [ ] **Step 3: Move the quoting engine, do not discard it**
 
-Matematika di `useQuote` adalah implementasi rujukan untuk `agent-kit` (spec §6). Pindahkan fungsi murninya ke `packages/protocol/src/quote.ts` — inversi fee dengan penyebut `10_000n + bps`, `qAfterBuy`, dan transisi probabilitas/payout — lengkap dengan ujinya. Baru setelah itu hapus hook dan komponennya dari frontend.
+The maths in `useQuote` is the reference implementation for `agent-kit` (spec §6). Move its pure functions to `packages/protocol/src/quote.ts` — the fee inversion with the `10_000n + bps` denominator, `qAfterBuy`, and the probability/payout transitions — together with their tests. Only then delete the hook and its component from the frontend.
 
-**Peringatan lingkup:** `packages/protocol` adalah cermin DPM yang dipaku ke Solidity oleh uji diferensial 512 vektor. Menambah modul baru boleh; mengubah `dpm.ts`, `units.ts`, atau konvensi impor paket itu **tidak** termasuk tugas ini.
+**A scope warning:** `packages/protocol` is the DPM mirror pinned to Solidity by a 512-vector differential test. Adding a new module is fine; changing `dpm.ts`, `units.ts`, or that package's import conventions is **not** part of this task.
 
 - [ ] **Step 4: Rakit ulang `MarketView`**
 
-Kolom kiri: kepala → panel probabilitas → panel payout → grafik → tabel posisi → tape.
+The left column: the header → the probability panel → the payout panel → the chart → the positions table → the tape.
 
-**Tidak ada `SpecViewer` di F1, dan itu disengaja.** Spec §4.2 menyebutnya, tetapi isinya berasal dari 0G Storage lewat `specRoot` (`MARKET_SPEC_BLOB`) yang integrasinya belum ada. Membuat kemampuan yang tak dipakai apa pun adalah persis beban mati yang baru saja dibuang bersama `QUOTE`/`EXECUTE`. Aturan resolusi tetap terlihat pembaca lewat baris **Kriteria resolusi** di `ResolutionEvidence`, yang bersumber dari receipt, bukan dari blob.
-Kolom kanan: `MarketStats`; ditambah `FinalOutcome` dan `ResolutionEvidence` bila `market.status === "Settled"`.
+**There is no `SpecViewer` in F1, and that is deliberate.** Spec §4.2 mentions it, but its content comes from 0G Storage through `specRoot` (`MARKET_SPEC_BLOB`), whose integration does not exist yet. Building a capability nothing uses is precisely the dead weight just discarded along with `QUOTE`/`EXECUTE`. The resolution rules remain visible to a reader through the **Resolution criteria** row in `ResolutionEvidence`, sourced from the receipt rather than from the blob.
+The right column: `MarketStats`; plus `FinalOutcome` and `ResolutionEvidence` when `market.status === "Settled"`.
 
-Setiap `Query<T>` dibongkar lewat fungsi `switch` beranotasi tipe kembalian eksplisit tanpa `default` — pola yang sama dengan `renderTrades` yang sudah ada.
+Every `Query<T>` is unwrapped through a `switch` function with an explicit return-type annotation and no `default` — the same pattern as the existing `renderTrades`.
 
-- [ ] **Step 5: Jalankan seluruh uji dan build**
+- [ ] **Step 5: Run the whole suite and the build**
 
 ```bash
 npm test -w @0g-delphi/frontend && npm test -w @0g-delphi/protocol
@@ -1153,19 +1153,19 @@ npx tsc --noEmit -p frontend && npm run build -w @0g-delphi/frontend
 ```
 Expected: semua hijau; build sukses.
 
-- [ ] **Step 6: Verifikasi di server produksi**
+- [ ] **Step 6: Verify on the production server**
 
-Jalankan `next start` pada port yang **sudah diverifikasi kosong**, dan pastikan proses yang menjawab memang milikmu sebelum mempercayai hasilnya — satu tugas di rencana sebelumnya mendapat 200 palsu dari proses asing yang kebetulan memegang portnya. Lalu `curl` halaman market dan pastikan **tidak ada** tombol beli/jual di HTML-nya.
+Run `next start` on a port **verified to be free**, and make sure the process answering really is yours before trusting the result — one task in an earlier plan got a false 200 from a foreign process that happened to hold the port. Then `curl` the market page and confirm there is **no** buy/sell button in its HTML.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add frontend packages/protocol/src/quote.ts packages/protocol/test
-git commit -m "feat(frontend): halaman market jadi halaman pemeriksaan; tiket order dikeluarkan"
+git commit -m "feat(frontend): the market page becomes an inspection page; the order ticket is removed"
 ```
 
 ---
 
 ## Fase berikutnya
 
-F1 selesai bila halaman detail market setara referensi Delphi, seluruhnya dari `MockSource`. Berikutnya F2 (`ChainSource` + daftar market) menuntut Task 17 kontrak, yang sudah selesai; F5 (`@0g-delphi/agent-kit`) memakai `packages/protocol/src/quote.ts` yang dipindahkan di Task 7 sebagai implementasi rujukannya.
+F1 is done when the market detail page matches the Delphi reference, entirely from `MockSource`. Next, F2 (`ChainSource` + the market list) requires contract Task 17, which is already finished; F5 (`@0g-delphi/agent-kit`) uses the `packages/protocol/src/quote.ts` moved in Task 7 as its reference implementation.
