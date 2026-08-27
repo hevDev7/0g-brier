@@ -85,6 +85,30 @@ abstract contract Fixtures is Test {
         m.initialize(address(config), address(shares), _params(), seedTokens, DEPOSIT);
     }
 
+    /// @dev `OutcomeShares.setRegistry` adalah kunci sekali-pakai dan `_deployBase` sudah
+    ///      memakainya untuk StubMarketRegistry — instance itu TIDAK akan pernah bisa
+    ///      dialihkan ke MarketFactory sungguhan (`RegistryAlreadySet`). Uji yang memakai
+    ///      factory sungguhan karena itu memulai dari instance yang bersih.
+    ///
+    ///      Registry sengaja belum dipasang di sini: urutannya harus mengikuti Deploy.s.sol —
+    ///      shares → factory → setRegistry — karena MarketFactory MEMOTRET alamat shares saat
+    ///      `initialize` dan tidak pernah membacanya ulang. Membalik urutannya menghasilkan
+    ///      factory yang menunjuk shares lama sementara uji memeriksa shares baru: market
+    ///      lahir sukses lalu gagal `NotMarket` pada trade pertama.
+    ///
+    ///      Deployer-lah satu-satunya yang boleh memanggil `setRegistry`, jadi instance ini
+    ///      harus di-deploy oleh kontrak uji yang sama dengan pemanggil `_useFactoryAsRegistry`.
+    function _freshShares() internal {
+        shares = new OutcomeShares("");
+        config.setAddress(ConfigKeys.OUTCOME_SHARES, address(shares));
+    }
+
+    /// @dev Menutup lingkaran dari `_freshShares`: mulai titik ini OutcomeShares hanya
+    ///      mempercayai market yang benar-benar lahir dari factory.
+    function _useFactoryAsRegistry(address factory_) internal {
+        shares.setRegistry(factory_);
+    }
+
     function _fund(address who, uint256 amount, address spender) internal {
         usdc.mintTo(who, amount);
         vm.prank(who);
