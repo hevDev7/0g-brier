@@ -21,7 +21,7 @@ function formatFixed(value: bigint, decimals: number, places: number): string {
   const scaled = (magnitude * factor + scale / 2n) / scale;
   const whole = groupThousands((scaled / factor).toString());
   const body = places > 0 ? `${whole}.${(scaled % factor).toString().padStart(places, "0")}` : whole;
-  return negative ? `-${body}` : body;
+  return negative && scaled !== 0n ? `-${body}` : body;
 }
 
 /** Probabilitas implisit (p_i^2) dalam wad → "59.0%". */
@@ -33,7 +33,11 @@ export function formatProbability(probWad: bigint): string {
 export function formatProbabilityDelta(fromWad: bigint, toWad: bigint): string {
   const delta = (toWad - fromWad) * 100n;
   const body = formatFixed(delta, 18, 1);
-  return delta < 0n ? `${body} pt` : `+${body} pt`;
+  // Sign dari `body` yang sudah dibulatkan, bukan dari `delta` mentah:
+  // formatFixed menekan tanda minus saat magnitudo membulat ke nol, dan
+  // keputusan tanda di sini harus konsisten dengan itu — kalau tidak,
+  // pergeseran negatif yang membulat ke nol tetap kehilangan tanda "+".
+  return body.startsWith("-") ? `${body} pt` : `+${body} pt`;
 }
 
 /** Payout per lembar (1/p_i) dalam wad → "1.30×". */

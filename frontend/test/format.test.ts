@@ -30,6 +30,11 @@ describe("formatProbabilityDelta", () => {
     expect(formatProbabilityDelta(638_000_000_000_000_000n, 590_000_000_000_000_000n)).toBe("-4.8 pt");
     expect(formatProbabilityDelta(WAD / 2n, WAD / 2n)).toBe("+0.0 pt");
   });
+
+  it("tidak pernah menampilkan negatif nol", () => {
+    expect(formatProbabilityDelta(1n, 0n)).toBe("+0.0 pt");
+    expect(formatProbabilityDelta(0n, 1n)).toBe("+0.0 pt");
+  });
 });
 
 describe("formatPayout", () => {
