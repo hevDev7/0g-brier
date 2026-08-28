@@ -3,9 +3,16 @@ import {render, screen} from "@testing-library/react";
 import {FinalOutcome} from "@/components/settlement/FinalOutcome";
 import {ResolutionEvidence} from "@/components/settlement/ResolutionEvidence";
 import {FIXTURE_MARKETS} from "@/lib/data/mock";
-import type {SettlementReceipt} from "@/lib/data/types";
+import type {MarketDetail, SettlementReceipt} from "@/lib/data/types";
 
-const m = FIXTURE_MARKETS[0]!;
+/**
+ * The first fixture, resolved YES.
+ *
+ * The winner is set HERE, on the market, because that is where `FinalOutcome`
+ * reads it from — `Market.winningOutcome` on chain, not the receipt. Its `q` is
+ * kept so the 1/p payout assertion below still has the same known answer.
+ */
+const m: MarketDetail = {...FIXTURE_MARKETS[0]!, winningOutcome: 1, resolvedAt: 1_790_000_000};
 const receipt: SettlementReceipt = {
   outcome: 1,
   votes: [
@@ -47,6 +54,34 @@ describe("FinalOutcome", () => {
   it("does not flag simulation in the final-outcome panel for a real receipt", () => {
     render(<FinalOutcome receipt={{...receipt, simulated: false}} market={m} />);
     expect(screen.queryByTestId("final-outcome-simulated")).not.toBeInTheDocument();
+  });
+
+  /**
+   * The contract holds the money, so the contract decides. A receipt is the
+   * resolver's ACCOUNT of the decision; if the two ever disagreed, showing the
+   * receipt's side would put the wrong winner above a payout figure computed for
+   * the right one.
+   */
+  it("names the chain's winner even when the receipt claims the other side", () => {
+    render(<FinalOutcome receipt={{...receipt, outcome: 0}} market={m} />);
+    expect(screen.getByTestId("winner")).toHaveTextContent("YES");
+  });
+
+  /**
+   * A mode with no receipt is the normal case on a live chain today. The winner
+   * is still known, and hiding it would be hiding what we have behind what we
+   * lack.
+   */
+  it("names the winner with no receipt at all", () => {
+    render(<FinalOutcome receipt={null} market={m} />);
+    expect(screen.getByTestId("winner")).toHaveTextContent("YES");
+    expect(screen.queryByTestId("final-outcome-simulated")).not.toBeInTheDocument();
+  });
+
+  it("says a market is unresolved rather than believing a receipt that says otherwise", () => {
+    render(<FinalOutcome receipt={receipt} market={FIXTURE_MARKETS[0]!} />);
+    expect(screen.queryByTestId("winner")).not.toBeInTheDocument();
+    expect(screen.getByTestId("final-outcome")).toHaveTextContent(/Not resolved yet/i);
   });
 });
 

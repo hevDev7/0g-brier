@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import {render, screen, waitFor, within} from "@testing-library/react";
 import {describe, expect, it} from "vitest";
 import {MarketView} from "@/app/market/[address]/MarketView";
@@ -82,18 +83,32 @@ describe("MarketView", () => {
     expect(screen.queryByTestId("probability-chart")).toBeNull();
   });
 
-  /** A resolved market: the committee's verdict AND the evidence one can inspect. */
-  it("a Settled market shows the final outcome and its resolution evidence", async () => {
+  /**
+   * A resolved market: the verdict in the sidebar, and the record a click away.
+   *
+   * The evidence is asserted through the DIALOG'S OWN `open` flag rather than by
+   * finding its testid. A <dialog> keeps its children in the DOM while closed, so
+   * `findByTestId("resolution-evidence")` passes whether the report has been
+   * opened or not — this assertion would have gone on passing after the panel
+   * moved behind a click, which is the same as not asserting it.
+   */
+  it("a Settled market shows the final outcome and offers the settlement report", async () => {
     renderMarket(new MockSource(), SETTLED);
     expect(await screen.findByTestId("final-outcome")).toBeInTheDocument();
-    expect(await screen.findByTestId("resolution-evidence")).toBeInTheDocument();
+
+    const dialog = screen.getByTestId("settlement-report") as HTMLDialogElement;
+    expect(dialog.open).toBe(false);
+    await userEvent.click(screen.getByTestId("open-settlement-report"));
+    expect(dialog.open).toBe(true);
+    expect(dialog).toHaveTextContent(/Two of three resolvers concluded YES/);
   });
 
   it("a still-open market shows no settlement panels", async () => {
     renderMarket();
     expect(await screen.findByTestId("market-stats")).toBeInTheDocument();
     expect(screen.queryByTestId("final-outcome")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("resolution-evidence")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settlement-report")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("open-settlement-report")).not.toBeInTheDocument();
   });
 });
 

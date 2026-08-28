@@ -25,18 +25,38 @@ function SimulatedBanner({testId}: {testId: string}) {
  * ordinary skew, exactly the direction that hurts a reader who trusts it. This
  * project's own first spec draft made that mistake; see dpm-view.ts.
  */
-export function FinalOutcome({receipt, market}: {receipt: SettlementReceipt; market: MarketDetail}) {
-  const outcome = receipt.outcome;
+/**
+ * The winner comes from `Market.winningOutcome` on chain, NOT from the receipt.
+ *
+ * The contract is what pays out, so it is what decides — and it answers in every
+ * mode, because `winningOutcome` is a plain view. Reading the receipt instead
+ * left a settled market on a live chain saying "resolution evidence not
+ * available" where the chain knew the answer perfectly well, and would have let
+ * a receipt that disagreed with the contract put the wrong side on screen.
+ *
+ * `receipt` is now only what qualifies the verdict — today, whether it was
+ * simulated. `null` means no receipt could be read, which does not stop us
+ * naming a winner.
+ */
+export function FinalOutcome({
+  receipt,
+  market,
+}: {
+  receipt: SettlementReceipt | null;
+  market: MarketDetail;
+}) {
+  const outcome = market.winningOutcome;
 
-  // A null outcome means this mode DOES NOT YET KNOW the final decision — not
-  // resolved, not "NO", and not an unexplained empty panel. Just like
-  // `unavailable` in Query<T>: not knowing is rendered as such.
+  // A null outcome means the market IS NOT RESOLVED — not "NO", and not an
+  // unexplained empty panel. Outcome 0 is a real answer and must not collapse
+  // into absence. Just like `unavailable` in Query<T>: not knowing is rendered
+  // as such.
   if (outcome === null) {
     return (
       <Panel testId="final-outcome">
         <PanelHeader eyebrow="Committee verdict" title="Final outcome" icon={Gavel} />
         <p className="p-4 text-[13px] text-text-muted md:p-5">
-          Not resolved yet — no committee resolution is available.
+          Not resolved yet — the chain has recorded no outcome for this market.
         </p>
       </Panel>
     );
@@ -48,7 +68,7 @@ export function FinalOutcome({receipt, market}: {receipt: SettlementReceipt; mar
   return (
     <Panel testId="final-outcome" className="overflow-hidden">
       <PanelHeader eyebrow="Committee verdict" title="Final outcome" icon={Gavel} />
-      {receipt.simulated && <SimulatedBanner testId="final-outcome-simulated" />}
+      {receipt?.simulated === true && <SimulatedBanner testId="final-outcome-simulated" />}
       <div className="flex flex-col gap-3 p-4 md:p-5">
         <div className="flex items-baseline justify-between gap-4">
           <span className="text-[13px] text-text-muted">Winner</span>

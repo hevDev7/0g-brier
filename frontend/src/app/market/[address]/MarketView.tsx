@@ -18,7 +18,7 @@ import {ProbabilityChart} from "@/components/market/ProbabilityChart";
 import {ProbabilityPanel} from "@/components/market/ProbabilityPanel";
 import {TradeTape} from "@/components/market/TradeTape";
 import {FinalOutcome} from "@/components/settlement/FinalOutcome";
-import {ResolutionEvidence} from "@/components/settlement/ResolutionEvidence";
+import {SettlementReport} from "@/components/settlement/SettlementReport";
 import {useDataSource} from "@/hooks/provider";
 import {useCandles} from "@/hooks/useCandles";
 import {useMarket} from "@/hooks/useMarket";
@@ -171,7 +171,7 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
         <aside className="flex min-w-0 flex-col gap-5 xl:sticky xl:top-[84px] xl:self-start">
           <MarketStats market={market} trades={trades} />
           <Lifecycle market={market} mode={source.mode} />
-          {market.status === "Settled" && renderSettlement(receipt, market)}
+          {market.status === "Settled" && renderSettlement(receipt, market, source.mode)}
         </aside>
       </div>
     </>
@@ -253,28 +253,29 @@ function renderPositions(
   }
 }
 
-/** The committee's verdict AND the evidence that makes it checkable — one receipt, two panels. */
+/**
+ * The verdict in the sidebar, the record behind a click.
+ *
+ * `ResolutionEvidence` used to sit here as a second panel. It now lives inside
+ * `SettlementReport`, which is the only place that can put it beside what the
+ * market PROMISED — and showing the same panel twice on one screen was the
+ * alternative.
+ *
+ * Neither element switches on the receipt's query state any more, and that is
+ * the point: `Market.winningOutcome` answers in every mode, so the verdict and
+ * the whole promised half of the report are readable with no receipt at all.
+ * Gating them on the receipt hid what IS known behind what is not — a settled
+ * market on a live chain read as though nobody had decided anything.
+ */
 function renderSettlement(
   receipt: Query<SettlementReceipt>,
   market: MarketDetail,
+  mode: DataMode,
 ): React.JSX.Element {
-  switch (receipt.status) {
-    case "ready":
-      return (
-        <>
-          <FinalOutcome receipt={receipt.data} market={market} />
-          <ResolutionEvidence receipt={receipt.data} />
-        </>
-      );
-    case "unavailable":
-      return <Unavailable capability={receipt.capability} mode={receipt.mode} />;
-    case "error":
-      return <ErrorNote error={receipt.error} what="the resolution evidence" />;
-    case "loading":
-      return (
-        <Panel>
-          <SkeletonRows rows={4} cols={2} />
-        </Panel>
-      );
-  }
+  return (
+    <>
+      <FinalOutcome market={market} receipt={receipt.status === "ready" ? receipt.data : null} />
+      <SettlementReport market={market} receipt={receipt} mode={mode} />
+    </>
+  );
 }

@@ -39,3 +39,27 @@ declare module "vitest" {
   interface AsymmetricMatchersContaining extends TestingLibraryMatchers<any, any> {}
 }
 /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-empty-object-type */
+
+// jsdom 30 implements <dialog> as an element but not its modal METHODS — there
+// is no `showModal` and no `close`. The element is baseline in every browser
+// since 2022, so this is a gap in the test environment rather than a reason to
+// hand-build an overlay and lose the focus trap, the Escape key and the inert
+// backdrop that come with it.
+//
+// The shim reproduces only what a test can meaningfully assert: `open` flips,
+// and `close` fires a `close` event so a component that syncs its state from
+// that event is exercised on the same path the browser drives. It does NOT
+// simulate focus trapping — nothing here should be read as proof of it.
+if (typeof HTMLDialogElement !== "undefined" && !HTMLDialogElement.prototype.showModal) {
+  const open = function (this: HTMLDialogElement) {
+    this.setAttribute("open", "");
+  };
+  HTMLDialogElement.prototype.showModal = open;
+  HTMLDialogElement.prototype.show = open;
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement, returnValue?: string) {
+    if (!this.hasAttribute("open")) return;
+    this.removeAttribute("open");
+    if (returnValue !== undefined) this.returnValue = returnValue;
+    this.dispatchEvent(new Event("close"));
+  };
+}
