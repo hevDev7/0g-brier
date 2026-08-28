@@ -22,7 +22,7 @@ export default function CreationPage() {
         methods={[
           {sig: "collateral", does: <>The token the market trades in. Must be on the allowlist, or <C>CollateralNotAllowlisted</C>.</>},
           {sig: "creator", does: <>Must equal <C>msg.sender</C>. A curator approval is not a bearer instrument — see below.</>},
-          {sig: "creatorAgentId", does: <>The identity the market is credited to. Its reputation gains a market created, and a market voided if it comes to that.</>},
+          {sig: "creatorAgentId", does: <>The identity the market is credited to, and the factory checks you own it — <C>NotAgentOwner</C> otherwise. Pass <C>0</C> to credit nobody. See below for what the credit does and does not yet buy.</>},
           {sig: "tradingEnd", does: <>When buying and selling stop.</>},
           {sig: "settlementDeadline", does: <>By when an outcome must exist. Miss it and the market fails, which pays both sides rather than nobody.</>},
           {sig: "tier", does: <>0 FAST, 1 VERIFIED, 2 DETERMINISTIC — how many resolvers judge it and how long anyone has to object. See <Link href="/docs/parameters" className={link}>the numbers</Link>.</>},
@@ -31,7 +31,7 @@ export default function CreationPage() {
         ]}
       />
 
-      <H3>Four things that must already be true</H3>
+      <H3>Five things that must already be true</H3>
       <div className="flex flex-col gap-6">
         <Step n={1} title="The question exists, and is addressable">
           <p>
@@ -73,7 +73,27 @@ export default function CreationPage() {
           </p>
         </Step>
 
-        <Step n={4} title="The protocol is not paused">
+        <Step n={4} title="The identity claimed is the creator's own">
+          <p>
+            A market records the agent it is created by. Until recently nothing checked that number, and the
+            gap was not hypothetical: a market on this chain credited itself to agent 1 — the trading agent&rsquo;s
+            identity — while being created by an entirely different wallet, and the chain recorded it as fact.
+          </p>
+          <p>
+            The factory now reads the AgentRegistry and refuses the claim unless the creator either owns the
+            agent NFT or is the key registered to operate it, which is how the registry itself decides whose
+            hands an agent has. A cold-storage owner therefore does not have to sign every creation.
+          </p>
+          <p>
+            Claiming nothing stays allowed: agent ids start at 1, so <C>0</C> means &ldquo;credited to
+            nobody&rdquo;, and a creator without an identity can still open a market. What is refused is
+            claiming an identity that is not yours — not declining to claim one. Where no registry is
+            configured at all, a non-zero claim is refused rather than waved through, because an unverifiable
+            claim on chain reads exactly like a verified one.
+          </p>
+        </Step>
+
+        <Step n={5} title="The protocol is not paused">
           <p>
             A guardian can pause creation and trading. Exits are never paused; see{" "}
             <Link href="/docs/lifecycle" className={link}>
@@ -83,6 +103,16 @@ export default function CreationPage() {
           </p>
         </Step>
       </div>
+
+      <Note kind="warn" title="What the credit does not yet buy">
+        Being credited with a market is recorded on the market and in <C>MarketCreated</C>, and now that the
+        claim is verified it means something. It does not yet move a counter. <C>AgentRegistry</C> declares
+        <C> marketsCreated</C> and <C>marketsVoided</C> on its reputation struct and nothing in the protocol
+        writes to either — only <C>resolutionsAgreed</C> and <C>resolutionsOverturned</C> are ever incremented,
+        by the ResolutionModule. So creation reputation reads zero for every agent, and will keep reading zero
+        until the factory is given a way to record it. This page said otherwise until the counters were
+        checked; a number nobody writes is not a reputation.
+      </Note>
 
       <Note kind="info" title="Then the factory does the rest">
         It clones the market implementation, registers the clone as real before anything else can touch it,

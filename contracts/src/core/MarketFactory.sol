@@ -16,6 +16,8 @@ import {OutcomeShares} from "./OutcomeShares.sol";
 import {Market} from "./Market.sol";
 import {IMarket} from "../interfaces/IMarket.sol";
 import {IMarketRegistry} from "../interfaces/IMarketRegistry.sol";
+import {IAgentRegistry} from "../interfaces/IAgentRegistry.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 /// @title MarketFactory
 /// @notice Mints Market clones and acts as the registry OutcomeShares trusts.
@@ -87,6 +89,12 @@ contract MarketFactory is
     ///      and there is nothing to decode — the call "succeeds" silently after the user's
     ///      collateral has already moved into a clone that is permanently dead.
     error NotAContract(address account);
+    /// @dev A market claimed an agent identity its creator neither owns nor operates.
+    error NotAgentOwner(uint256 agentId, address creator);
+    /// @dev An identity was claimed on a deployment with no registry to check it against.
+    ///      Refused rather than waved through: an unverifiable claim recorded on chain is
+    ///      worth less than no claim, because it looks exactly like a verified one.
+    error AgentRegistryUnset();
 
     event MarketCreated(
         address indexed market,
@@ -185,6 +193,7 @@ contract MarketFactory is
         // return is zero arbitrary calls.
         if (!config.allowedCollateral(p.collateral)) revert CollateralNotAllowlisted();
         if (config.categoryIndex(p.category) == 0) revert UnknownCategory(p.category);
+        _requireAgentBelongsTo(p.creatorAgentId, p.creator);
 
         bytes32 digest = _approvalDigest(p, seedTokens, depositTokens, nonce);
         if (usedApprovals[digest]) revert ApprovalAlreadyUsed();
@@ -227,6 +236,36 @@ contract MarketFactory is
 
     function marketAt(uint256 index) external view returns (address) {
         return _markets[index];
+    }
+
+    /**
+     * The identity a market is credited to must belong to whoever creates it.
+     *
+     * `creatorAgentId` was written to storage and emitted in `MarketCreated` without anyone
+     * checking it. The curator signature covers the field, but a curator attesting to
+     * "creator X, agent 7" does not make X own agent 7 — it only records that a human looked.
+     * On Galileo the gap was not hypothetical: a market created by the deployer credited
+     * itself to agent 1, which belongs to a different wallet entirely, and the chain recorded
+     * that as fact. Reputation counted off such a field is reputation anyone can mint.
+     *
+     * OWNER OR OPERATOR, because the registry already treats both as the agent's own hands:
+     * `agentOf` exists precisely to answer "which agent does this key act for". Requiring the
+     * NFT holder alone would force a key kept in cold storage to sign every market creation.
+     *
+     * ZERO IS NOT A CLAIM. Agent ids start at 1 (`nextAgentId = 1`), so 0 is the registry's
+     * own sentinel for "none" — and a creator with no agent should be able to open a market
+     * crediting nobody rather than be forced to mint an identity first. What is refused is
+     * claiming an identity that is not yours, not declining to claim one.
+     */
+    function _requireAgentBelongsTo(uint256 agentId, address creator) private view {
+        if (agentId == 0) return;
+        address registry = config.addresses(ConfigKeys.AGENT_REGISTRY);
+        if (registry == address(0)) revert AgentRegistryUnset();
+        // `ownerOf` reverts for an id that was never minted, which is the right answer to a
+        // claim on an agent that does not exist — no separate existence check is needed.
+        if (IERC721(registry).ownerOf(agentId) == creator) return;
+        if (IAgentRegistry(registry).agentOf(creator) == agentId) return;
+        revert NotAgentOwner(agentId, creator);
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {}

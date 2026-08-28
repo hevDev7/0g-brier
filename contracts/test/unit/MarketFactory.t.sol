@@ -11,6 +11,8 @@ import {OutcomeShares} from "../../src/core/OutcomeShares.sol";
 import {IMarket} from "../../src/interfaces/IMarket.sol";
 import {ConfigKeys} from "../../src/core/ConfigKeys.sol";
 import {MockUSDC} from "../../src/mocks/MockUSDC.sol";
+import {AgentRegistry} from "../../src/core/AgentRegistry.sol";
+import {IAgentRegistry} from "../../src/interfaces/IAgentRegistry.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
@@ -73,6 +75,10 @@ contract MarketFactoryTest is Fixtures {
     MarketFactory internal factory;
     uint256 internal curatorPk = 0xC0FFEE;
     address internal curator;
+    /// @dev A real registry, not a stub: `_params()` credits agent 1, and since the factory
+    ///      now verifies that claim the fixture has to make it true. Deployed and minted here
+    ///      so every existing test keeps testing what it was written to test.
+    AgentRegistry internal agents;
 
     function setUp() public {
         _deployBase();
@@ -97,6 +103,23 @@ contract MarketFactoryTest is Fixtures {
                 )
             )
         );
+        AgentRegistry agentImpl = new AgentRegistry();
+        agents = AgentRegistry(
+            address(
+                new ERC1967Proxy(
+                    address(agentImpl), abi.encodeCall(AgentRegistry.initialize, (address(this), address(config)))
+                )
+            )
+        );
+        // Minted BY `creator` so the NFT lands in `creator`'s hands: `register` calls
+        // `_safeMint(msg.sender, …)`, and it is ownership that `_params().creatorAgentId = 1`
+        // has to match. Operator is left unset so the owner path is what these tests exercise;
+        // the operator path has a test of its own below.
+        vm.prank(creator);
+        uint256 minted = agents.register(IAgentRegistry.Role.Creator, address(0), "creator-one", bytes32(0));
+        assertEq(minted, 1, "fixture assumes agent 1");
+
+        config.setAddress(ConfigKeys.AGENT_REGISTRY, address(agents));
         config.setAddress(ConfigKeys.MARKET_FACTORY, address(factory));
         config.setAddress(ConfigKeys.CURATOR_SIGNER, curator);
         _useFactoryAsRegistry(address(factory));
@@ -549,5 +572,99 @@ contract MarketFactoryTest is Fixtures {
             "the re-entry must be stopped by the reentrancy guard, not by something incidental"
         );
         assertEq(factory.marketCount(), 1, "exactly one market exists");
+    }
+
+    // ── the identity a market credits itself to ───────────────────────────────
+
+    /**
+     * `creatorAgentId` was written to storage and emitted in `MarketCreated` with nothing
+     * checking it. The curator signature covers the field, but a curator attesting to
+     * "creator X, agent 7" does not make X own agent 7. On Galileo a market created by the
+     * deployer credited itself to agent 1, which belongs to a different wallet, and the chain
+     * recorded that as fact — so any reputation counted off the field was reputation anyone
+     * could mint by typing a different number.
+     */
+    function test_creatorCannotClaimAnAgentItDoesNotOwn() public {
+        IMarket.Params memory p = _params();
+        // Alice owns agent 2. `creator` owns agent 1 and is the one signing and paying.
+        vm.prank(alice);
+        uint256 hers = agents.register(IAgentRegistry.Role.Creator, address(0), "alice-one", bytes32(0));
+        p.creatorAgentId = hers;
+
+        bytes memory sig = _sign(p, 1);
+        vm.prank(creator);
+        vm.expectRevert(abi.encodeWithSelector(MarketFactory.NotAgentOwner.selector, hers, creator));
+        factory.createMarket(p, SEED, DEPOSIT, 1, sig);
+    }
+
+    /// @dev A curator approval does not launder the claim: the signature here is perfectly
+    ///      valid over exactly these params, and the market is still refused.
+    function test_aValidCuratorApprovalDoesNotMakeTheClaimTrue() public {
+        IMarket.Params memory p = _params();
+        p.creatorAgentId = 99; // never minted
+        bytes memory sig = _sign(p, 1);
+
+        vm.prank(creator);
+        vm.expectRevert(); // ownerOf on a nonexistent id — the right answer to a claim on nothing
+        factory.createMarket(p, SEED, DEPOSIT, 1, sig);
+    }
+
+    /**
+     * Zero is not a claim. Agent ids start at 1, so 0 is the registry's own sentinel for
+     * "none", and a creator with no agent should be able to open a market crediting nobody
+     * rather than be forced to mint an identity first. What is refused is claiming an
+     * identity that is not yours — not declining to claim one.
+     */
+    function test_aMarketMayCreditNobody() public {
+        IMarket.Params memory p = _params();
+        p.creatorAgentId = 0;
+        bytes memory sig = _sign(p, 1);
+
+        vm.prank(creator);
+        address market = factory.createMarket(p, SEED, DEPOSIT, 1, sig);
+        assertEq(Market(market).creatorAgentId(), 0, "credited to nobody");
+    }
+
+    /**
+     * The operator key counts as the agent's own hand. `agentOf` exists precisely to answer
+     * "which agent does this key act for", and requiring the NFT holder alone would force a
+     * key kept in cold storage to sign every market creation.
+     */
+    function test_theOperatorKeyMayCreateOnTheAgentsBehalf() public {
+        // Alice holds the NFT; bob is the key that acts for it.
+        vm.prank(alice);
+        uint256 id = agents.register(IAgentRegistry.Role.Creator, bob, "cold-storage", bytes32(0));
+        assertEq(agents.agentOf(bob), id, "bob operates it");
+
+        IMarket.Params memory p = _params();
+        p.creator = bob;
+        p.creatorAgentId = id;
+        bytes memory sig = _sign(p, 1);
+
+        _fund(bob, 1_000_000e6, address(factory));
+        vm.prank(bob);
+        address market = factory.createMarket(p, SEED, DEPOSIT, 1, sig);
+        assertEq(Market(market).creatorAgentId(), id, "credited to the agent it operates");
+    }
+
+    /**
+     * An identity claimed where nothing can check it is refused, not waved through. An
+     * unverifiable claim recorded on chain is worth less than no claim at all, because on
+     * screen it looks exactly like a verified one — which is the whole defect being repaired.
+     */
+    function test_anUncheckableClaimIsRefusedRatherThanTrusted() public {
+        config.setAddress(ConfigKeys.AGENT_REGISTRY, address(0));
+
+        IMarket.Params memory p = _params();
+        bytes memory sig = _sign(p, 1);
+        vm.prank(creator);
+        vm.expectRevert(MarketFactory.AgentRegistryUnset.selector);
+        factory.createMarket(p, SEED, DEPOSIT, 1, sig);
+
+        // …but a market crediting nobody still opens, because it claims nothing.
+        p.creatorAgentId = 0;
+        bytes memory none = _sign(p, 2);
+        vm.prank(creator);
+        factory.createMarket(p, SEED, DEPOSIT, 2, none);
     }
 }

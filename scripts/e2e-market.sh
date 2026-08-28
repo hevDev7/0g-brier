@@ -167,7 +167,14 @@ SETTLEMENT_DEADLINE=$(( TRADING_END + WINDOW ))
 # and its dispute window, so a run with three staked resolvers wants tier 2 (n=3, k=2)
 # rather than the default VERIFIED (n=5, k=3), which would revert NotEnoughResolvers.
 TIER="${TIER:-1}"
-AGENT_ID=1
+# ZERO, not 1, and the change is not cosmetic. The factory now verifies that whoever
+# creates a market OWNS the identity it credits — `NotAgentOwner` otherwise — and this
+# script signs with DEPLOYER_KEY, which owns no agent. It used to pass 1, which belongs
+# to the trading agent's wallet, and the chain recorded that false attribution as fact.
+# Zero is the registry's own sentinel for "none": a market crediting nobody is honest,
+# a market crediting somebody else was not. Override with AGENT_ID=<id> when the signing
+# key genuinely owns or operates one.
+AGENT_ID="${AGENT_ID:-0}"
 # One of the six the registry knows (spec §5.2), or `selftest` for a lifecycle demo.
 # The factory REFUSES an unknown category: a market nobody can file is one nobody can
 # filter for, no agent policy can match, and no settlement template can reach.
