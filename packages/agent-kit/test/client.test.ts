@@ -323,3 +323,29 @@ describe("reading a settlement out of a model's reply", () => {
     expect(() => parseJudgement(raw)).toThrow(UnreadableBeliefError);
   });
 });
+
+/**
+ * The same three-state read as the frontend's, and the same live cause: a committee
+ * on Galileo returned UNRESOLVABLE, the market FAILED, and `winningOutcome` read 0
+ * because nothing had ever written to it. `resolvedAt` is set on failure too, so it
+ * cannot be what distinguishes a winner from the absence of one.
+ */
+describe("a market that failed has no winner", () => {
+  it.each([
+    ["Failed", 5],
+    ["Voided", 6],
+  ])("reports no winner for a %s market, not NO", async (_l, status) => {
+    const m = await client({status, winningOutcome: 0, resolvedAt: 1790000500n}).getMarket(MARKET);
+    expect(m.winningOutcome).toBeNull();
+  });
+
+  it("still reports NO as a winner for a Settled market", async () => {
+    const m = await client({status: 4, winningOutcome: 0, resolvedAt: 1790000500n}).getMarket(MARKET);
+    expect(m.winningOutcome).toBe(0);
+  });
+
+  /** `redeem` on a market with no winner has nothing to claim, and says so. */
+  it("refuses to redeem a failed market", async () => {
+    await expect(client({status: 5, resolvedAt: 1790000500n}).redeem(MARKET)).rejects.toThrow(/not been resolved/);
+  });
+});

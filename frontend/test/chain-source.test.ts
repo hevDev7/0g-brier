@@ -151,3 +151,28 @@ describe("ChainSource market state", () => {
     expect(await source().getBalance("0xaaaaaaaa00000000000000000000000000000001", TOKEN)).toBe(4_200_000n);
   });
 });
+
+/**
+ * Three states, not two. A FAILED market has `resolvedAt` set — the contract writes
+ * it when the liquidation is snapshotted — and `winningOutcome` still reads 0
+ * because nothing ever wrote to it. Reading those two alone announces "NO won" for
+ * a market a committee has just declared unanswerable.
+ *
+ * A live committee on Galileo produced exactly that.
+ */
+describe("a market that failed has no winner", () => {
+  it.each([
+    ["Failed", 5],
+    ["Voided", 6],
+  ])("reports no winner for a %s market, not NO", async (_label, status) => {
+    const m = await source({status, winningOutcome: 0, resolvedAt: 1790000500n}).getMarket(MARKET);
+    expect(m.winningOutcome).toBeNull();
+    // The TIME of the decision is still known, and still worth showing.
+    expect(m.resolvedAt).toBe(1790000500);
+  });
+
+  it("still reports NO as a winner for a Settled market", async () => {
+    const m = await source({status: 4, winningOutcome: 0, resolvedAt: 1790000500n}).getMarket(MARKET);
+    expect(m.winningOutcome).toBe(0);
+  });
+});

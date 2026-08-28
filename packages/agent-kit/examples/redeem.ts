@@ -34,8 +34,22 @@ const x = (wad: bigint) => `${(Number(wad) / 1e18).toFixed(4)}×`;
 
 console.log(`agent  ${client.address}`);
 console.log(`market ${market}  (${view.status})`);
-if (view.winningOutcome === null) {
+if (view.winningOutcome === null && view.status !== "Failed" && view.status !== "Voided") {
   console.log(`  not resolved — nothing to claim`);
+  process.exit(0);
+}
+
+// A market can end three ways and only one of them has a winner. Settled pays the
+// winning side at 1/p; Failed and Voided pay BOTH sides at their own price, which
+// is a different function and a different arithmetic.
+if (view.status === "Failed" || view.status === "Voided") {
+  console.log(`  ${view.status.toLowerCase()} — no winner. Both sides exit at their own price.`);
+  const both = await client.liquidate(market);
+  console.log(`\nliquidated ${both.hash}`);
+  console.log(`  shares burned ${(Number(both.sharesBefore) / 1e18).toFixed(6)}  (both sides, tradable and seed)`);
+  console.log(`  received      ${usd(both.tokensReceived)} ${view.collateralSymbol}`);
+  console.log(`\nNobody won, so nobody was paid at 1/p. Each side was paid its own`);
+  console.log(`marginal price — which is what makes an unanswerable question survivable.`);
   process.exit(0);
 }
 

@@ -270,4 +270,11 @@ for (;;) {
 await send(KEY, "finalize", [MARKET]);
 const status = await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "status"});
 const winner = await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "winningOutcome"});
-console.log(`\nfinalized. market status ${status} (4 = Settled, 5 = Failed), winner ${OUTCOME_NAMES[winner]}`);
+// A FAILED market has no winner, and `winningOutcome` is 0 there because nothing
+// ever wrote to it. Printing `OUTCOME_NAMES[0]` announced "NO" for a market the
+// committee had just declared unanswerable.
+console.log(
+  status === 4
+    ? `\nfinalized: SETTLED, winner ${OUTCOME_NAMES[winner]}`
+    : `\nfinalized: FAILED — no winner. Every side liquidates at its own price.`,
+);

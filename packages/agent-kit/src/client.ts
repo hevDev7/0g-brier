@@ -145,9 +145,14 @@ export class DelphiZeroClient {
 
     const token = await this.tokenInfo(collateral);
     const qq = q as readonly [bigint, bigint];
-    // `winningOutcome` is 0 until a resolution lands, and 0 is also a winner.
-    // `resolvedAt` is what separates them.
-    const resolved = Number(resolvedAt) !== 0;
+    // Three states, not two, and the third is easy to miss.
+    //
+    // `winningOutcome` is 0 until a resolution lands, and 0 is also a winner, so
+    // `resolvedAt` is what separates "unresolved" from "NO won". But `resolvedAt`
+    // is ALSO set when a market FAILS or is VOIDED — where there is no winner at
+    // all and both sides liquidate at their own price. A live committee returning
+    // UNRESOLVABLE produced exactly that, and this read reported "NO won".
+    const resolved = statusLabel === "Settled";
 
     return {
       address: market,

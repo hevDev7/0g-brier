@@ -260,12 +260,18 @@ export class ChainSource implements DataSource {
       read<bigint>("resolvedAt"),
     ]);
 
+    // Three states, not two.
+    //
     // `winningOutcome` is 0 in storage until a resolution lands, and 0 is also a
-    // legitimate winner ("NO"). `resolvedAt` is what distinguishes them — it is
-    // the field the contract writes at the moment of resolution, and it cannot
-    // be zero afterwards. Reading the outcome alone would report every unresolved
-    // market as having settled NO.
+    // legitimate winner ("NO"), so the outcome alone would report every unresolved
+    // market as having settled NO. `resolvedAt` separates those two — but it is
+    // ALSO written when a market FAILS or is VOIDED, where there is no winner at
+    // all and every side liquidates at its own price. A committee on Galileo
+    // returned UNRESOLVABLE, the market failed, and this read called it "NO".
+    //
+    // Only `Settled` has a winner. `resolvedAt` still says WHEN it was decided.
     const resolved = Number(resolvedAt) !== 0;
+    const hasWinner = base.summary.status === "Settled";
 
     return {
       ...base.summary,
@@ -276,7 +282,7 @@ export class ChainSource implements DataSource {
       rules: base.spec?.rules ?? null,
       settlementPrompt: base.spec?.settlementPrompt ?? null,
       sources: base.spec?.sources ?? null,
-      winningOutcome: resolved ? ((winner === 1 ? 1 : 0) as Outcome) : null,
+      winningOutcome: hasWinner ? ((winner === 1 ? 1 : 0) as Outcome) : null,
       resolvedAt: resolved ? Number(resolvedAt) : null,
     };
   }
