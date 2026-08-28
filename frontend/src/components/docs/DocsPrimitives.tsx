@@ -4,32 +4,16 @@ import {AlertTriangle, Info, Lightbulb} from "lucide-react";
 /**
  * The pieces the documentation is built from.
  *
- * Kept apart from the page so the page reads as prose and structure rather than
- * as markup, and so the two shapes that carry the teaching — a worked number and
- * a correction of an expectation — are defined once and cannot drift apart.
+ * Kept apart from the pages so each page reads as prose and structure rather
+ * than as markup, and so the two shapes that carry the teaching — a worked
+ * number and a correction of an expectation — are defined once and cannot drift
+ * apart.
+ *
+ * There was a `Section` here, which wrapped a heading around content while the
+ * documentation was one long page. Splitting it into routes gave that job to
+ * `DocPage`, and a design system that keeps the older of two ways to do the same
+ * thing invites somebody to reach for it.
  */
-
-/** A section with an id, so the contents list can link into it. */
-export function Section({
-  id,
-  eyebrow,
-  title,
-  children,
-}: {
-  id: string;
-  eyebrow: string;
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    // scroll-mt so an anchored heading does not land under the sticky header.
-    <section id={id} className="scroll-mt-24 border-t border-border pt-10">
-      <p className="eyebrow mb-2 text-accent">{eyebrow}</p>
-      <h2 className="text-[20px] leading-tight font-extrabold tracking-[-0.02em] text-text md:text-[24px]">{title}</h2>
-      <div className="mt-4 flex flex-col gap-4">{children}</div>
-    </section>
-  );
-}
 
 export function P({children}: {children: ReactNode}) {
   return <p className="max-w-2xl text-[14px] leading-relaxed text-text-muted">{children}</p>;

@@ -1,211 +1,238 @@
+import type {ReactElement} from "react";
 import {render, screen} from "@testing-library/react";
-import {describe, expect, it} from "vitest";
-import DocsPage from "@/app/docs/page";
+import {beforeEach, describe, expect, it, vi} from "vitest";
+import {DOCS, PAGES, neighbours, pageBySlug} from "@/components/docs/nav";
+import {DocsSidebar} from "@/components/docs/DocsSidebar";
+import {DocPage} from "@/components/docs/DocPage";
 
-/**
- * The documentation makes numeric claims, and a wrong one is worse than no page
- * at all: a reader who checks a figure and finds it consistent stops checking.
- * So the arithmetic behind the worked examples is recomputed here from the
- * mechanism rather than compared against a transcription of what the page says.
- */
-describe("the documentation page", () => {
-  it("renders every section its contents list promises", () => {
-    const {container} = render(<DocsPage />);
-    const links = [...container.querySelectorAll('nav[aria-label="Contents"] a')];
-    expect(links.length).toBeGreaterThan(5);
+import Index from "@/app/docs/page";
+import Reading from "@/app/docs/reading/page";
+import Probability from "@/app/docs/probability/page";
+import Payout from "@/app/docs/payout/page";
+import Lifecycle from "@/app/docs/lifecycle/page";
+import Parameters from "@/app/docs/parameters/page";
+import Agent from "@/app/docs/agent/page";
+import Setup from "@/app/docs/setup/page";
+import Funding from "@/app/docs/funding/page";
+import Deciding from "@/app/docs/deciding/page";
+import Risks from "@/app/docs/risks/page";
+import Sdk from "@/app/docs/sdk/page";
+import Errors from "@/app/docs/errors/page";
+import Porting from "@/app/docs/porting/page";
 
-    for (const link of links) {
-      const id = link.getAttribute("href")!.slice(1);
-      // A contents entry pointing at nothing is silent in a browser: the click
-      // does nothing at all and the reader assumes the section is missing.
-      expect(container.querySelector(`#${id}`), `no section with id "${id}"`).not.toBeNull();
+const routing = {pathname: "/docs"};
+vi.mock("next/navigation", () => ({
+  usePathname: () => routing.pathname,
+}));
+
+/** Every route, keyed by the slug the nav tree uses. */
+const ROUTES: Record<string, () => ReactElement> = {
+  "": Index,
+  reading: Reading,
+  probability: Probability,
+  payout: Payout,
+  lifecycle: Lifecycle,
+  parameters: Parameters,
+  agent: Agent,
+  setup: Setup,
+  funding: Funding,
+  deciding: Deciding,
+  risks: Risks,
+  sdk: Sdk,
+  errors: Errors,
+  porting: Porting,
+};
+
+const textOf = (slug: string) => render(ROUTES[slug]!()).container.textContent ?? "";
+
+beforeEach(() => {
+  routing.pathname = "/docs";
+});
+
+describe("the documentation tree", () => {
+  /**
+   * The two ways a split-up documentation set rots: a page nobody can reach, and
+   * a sidebar entry leading nowhere. Both are silent — the first because nothing
+   * links to it, the second because the 404 only appears to whoever clicks.
+   */
+  it("has a route for every page it lists, and lists every route it has", () => {
+    expect(Object.keys(ROUTES).sort()).toEqual(PAGES.map((p) => p.slug).sort());
+  });
+
+  it("gives every page the heading its own nav entry promises", () => {
+    for (const {slug, title} of PAGES) {
+      const {container, unmount} = render(ROUTES[slug]!());
+      expect(container.querySelector("h1")?.textContent, `${slug} has the wrong heading`).toBe(title);
+      unmount();
     }
   });
 
-  it("states plainly that the site cannot trade", () => {
-    render(<DocsPage />);
-    // The structural promise of the whole product. If this text ever softens
-    // into "trading is done through the SDK" it stops warning anybody.
-    expect(screen.getByText(/cannot trade from this website/i)).toBeInTheDocument();
+  it("chains the pages so a reader can go start to finish without the sidebar", () => {
+    const first = PAGES[0]!;
+    const last = PAGES[PAGES.length - 1]!;
+    expect(neighbours(first.slug).prev, "the first page has a previous").toBeUndefined();
+    expect(neighbours(last.slug).next, "the last page has a next").toBeUndefined();
+
+    const walked: string[] = [];
+    let at: string | undefined = first.slug;
+    while (at !== undefined) {
+      walked.push(at);
+      at = neighbours(at).next?.slug;
+    }
+    expect(walked).toEqual(PAGES.map((p) => p.slug));
+  });
+
+  it("refuses to render a page that is not in the tree", () => {
+    // A heading rendered for a page the nav does not know would be an orphan:
+    // reachable by URL, invisible in the sidebar.
+    expect(() => render(<DocPage slug="not-a-page">x</DocPage>)).toThrow(/not in the documentation tree/);
+  });
+});
+
+describe("the sidebar", () => {
+  it("shows every group and every page", () => {
+    const {container} = render(<DocsSidebar />);
+    for (const group of DOCS) {
+      expect(container.textContent, `group "${group.title}" missing`).toContain(group.title);
+      for (const page of group.pages) {
+        expect(container.textContent, `page "${page.title}" missing`).toContain(page.title);
+      }
+    }
+  });
+
+  it("marks only the page being read", () => {
+    routing.pathname = "/docs/funding";
+    const {container} = render(<DocsSidebar />);
+    const current = [...container.querySelectorAll('[aria-current="page"]')];
+    expect(current).toHaveLength(1);
+    expect(current[0]!.textContent).toBe(pageBySlug("funding")!.title);
+  });
+
+  it("does not light the index up on every other page", () => {
+    // `/docs` is a prefix of all thirteen other docs URLs, so a startsWith test
+    // would mark the index current everywhere.
+    routing.pathname = "/docs/sdk";
+    const {container} = render(<DocsSidebar />);
+    expect(container.querySelector('[aria-current="page"]')?.textContent).toBe("The SDK, call by call");
+  });
+});
+
+describe("what each page has to say", () => {
+  it("the index states plainly that the site cannot trade", () => {
+    render(<Index />);
+    // Exact, because the page's own blurb now says it too — matching loosely
+    // finds two elements and fails for a reason that has nothing to do with the
+    // claim being made.
+    expect(screen.getByText("You cannot trade from this website")).toBeInTheDocument();
+    // The reason, not just the rule: a promise with no mechanism behind it is a
+    // slogan, and this one is enforced by a test in the repository.
+    expect(screen.getByText(/no connect-wallet button/i)).toBeInTheDocument();
   });
 
   /**
    * The claim: payout is 1/price, and computing it from the probability instead
-   * overstates it by about 30% at ordinary skew. Both numbers are recomputed
-   * from P here, so a typo in the page fails rather than reading plausibly.
+   * overstates it by about 30%. Recomputed from P here, so a typo in the page
+   * fails rather than reading plausibly.
    */
-  it("gets the worked payout example right", () => {
-    const {container} = render(<DocsPage />);
+  it("probability gets both worked examples right", () => {
     const P = 0.59;
     const price = Math.sqrt(P);
     expect(price.toFixed(4)).toBe("0.7681");
     expect((1 / price).toFixed(4)).toBe("1.3019");
     expect((1 / P).toFixed(4)).toBe("1.6949");
-
-    const text = container.textContent ?? "";
-    expect(text).toContain("0.7681");
-    expect(text).toContain("1.3019×");
-    expect(text).toContain("1.6949×");
-    // And the size of the error, which is the part a reader remembers.
-    expect(Math.round(((1 / P) / (1 / price) - 1) * 100)).toBe(30);
-  });
-
-  it("gets the second worked example right — 10% pays 3.16x, not 10x", () => {
-    const {container} = render(<DocsPage />);
+    expect(Math.round((1 / P / (1 / price) - 1) * 100)).toBe(30);
     expect((1 / Math.sqrt(0.1)).toFixed(2)).toBe("3.16");
-    const text = container.textContent ?? "";
-    expect(text).toContain("3.16×");
-    expect(text).toContain("10×");
+
+    const text = textOf("probability");
+    for (const n of ["0.7681", "1.3019×", "1.6949×", "3.16×", "10×"]) {
+      expect(text, `${n} missing`).toContain(n);
+    }
   });
 
-  it("names all four market states and pairs each with what it forbids", () => {
-    const {container} = render(<DocsPage />);
-    const text = container.textContent ?? "";
+  it("probability and payout each name the wrong belief before the right one", () => {
+    // The correction only teaches if the assumption is stated. A page of correct
+    // facts leaves the reader's incorrect one intact beside them.
+    for (const slug of ["probability", "payout"]) {
+      expect(textOf(slug), `${slug} states no expectation to correct`).toContain("You might expect");
+    }
+  });
+
+  it("payout shows the live measurement of a prize shrinking under its own order", () => {
+    const text = textOf("payout");
+    expect(text).toContain("1.4142×");
+    expect(text).toContain("1.3490×");
+    // √2 is the payout at even odds, which is where that order began.
+    expect(Math.SQRT2.toFixed(4)).toBe("1.4142");
+  });
+
+  it("lifecycle names all four states and pairs each with what it forbids", () => {
+    const text = textOf("lifecycle");
     for (const state of ["Open", "Closed", "Settled", "Failed or Voided"]) {
       expect(text).toContain(state);
     }
-    // Four rows, each with a Can and a Cannot. A state described only by what it
-    // allows is the one a reader gets wrong.
+    // A state described only by what it allows is the one a reader gets wrong.
     expect(text.match(/Cannot:/g)?.length).toBe(4);
     expect(text.match(/Can:/g)?.length).toBe(4);
   });
 
-  it("keeps the two corrections a newcomer arrives with", () => {
-    const {container} = render(<DocsPage />);
-    const blocks = [...container.querySelectorAll("div")].filter((d) =>
-      d.textContent?.includes("You might expect"),
-    );
-    // Price-is-probability, and payout-is-fixed. Both are assumptions carried in
-    // from an ordinary book, and both cost money here.
-    expect(blocks.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("shows the live measurement of a payout shrinking under its own order", () => {
-    const {container} = render(<DocsPage />);
-    const text = container.textContent ?? "";
-    expect(text).toContain("1.4142×");
-    expect(text).toContain("1.3490×");
-    // √2 is the payout on a market at even odds, which is where that order began.
-    expect(Math.SQRT2.toFixed(4)).toBe("1.4142");
-  });
-
-  /**
-   * The reference half. Its value is being correct about names, so the test
-   * checks names that exist in the SDK and the contracts rather than prose.
-   */
-  it("documents the four calls that actually send a transaction", () => {
-    const {container} = render(<DocsPage />);
-    const text = container.textContent ?? "";
-    for (const write of ["buyShares", "sellShares", "redeem(market)", "liquidate(market)"]) {
-      expect(text, `${write} missing from the reference`).toContain(write);
-    }
-    // And the bound that stops Kelly on a thin book.
-    expect(text).toContain("sizeWithinImpact");
-  });
-
-  it("warns about the two decimal scales, which nothing in the types distinguishes", () => {
-    render(<DocsPage />);
-    expect(screen.getByText(/Two units, and mixing them is silent/i)).toBeInTheDocument();
-  });
-
-  it("names the reversed outcome index for anyone porting an agent", () => {
-    const {container} = render(<DocsPage />);
-    const text = container.textContent ?? "";
-    // The single most dangerous difference: it compiles and runs either way.
-    expect(text).toContain("0 = NO, 1 = YES");
-    expect(text).toContain("0 = YES, 1 = NO");
-  });
-
-  it("lists errors a trading agent can actually hit", () => {
-    const {container} = render(<DocsPage />);
-    const text = container.textContent ?? "";
-    for (const err of ["SlippageExceeded", "TradingEnded", "NotSettled", "NotLiquidatable", "ProtocolPaused"]) {
-      expect(text, `${err} undocumented`).toContain(err);
-    }
-  });
-
-  it("says an exit is never blocked by a pause", () => {
-    const {container} = render(<DocsPage />);
-    // Contract guarantee, not a convention: sell/redeem/liquidate skip the pause
-    // check, and a trader who assumes otherwise waits for nothing.
-    expect(container.textContent).toMatch(/exit is never blocked/i);
-  });
-
-  /**
-   * The configuration reference. Its whole value is being right about values a
-   * reader will paste, so these are checked against the live deployment rather
-   * than against the page's own prose.
-   */
-  it("gives the concrete numbers a newcomer needs to actually start", () => {
-    const {container} = render(<DocsPage />);
-    const text = container.textContent ?? "";
-    expect(text).toContain("16602");                              // chain
-    expect(text).toContain("https://faucet.0g.ai");               // gas
-    expect(text).toContain("10,000 mUSDC");                       // collateral per claim
-    expect(text).toContain("0.1 0G per wallet per day");
-    expect(text).toContain("claim()");
-  });
-
-  it("warns about Galileo's two-part gas price, which most tools get wrong", () => {
-    const {container} = render(<DocsPage />);
-    const text = container.textContent ?? "";
-    expect(text).toContain("7 wei");
-    expect(text).toContain("4 gwei");
-    // Both failure messages, because they look unrelated and have one cause.
-    expect(text).toContain("transaction gas price below minimum");
-    expect(text).toContain("max priority fee per gas higher than max fee per gas");
-  });
-
-  it("states the dispute windows, and that they run opposite to the guess", () => {
-    const {container} = render(<DocsPage />);
-    const text = container.textContent ?? "";
-    expect(text).toContain("24 hours");   // FAST — weakest evidence, most time
-    expect(text).toContain("6 hours");    // VERIFIED
-    expect(text).toContain("2 hours");    // DETERMINISTIC
+  it("parameters states the dispute windows, and that they run opposite to the guess", () => {
+    const text = textOf("parameters");
+    expect(text).toContain("24 hours"); // FAST — weakest evidence, most time
+    expect(text).toContain("6 hours"); // VERIFIED
+    expect(text).toContain("2 hours"); // DETERMINISTIC
     expect(text).toMatch(/runs backwards from the obvious guess/i);
   });
 
-  it("numbers its sections from the contents list rather than from literals", () => {
-    const {container} = render(<DocsPage />);
-    const links = [...container.querySelectorAll('nav[aria-label="Contents"] a')];
-    links.forEach((link, i) => {
-      const id = link.getAttribute("href")!.slice(1);
-      const eyebrow = container.querySelector(`#${id} p`)?.textContent;
-      // The section's own number must match its position in the contents, or the
-      // page disagrees with its own index — which a reader notices and an author
-      // never does.
-      expect(eyebrow, `section "${id}" is numbered ${eyebrow}, listed at ${i + 1}`).toBe(
-        String(i + 1).padStart(2, "0"),
-      );
-    });
-  });
-
-  /**
-   * The quickstart. Its only job is to work when pasted, so the test pins the
-   * facts that make it work rather than its prose.
-   */
-  it("is honest that there is no npm package", () => {
-    const {container} = render(<DocsPage />);
-    const text = container.textContent ?? "";
+  it("setup is honest about npm, and shows a first script needing no key", () => {
+    const text = textOf("setup");
     expect(text).toMatch(/no npm package yet/i);
-    // The consequence, not just the fact: unpublished plus TypeScript source
-    // means a path dependency and tsx, which changes how you plan a project.
     expect(text).toContain("file:../brier/packages/agent-kit");
     expect(text).toContain("tsx");
-  });
-
-  it("shows a first script that needs no key, wallet or funding", () => {
-    const {container} = render(<DocsPage />);
-    const text = container.textContent ?? "";
     expect(text).toContain("new BrierClient({");
     expect(text).toContain("listMarkets()");
-    // The point of the example: reading costs nothing and risks nothing.
     expect(text).toMatch(/no privateKey/i);
     expect(text).toContain("canWrite");
+    expect(text).toContain("privateKey: process.env.AGENT_KEY");
   });
 
-  it("shows the one field that turns a reader into a trader", () => {
-    const {container} = render(<DocsPage />);
-    expect(container.textContent).toContain("privateKey: process.env.AGENT_KEY");
+  it("funding gives the concrete numbers and the two-part gas price", () => {
+    const text = textOf("funding");
+    for (const fact of [
+      "https://faucet.0g.ai",
+      "0.1 0G per wallet per day",
+      "10,000 mUSDC",
+      "claim()",
+      "7 wei",
+      "4 gwei",
+      // Both failure messages, because they look unrelated and have one cause.
+      "transaction gas price below minimum",
+      "max priority fee per gas higher than max fee per gas",
+    ]) {
+      expect(text, `${fact} missing`).toContain(fact);
+    }
+  });
+
+  it("sdk documents the calls that send a transaction, and the decimals trap", () => {
+    const text = textOf("sdk");
+    for (const write of ["buyShares", "sellShares", "redeem(market)", "liquidate(market)"]) {
+      expect(text, `${write} missing`).toContain(write);
+    }
+    expect(text).toContain("sizeWithinImpact");
+    expect(text).toMatch(/Two units, and mixing them is silent/i);
+  });
+
+  it("errors lists reverts an agent hits, and says an exit is never blocked", () => {
+    const text = textOf("errors");
+    for (const err of ["SlippageExceeded", "TradingEnded", "NotSettled", "NotLiquidatable", "ProtocolPaused"]) {
+      expect(text, `${err} undocumented`).toContain(err);
+    }
+    expect(text).toMatch(/exit is never blocked/i);
+  });
+
+  it("porting names the reversed outcome index", () => {
+    const text = textOf("porting");
+    // The single most dangerous difference: it compiles and runs either way.
+    expect(text).toContain("0 = NO, 1 = YES");
+    expect(text).toContain("0 = YES, 1 = NO");
   });
 });
