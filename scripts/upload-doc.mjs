@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /**
- * Uploads a MarketSpec document to 0G Storage and prints its Merkle root.
+ * Uploads a JSON document to 0G Storage and prints its Merkle root.
+ *
+ * Two documents go through here — the MarketSpec a market commits to, and the
+ * settlement receipt a resolution anchors — and the upload is identical for
+ * both. What differs is which fields must be present, so the caller says:
+ * `--require question,rules`.
  *
  * That root goes on chain as `specRoot`, verbatim. It is NOT hashed again: the
  * root IS the content address, and hashing it a second time would leave a
@@ -34,11 +39,14 @@ const INDEXER = process.env.ZG_INDEXER ?? "https://indexer-storage-testnet-turbo
 const EVM_RPC = process.env.EVM_RPC ?? "https://evmrpc-testnet.0g.ai";
 
 const die = (msg) => {
-  console.error(`upload-spec: ${msg}`);
+  console.error(`upload-doc: ${msg}`);
   process.exit(1);
 };
 
 const dryRun = process.argv.includes("--dry-run");
+
+const requireArg = process.argv.indexOf("--require");
+const required = requireArg === -1 ? [] : (process.argv[requireArg + 1] ?? "").split(",").filter(Boolean);
 
 const readStdin = async () => {
   const chunks = [];
@@ -55,10 +63,10 @@ try {
 } catch (e) {
   die(`stdin is not JSON: ${e.message}`);
 }
-// The two fields the UI reads. Uploading a document without them costs gas and
-// produces a market that still shows no question — the failure this script exists
-// to prevent, so it is worth refusing before the transaction rather than after.
-for (const field of ["question", "rules"]) {
+// Checked BEFORE the transaction rather than after. Uploading a document that the
+// UI cannot read costs gas and produces a market that still shows nothing — which
+// is the failure this script exists to prevent.
+for (const field of required) {
   if (typeof doc[field] !== "string" || doc[field].length === 0) {
     die(`the document has no non-empty "${field}"`);
   }

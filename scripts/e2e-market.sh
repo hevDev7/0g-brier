@@ -137,13 +137,21 @@ advance_to() {
 }
 
 # ── settlement authority ─────────────────────────────────────────────────────
-# `settle` is `onlyResolutionModule`, and a fresh deployment leaves
-# RESOLUTION_MODULE unset — so nothing could ever settle. P2 replaces this with
-# the real committee contract; until then the test drives it from a key we hold,
-# which is why this line is here and not in the deploy script: it is a property of
-# the test, not of the deployment.
-RESOLUTION_KEY="$(cast keccak "RESOLUTION_MODULE")"
-send "$CONFIG" "setAddress(bytes32,address)" "$RESOLUTION_KEY" "$ACTOR"
+# `settle` is `onlyResolutionModule`, and this used to point that gate at our own
+# EOA so the test could settle directly. It no longer does, and the difference is
+# the whole point: settling through ResolutionModule is what anchors the receipt.
+# An EOA can move a market to Settled and leave no evidence behind at all.
+MODULE="$(j ResolutionModule)"
+[[ "$MODULE" =~ ^0x[0-9a-fA-F]{40}$ ]] || {
+  echo "✗ no ResolutionModule in $MANIFEST — run script/DeployResolutionModule.s.sol first" >&2
+  exit 1
+}
+ONCHAIN_MODULE="$(call "$CONFIG" "addresses(bytes32)(address)" "$(cast keccak "RESOLUTION_MODULE")")"
+[[ "${ONCHAIN_MODULE,,}" == "${MODULE,,}" ]] || {
+  echo "✗ RESOLUTION_MODULE on chain is $ONCHAIN_MODULE, manifest says $MODULE" >&2
+  exit 1
+}
+echo "   resolution module $MODULE"
 
 step "1/8 fund the creator and approve the factory"
 SEED=1000000000        # 1,000 mUSDC (MIN_SEED is 100)
@@ -172,9 +180,9 @@ SPEC_DOC="$(python3 "$ROOT/scripts/market-spec.py" "$TRADING_END" "$SETTLEMENT_D
 # storing anything and says so, rather than pretending.
 if [[ "$CHAIN_ID" == "16602" || "${ZG_UPLOAD:-0}" == "1" ]]; then
   echo "   uploading the MarketSpec to 0G Storage"
-  SPEC_ROOT="$(printf '%s' "$SPEC_DOC" | UPLOADER_KEY="$DEPLOYER_KEY" node "$ROOT/scripts/upload-spec.mjs")"
+  SPEC_ROOT="$(printf '%s' "$SPEC_DOC" | UPLOADER_KEY="$DEPLOYER_KEY" node "$ROOT/scripts/upload-doc.mjs" --require question,rules)"
 else
-  SPEC_ROOT="$(printf '%s' "$SPEC_DOC" | node "$ROOT/scripts/upload-spec.mjs" --dry-run)"
+  SPEC_ROOT="$(printf '%s' "$SPEC_DOC" | node "$ROOT/scripts/upload-doc.mjs" --dry-run --require question,rules)"
 fi
 NONCE=$(( $(now) ))
 
@@ -226,8 +234,23 @@ advance_to "$TRADING_END"
 send "$MARKET" "close()"
 echo "   status $(call "$MARKET" "status()(uint8)")  (1 = Closed)"
 
-step "6/8 settle YES"
-send "$MARKET" "settle(uint8)" 1
+step "6/8 settle YES, with a receipt anchored on chain"
+# The receipt is written and stored BEFORE the settlement, because its root is an
+# argument to it. A settlement cannot land here without one: ResolutionModule
+# rejects a zero root, which is the guard that stops this market repeating what
+# the first Galileo market did with its specRoot.
+RECEIPT_DOC="$(python3 "$ROOT/scripts/settlement-receipt.py" "$MARKET" "$SPEC_ROOT" 1 "$ACTOR" "$(now)")"
+if [[ "$CHAIN_ID" == "16602" || "${ZG_UPLOAD:-0}" == "1" ]]; then
+  echo "   uploading the settlement receipt to 0G Storage"
+  RECEIPT_ROOT="$(printf '%s' "$RECEIPT_DOC" | UPLOADER_KEY="$DEPLOYER_KEY" node "$ROOT/scripts/upload-doc.mjs")"
+else
+  RECEIPT_ROOT="$(printf '%s' "$RECEIPT_DOC" | node "$ROOT/scripts/upload-doc.mjs" --dry-run)"
+fi
+send "$MODULE" "settle(address,uint8,bytes32)" "$MARKET" 1 "$RECEIPT_ROOT"
+ANCHORED="$(call "$MODULE" "resolutionOf(address)(bytes32,address)" "$MARKET" | head -1)"
+[[ "${ANCHORED,,}" == "${RECEIPT_ROOT,,}" ]] || {
+  echo "✗ the module reports receipt $ANCHORED, not $RECEIPT_ROOT" >&2; exit 1; }
+echo "   receipt $RECEIPT_ROOT anchored"
 echo "   status $(call "$MARKET" "status()(uint8)")  (4 = Settled)"
 echo "   payout/share $(python3 -c "print(f\"{int('$(call "$MARKET" "payoutPerShareWad()(uint256)" | cut -d' ' -f1)')/10**18:.4f}x\")")"
 
