@@ -8,6 +8,14 @@
  * so the ABI that can spend money cannot drift into the page that must not.
  */
 export const MARKET_ABI = [
+  // ── lifecycle, for an operator rather than a trader ──────────────────────
+  // Both are permissionless by design: `close` once trading has ended, and
+  // `fail` once the settlement deadline has passed. A market nobody can advance
+  // is a market where every position is stuck, so the protocol lets anybody
+  // advance it. See `examples/keeper.ts`.
+  {type: "function", name: "close", stateMutability: "nonpayable", inputs: [], outputs: []},
+  {type: "function", name: "fail", stateMutability: "nonpayable", inputs: [], outputs: []},
+  {type: "function", name: "settlementDeadline", stateMutability: "view", inputs: [], outputs: [{type: "uint64"}]},
   {type: "function", name: "qArray", stateMutability: "view", inputs: [], outputs: [{type: "uint256[2]"}]},
   {type: "function", name: "poolWad", stateMutability: "view", inputs: [], outputs: [{type: "uint256"}]},
   {type: "function", name: "status", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
