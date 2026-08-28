@@ -18,29 +18,61 @@ import {InvariantBounds} from "../helpers/InvariantBounds.sol";
 ///      handler is already wrapped in try/catch, so a handler that reverts on its own is a
 ///      handler bug and must be visible rather than swallowed.
 ///
-///      `depth = 128` (not the default 64) was MEASURED, not guessed: at depth 64 only 8 of 20
-///      seeds ever crossed `tradingEnd`, so INV-3/INV-4 — the only invariants that live in the
-///      post-resolution regime — were never reached in 60% of runs. At 128, 15 of 15 seeds
-///      reach resolution (5 settle, 7 fail, 3 void) and all of them get to claim. The `ci`
-///      profile already uses 512×128 from foundry.toml.
-/// forge-config: default.invariant.depth = 128
+///      The DEPTH now lives in `foundry.toml` (512 × 256 by default, 2048 × 512 under `ci`)
+///      rather than in an inline override here. The `depth = 128` this replaces was measured
+///      against a depth-64 default and was right at the time, but an inline `forge-config` wins
+///      over the profile AND over the environment in BOTH directions — so once it was written
+///      here it stopped being a floor and became a ceiling: `[profile.ci.invariant] depth` and
+///      `FOUNDRY_INVARIANT_DEPTH` were silently ignored for this contract (verified: with the
+///      line present, `FOUNDRY_INVARIANT_DEPTH=300` still ran 128).
+///
+///      Raising the depth is only half the job: the market's TRADING WINDOW has to move with it
+///      or the added depth lands entirely in the dead post-resolution tail. See
+///      `INV_TRADING_WINDOW` below, where that is derived and where the measurement is recorded.
 /// forge-config: default.invariant.fail-on-revert = true
 /// forge-config: ci.invariant.fail-on-revert = true
 contract MarketInvariantsTest is Fixtures {
-    /// @dev The short window is DELIBERATE. `warpForward` is capped at 3 hours and ~1 call in 11
-    ///      is a warp, so an 8-hour window is crossed roughly halfway through a run: the first
-    ///      half exercises the trading regime (INV-1/2/5/6/8/9/10), the second half the
-    ///      resolution regime (INV-3/4/7/10). The 7-day window Fixtures provides would never be
-    ///      crossed at this depth, and INV-3/INV-4 would never be exercised at all.
-    uint64 internal constant INV_TRADING_WINDOW = 8 hours;
-    uint64 internal constant INV_SETTLEMENT_WINDOW = 4 hours;
+    /// @notice The market's trading window, sized so that a run crosses it about HALFWAY.
+    ///
+    /// @dev The short window is DELIBERATE — the 7-day window `Fixtures` provides would never be
+    ///      crossed at this depth and INV-3/INV-4 would never be exercised at all — and it MUST
+    ///      SCALE WITH THE DEPTH. That second half is not decoration:
+    ///
+    ///        `warpForward` is 1 of 12 selectors and warps uniformly on (0, 3h], so a run
+    ///        advances D/12 × 1.5h = D/8 hours of simulated time. The window is crossed at about
+    ///        call index `8 × window / (1 hour)`.
+    ///
+    ///      At depth 128 an 8-hour window put that crossing at call ~64, i.e. halfway, which is
+    ///      what the original comment claimed. Raising the depth to 256 while LEAVING the window
+    ///      at 8 hours moves the crossing to call ~64 of 256 — a quarter — and the extra depth
+    ///      buys nothing at all. That is not a prediction; it was MEASURED across 12 fixed seeds
+    ///      before this constant was changed: at depth 256 with an 8-hour window, every seed's
+    ///      buy/sell/addLiquidity/removeLiquidity counts were IDENTICAL to the same seed at depth
+    ///      128, to the call. The whole of the added depth was spent in the resolved regime with
+    ///      nothing left to do.
+    ///
+    ///      16 hours restores the halfway crossing at depth 256 (8 × 16 = 128). If the depth is
+    ///      changed again, this constant has to move with it, or the run silently degenerates
+    ///      back into a long post-resolution tail.
+    uint64 internal constant INV_TRADING_WINDOW = 16 hours;
+    /// @dev Half the trading window, as before, so that `settlementDeadline` falls at about
+    ///      three-quarters of a run and the PERMISSIONLESS branch of `fail()` gets real exposure.
+    uint64 internal constant INV_SETTLEMENT_WINDOW = 8 hours;
 
     Market internal m;
     MarketHandler internal handler;
     address internal carol = makeAddr("carol");
 
-    function setUp() public {
+    /// @notice The fee this campaign's market is born with, in bps.
+    /// @dev Overridden by `MarketInvariantsZeroFeeTest`. See the note there for why running the
+    ///      whole stateful campaign at 1% only is not enough.
+    function _campaignFeeBps() internal pure virtual returns (uint256) {
+        return 100;
+    }
+
+    function setUp() public virtual {
         _deployBase();
+        config.setParam(ConfigKeys.FEE_BPS, _campaignFeeBps());
         m = _newShortWindowMarket();
         handler = new MarketHandler(m, usdc, shares, config, [alice, bob, carol], creator, SEED);
 
@@ -48,7 +80,7 @@ contract MarketInvariantsTest is Fixtures {
         // Chosen EXPLICITLY: left to the default, Foundry would fuzz every public state-changing
         // function on every deployed contract — including `MockUSDC.mintTo`,
         // `ConfigRegistry.setParam`, and `Market` itself with no bounds at all.
-        bytes4[] memory sel = new bytes4[](11);
+        bytes4[] memory sel = new bytes4[](12);
         sel[0] = MarketHandler.buy.selector;
         sel[1] = MarketHandler.sell.selector;
         sel[2] = MarketHandler.addLiquidity.selector;
@@ -60,6 +92,7 @@ contract MarketInvariantsTest is Fixtures {
         sel[8] = MarketHandler.advanceStatus.selector;
         sel[9] = MarketHandler.resolve.selector;
         sel[10] = MarketHandler.claim.selector;
+        sel[11] = MarketHandler.sweep.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: sel}));
     }
 
@@ -221,6 +254,21 @@ contract MarketInvariantsTest is Fixtures {
         assertEq(handler.pauseLeaks(), 0, "INV-10 dual: an entrance got through while paused");
     }
 
+    /// @notice Once `sweepUnclaimed` has run, EVERY exit rejects with `AlreadySwept` — it does
+    ///         not succeed, and above all it does not Panic.
+    ///
+    /// @dev The counterpart of INV-10's `pauseLeaks`, for the one mechanism in this contract that
+    ///      is ALLOWED to close an exit. Both failure modes it guards against have actually
+    ///      shipped here: `redeem` answered a swept market with an arithmetic Panic, and
+    ///      `liquidate` answered it by succeeding and burning the caller's shares for nothing.
+    ///      Neither would be visible through the handler's try/catch without this counter.
+    ///
+    ///      This regime used to be reachable only from one directed test. It is now part of the
+    ///      random campaign, because `sweep` carries its own warp.
+    function invariant_claimWindowClosesCleanly() public view {
+        assertEq(handler.sweepLeaks(), 0, "an exit did not reject cleanly after the sweep");
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  Suite quality guards
     // ═══════════════════════════════════════════════════════════════════════
@@ -238,12 +286,24 @@ contract MarketInvariantsTest is Fixtures {
     }
 
     /// @notice Coarse conservation: tokens flowing OUT through user paths never exceed those
-    ///         flowing IN, plus the opening seed and deposit. Fees distributed by
-    ///         `_distributeFees` are deliberately not counted on the outgoing side, so this is a
-    ///         loose inequality with ZERO tolerance — what it guards is "no money was created",
-    ///         not an exact balance sheet.
+    ///         flowing IN, plus the opening SEED. ZERO tolerance.
+    ///
+    /// @dev The `+ DEPOSIT` this bound used to carry was dead slack, and dead slack in a
+    ///      conservation check is exactly where a small leak hides. The settlement deposit never
+    ///      enters the pool: it is held in `settlementDeposit` and paid out in full by
+    ///      `_distributeFees` to the resolver pool (settle/fail) or to the Treasury (void). No
+    ///      user path can reach it, so it cannot fund an outflow and has no business widening the
+    ///      bound by 20 USDC on a 1,000 USDC seed.
+    ///
+    ///      What remains is exact rather than fitted. Every path that puts money INTO the pool
+    ///      charges `ceilDiv(target − poolWad, scale)`; every path that takes money out pays
+    ///      `⌊(poolWad − target)/scale⌋`. The pool opens at `costUp(seedShares(SEED·scale))`,
+    ///      which is ≤ `SEED·scale` by construction of `seedShares`. So user outflow ≤ pool
+    ///      inflow + SEED, and `ghostTokensIn` is ≥ pool inflow because it also counts the fee
+    ///      leg of every buy. The inequality therefore still has genuine slack — the accrued
+    ///      fees — but no longer any that was simply asserted.
     function invariant_userOutflowNeverExceedsInflow() public view {
-        assertLe(handler.ghostTokensOut(), handler.ghostTokensIn() + SEED + DEPOSIT, "money out > money in");
+        assertLe(handler.ghostTokensOut(), handler.ghostTokensIn() + SEED, "money out > money in");
     }
 
     /// @notice No arithmetic path may Panic. These are INV-3's teeth: a `redeem` that underflows
@@ -290,9 +350,12 @@ contract MarketInvariantsTest is Fixtures {
         console.log("markDisputed        ", handler.callsDispute());
         console.log("settle              ", handler.callsSettle());
         console.log("fail                ", handler.callsFail());
+        console.log("  of which permless ", handler.callsFailPermissionless());
         console.log("void                ", handler.callsVoid());
         console.log("redeem              ", handler.callsRedeem());
         console.log("liquidate           ", handler.callsLiquidate());
+        console.log("sweepUnclaimed      ", handler.callsSweep());
+        console.log("exit rejected swept ", handler.callsPostSweepRejected());
         console.log("gated / landed      ", handler.gatedActions(), handler.landedActions());
         console.log("tokens in / out     ", handler.ghostTokensIn(), handler.ghostTokensOut());
         console.log("worst INV-9 drift   ", handler.worstInv9Drift(), "bound", handler.worstInv9Bound());
@@ -351,6 +414,12 @@ contract MarketInvariantsTest is Fixtures {
 
         _assertTradingCoverage();
         assertGt(handler.callsFail(), 0, "fail never landed");
+        // `_warpPastTradingEnd` lands exactly on `settlementDeadline` (8h window + 4×3h), so this
+        // path takes the PERMISSIONLESS branch of `fail()` — the one a real deployment falls back
+        // on when the committee never reports. The module-authorised branch is covered by
+        // `MarketLifecycleTest.test_anyoneCanFailAfterSettlementDeadline` and by the random
+        // campaign, which reaches `fail` before the deadline too.
+        assertEq(handler.callsFailPermissionless(), handler.callsFail(), "fail did not take the permissionless path");
         assertGt(handler.callsPausedLiquidate(), 0, "liquidate while paused never landed");
         assertGt(handler.callsLiquidate(), 0, "liquidate never landed");
         assertTrue(handler.allPositionsCleared(), "positions still remain");
@@ -386,6 +455,39 @@ contract MarketInvariantsTest is Fixtures {
         _logCoverage();
     }
 
+    /// @notice The post-sweep regime, driven through the HANDLER rather than through a directed
+    ///         fixture — so that the same gates the random campaign relies on are the ones under
+    ///         test.
+    /// @dev One claimant exits before the window closes and the rest never do; that asymmetry is
+    ///      the entire point of the sweep and is what leaves unclaimed liability behind.
+    function test_coverage_sweepPath() public {
+        _tradePhase();
+        _warpPastTradingEnd();
+        _advanceThroughProposedAndDisputed();
+        handler.resolve(2); // settle
+        handler.claim(0); // exactly one claimant exits in time
+
+        handler.sweep(0); // 0 % 6 == 0 -> sweeps; carries its own 365-day warp
+        assertGt(handler.callsSweep(), 0, "sweepUnclaimed never landed");
+        assertEq(m.poolWad(), 0, "the pool is not empty after a sweep");
+        assertGe(usdc.balanceOf(address(m)), m.collateralOwed(), "INV-2: insolvent after the sweep");
+
+        // Every remaining exit — plain, and while paused — must now reject with AlreadySwept.
+        for (uint256 i = 0; i < 4; ++i) {
+            handler.claim(i);
+        }
+        handler.togglePause();
+        handler.exitWhilePaused(0, 0);
+        handler.togglePause();
+
+        assertGt(handler.callsPostSweepRejected(), 0, "no exit was ever probed after the sweep");
+        assertEq(handler.sweepLeaks(), 0, "an exit did not reject cleanly after the sweep");
+        assertEq(handler.inv10Violations(), 0, "INV-10 violated on the sweep path");
+        assertFalse(handler.sawArithmeticPanic(), "an exit Panicked after the sweep");
+        assertEq(handler.unexpectedReverts(), 0, "an action with satisfied preconditions still reverted");
+        _logCoverage();
+    }
+
     function _tradePhase() internal {
         for (uint256 i = 0; i < 8; ++i) {
             uint256 s = uint256(keccak256(abi.encode("brier-invariant", i)));
@@ -401,11 +503,16 @@ contract MarketInvariantsTest is Fixtures {
         }
     }
 
+    /// @dev Warps until the SETTLEMENT DEADLINE, not merely past `tradingEnd`. Derived from the
+    ///      market rather than from a fixed count of 3-hour hops: the old `4 × 3 hours` was
+    ///      exactly enough for an 8-hour trading window and silently stops being enough the
+    ///      moment `INV_TRADING_WINDOW` moves.
     function _warpPastTradingEnd() internal {
-        for (uint256 i = 0; i < 4; ++i) {
+        while (block.timestamp < m.settlementDeadline()) {
             handler.warpForward(3 hours);
         }
         assertGe(block.timestamp, m.tradingEnd(), "failed to get past tradingEnd");
+        assertGe(block.timestamp, m.settlementDeadline(), "failed to get past settlementDeadline");
     }
 
     function _advanceThroughProposedAndDisputed() internal {
@@ -430,6 +537,36 @@ contract MarketInvariantsTest is Fixtures {
         assertEq(handler.inv9Violations(), 0, "INV-9 violated on the coverage path");
         assertEq(handler.inv10Violations(), 0, "INV-10 violated on the coverage path");
         assertEq(handler.pauseLeaks(), 0, "the pause leaked on the coverage path");
+    }
+}
+
+/// @title MarketInvariantsZeroFeeTest
+/// @notice The whole INV-1..10 campaign again, on a market born with `FEE_BPS = 0`.
+///
+/// @dev Not a duplicate run for its own sake. Until now every STATEFUL invariant in this repo was
+///      exercised against a 1% fee, and a 1% fee papers over almost every rounding error: a
+///      round-trip can only profit if its rounding error exceeds roughly 2% of the trade value,
+///      and the pool is handed a 1% cushion on every buy and every sell. With the fee removed,
+///      the only thing standing between the pool and a leak is the direction discipline — money
+///      in through `ceilDiv`, money out through floor division.
+///
+///      The observation was already written down for ONE directed fuzz test
+///      (`testFuzz_INV5_roundTripNeverProfitsWithoutFee`) and then not applied to the stateful
+///      suite, where an arbitrary order flow can compose thousands of roundings that a two-call
+///      directed test cannot. `FEE_BPS = 0` is inside DeployLib's [0, 300] bounds, so this is a
+///      configuration the protocol may genuinely ship, not a synthetic one.
+///
+///      Everything else — the handler, the selectors, the invariants, the coverage gates — is
+///      inherited unchanged, so the two campaigns cannot drift apart.
+/// forge-config: default.invariant.fail-on-revert = true
+/// forge-config: ci.invariant.fail-on-revert = true
+contract MarketInvariantsZeroFeeTest is MarketInvariantsTest {
+    function _campaignFeeBps() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function test_theCampaignReallyRunsWithoutAFee() public view {
+        assertEq(m.feeBps(), 0, "the fee was not actually removed");
     }
 }
 
@@ -816,23 +953,23 @@ contract MarketInvariantsDirectedTest is Fixtures {
 
     // ── the post-sweep regime ────────────────────────────────────────────────
 
-    /// @notice `sweepUnclaimed` is deliberately absent from the stateful handler, and the
-    ///         reason is now a time horizon rather than a defect.
+    /// @notice The post-sweep regime, from the outside: still solvent, pool empty, and no exit
+    ///         for any holder can produce an arithmetic Panic.
     ///
-    /// @dev It used to be excluded because `redeem` panicked afterwards, and a known Panic
-    ///      would have forced `invariant_noArithmeticPanic` to be weakened — INV-3's teeth.
-    ///      That Panic is gone: both exits reject with `AlreadySwept`.
+    /// @dev `sweepUnclaimed` used to be absent from the stateful handler — first because `redeem`
+    ///      panicked afterwards and a known Panic would have forced `invariant_noArithmeticPanic`
+    ///      to be weakened (INV-3's teeth), and then, once that was fixed, because
+    ///      `SWEEP_UNCLAIMED_AFTER` is 365 days while `warpForward` is capped at 3 hours and a
+    ///      fuzz sequence could never reach the window.
     ///
-    ///      It stays out for a different reason. `SWEEP_UNCLAIMED_AFTER` is 365 days while
-    ///      `warpForward` is capped at 3 hours over a depth-128 run, so a fuzz sequence can
-    ///      advance at most ~35 hours and could never reach the window. An action that never
-    ///      lands is decoration, and `invariant_handlerCallsLandAsPredicted` exists precisely
-    ///      to catch decoration. Worse, an action that warped straight to the window would
-    ///      close the claim window mid-run and spend the remaining depth on rejected calls.
+    ///      It is no longer absent. `MarketHandler.sweep` carries its own warp, so the largest
+    ///      single money movement in this contract — the entire collateral balance, in one
+    ///      transfer — is now inside the random campaign, guarded by
+    ///      `invariant_claimWindowClosesCleanly` and reached by `test_coverage_sweepPath`.
     ///
-    ///      So the regime is covered here, directly and deterministically: after a sweep the
-    ///      market is still solvent, the pool is empty, and NO exit for ANY holder can produce
-    ///      an arithmetic Panic.
+    ///      This test stays, and is not redundant: it asserts the regime through the MARKET's own
+    ///      interface with `expectRevert` bound to the selector, whereas the handler necessarily
+    ///      observes it through try/catch and a counter.
     function test_postSweepRegimeIsConsistentAndPanicFree() public {
         _fund(alice, 1_000_000e6, address(m));
         _fund(bob, 1_000_000e6, address(m));

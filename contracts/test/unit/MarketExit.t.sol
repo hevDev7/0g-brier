@@ -231,7 +231,10 @@ contract MarketExitTest is Fixtures {
     // INV-3's teeth.
     //
     // Both exits now reject with `AlreadySwept`, which is a statement rather than a
-    // symptom.
+    // symptom — and the damage elsewhere has been repaired too: `sweepUnclaimed` is back
+    // inside the invariant handler (`MarketHandler.sweep`, which carries its own warp past
+    // the 365-day window), with `invariant_claimWindowClosesCleanly` asserting that every
+    // exit after it rejects with THIS selector rather than succeeding or panicking.
 
     function _sweep() internal {
         vm.warp(block.timestamp + config.params(ConfigKeys.SWEEP_UNCLAIMED_AFTER));

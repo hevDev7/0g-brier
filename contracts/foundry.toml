@@ -18,9 +18,13 @@ fs_permissions = [
 [profile.default.fuzz]
 runs = 512
 
+# 512 × 256 = 131,072 calls per invariant, across two campaigns (1% fee and 0% fee).
+# MEASURED, not guessed — see the note at the top of test/invariant/MarketInvariants.t.sol.
+# `fail_on_revert = false` is the FILE-level default and is overridden back to `true` inline by
+# the market invariant contracts, whose handler wraps every call in try/catch itself.
 [profile.default.invariant]
-runs            = 128
-depth           = 64
+runs            = 512
+depth           = 256
 fail_on_revert  = false
 
 # Release profile: via_ir on. CI must build this profile so that
@@ -32,9 +36,13 @@ optimizer_runs = 20000
 [profile.ci.fuzz]
 runs = 4096
 
+# 4× the default in each dimension, the same ratio this profile carried before.
+# MEASURED on a 32-core box: 4m32s wall / 61m CPU for the whole of test/invariant, which is
+# 1,048,576 calls per invariant × 15 invariants × 2 campaigns ≈ 31M market calls. Divide the CPU
+# figure by the runner's core count to budget it; a 4-core runner is roughly 15 minutes.
 [profile.ci.invariant]
-runs  = 512
-depth = 128
+runs  = 2048
+depth = 512
 
 [fmt]
 line_length = 120

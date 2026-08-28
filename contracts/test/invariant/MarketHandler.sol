@@ -12,6 +12,7 @@ import {ConfigRegistry} from "../../src/core/ConfigRegistry.sol";
 import {ConfigKeys} from "../../src/core/ConfigKeys.sol";
 import {DPMMath} from "../../src/math/DPMMath.sol";
 import {IMarket} from "../../src/interfaces/IMarket.sol";
+import {InvariantBounds} from "../helpers/InvariantBounds.sol";
 
 /// @title MarketHandler
 /// @notice Runs BOUNDED random actions against a single Market and records ghost variables
@@ -88,6 +89,12 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
     uint256 public callsVoid;
     uint256 public callsRedeem;
     uint256 public callsLiquidate;
+    /// @dev `fail()` taken through the PERMISSIONLESS branch (any caller, past the settlement
+    ///      deadline) rather than through the resolution module. Counted separately because the
+    ///      two are different authorisation paths through the same state transition.
+    uint256 public callsFailPermissionless;
+    uint256 public callsSweep;
+    uint256 public callsPostSweepRejected;
 
     // ── handler efficiency accounting ────────────────────────────────────────
     uint256 public gatedActions;
@@ -117,6 +124,10 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
     uint256 public inv9Violations;
     uint256 public inv10Violations;
     uint256 public pauseLeaks;
+    /// @dev The post-sweep dual of `pauseLeaks`: once `sweptAt != 0` EVERY exit must reject with
+    ///      `AlreadySwept`. Succeeding would burn a holder's shares for nothing, and a Panic —
+    ///      which is what `redeem` used to answer with — would be swallowed by the try/catch.
+    uint256 public sweepLeaks;
     uint256 public worstInv9Drift;
     uint256 public worstInv9Bound;
 
@@ -176,6 +187,28 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         return true;
     }
 
+    /// @notice The RECIPIENT of a trade — the caller itself about three times in four, another
+    ///         TRADER otherwise.
+    ///
+    /// @dev Every `to` returned here is a claimant, and that is load-bearing rather than
+    ///      incidental: INV-4's derivation needs `Σ_h a_{h,i} = qᵢ` exactly, which holds only
+    ///      while every share ever minted is held by one of the four addresses
+    ///      `allPositionsCleared` inspects.
+    ///
+    ///      The CREATOR is deliberately excluded. Crediting it with bought shares or with an
+    ///      `addLiquidity` position would move its holding off the symmetric seed `(s, s)`, and
+    ///      the 1 − 1/√2 constant INV-7 asserts is valid ONLY for a symmetric provider — the
+    ///      general bound is `deposit × min(p₀,p₁) at entry`. Sending to the creator would not
+    ///      break the protocol; it would break the invariant's premise, silently.
+    ///
+    ///      Callers pass the ACTOR seed, not the amount seed. The amount seed is already spent on
+    ///      `_bound(seed, lo, hi)`, whose modular reduction shares a factor with 4 whenever
+    ///      `hi − lo + 1` is even — which would tie "sends to a third party" to a fixed residue
+    ///      of the trade size. The actor seed is reduced mod 3, and 3 and 4 are coprime.
+    function _recipient(address self, uint256 seed) internal view returns (address) {
+        return seed % 4 == 0 ? traders[(seed >> 8) % 3] : self;
+    }
+
     // ── actions ──────────────────────────────────────────────────────────────
 
     function buy(uint256 actorSeed, uint256 outcomeSeed, uint256 amountSeed) external {
@@ -185,10 +218,11 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         uint256 amount = _boundTradeSize(o, amountSeed);
         if (amount == 0) return;
         if (!_buyQuoteClearsMinimum(o, amount)) return;
+        address to = _recipient(a, actorSeed);
 
         ++gatedActions;
         vm.prank(a);
-        try market.buy(o, amount, type(uint256).max, a) returns (uint256 paid) {
+        try market.buy(o, amount, type(uint256).max, to) returns (uint256 paid) {
             ghostTokensIn += paid;
             ++callsBuy;
             ++landedActions;
@@ -207,10 +241,11 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         if (floorShares == 0 || held < floorShares) return;
         uint256 amount = _bound(amountSeed, floorShares, held);
         if (!_sellQuoteClearsMinimum(o, amount)) return;
+        address to = _recipient(a, actorSeed);
 
         ++gatedActions;
         vm.prank(a);
-        try market.sell(o, amount, 0, a) returns (uint256 got) {
+        try market.sell(o, amount, 0, to) returns (uint256 got) {
             ghostTokensOut += got;
             ++callsSell;
             ++landedActions;
@@ -233,10 +268,13 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         uint256 pBefore0 = market.probability(0);
         uint256 pBefore1 = market.probability(1);
         uint256 balBefore = usdc.balanceOf(a);
+        // The seed position is credited to `to`, while the collateral is pulled from
+        // `msg.sender` — so `removeLiquidity` is thereafter callable only by `to`.
+        address to = _recipient(a, actorSeed);
 
         ++gatedActions;
         vm.prank(a);
-        try market.addLiquidity(amount, 0, a) returns (uint256[2] memory) {
+        try market.addLiquidity(amount, 0, to) returns (uint256[2] memory) {
             ghostTokensIn += balBefore - usdc.balanceOf(a);
             ++callsAddLiquidity;
             ++landedActions;
@@ -254,10 +292,11 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         if (held[0] == 0 || held[1] == 0) return;
         uint256 lambda = _boundLambda(held, lambdaSeed);
         if (lambda == 0) return;
+        address to = _recipient(a, actorSeed);
 
         ++gatedActions;
         vm.prank(a);
-        try market.removeLiquidity(lambda, 0, a) returns (uint256 got) {
+        try market.removeLiquidity(lambda, 0, to) returns (uint256 got) {
             ghostTokensOut += got;
             ++callsRemoveLiquidity;
             ++landedActions;
@@ -403,9 +442,16 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
             }
         } else if (kind == 1) {
             ++gatedActions;
-            vm.prank(resolutionModule);
+            // `fail()` has TWO authorisation paths: the resolution module at any time, or
+            // ANYONE once `settlementDeadline` has passed. Until now the handler only ever
+            // pranked the module, so the permissionless branch — the one a real deployment
+            // relies on when the committee goes dark, and the one that snapshots the
+            // liquidation prices and distributes the fees — was never executed statefully.
+            bool permissionless = block.timestamp >= market.settlementDeadline();
+            vm.prank(permissionless ? traders[seed % 3] : resolutionModule);
             try market.fail() {
                 ++callsFail;
+                if (permissionless) ++callsFailPermissionless;
                 ++landedActions;
                 _snapshotResolution();
             } catch (bytes memory err) {
@@ -425,7 +471,55 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         }
     }
 
+    /// @notice The claim window closes for good, and whatever nobody claimed goes to the Treasury.
+    ///
+    /// @dev `sweepUnclaimed` used to be absent from this handler on the grounds that
+    ///      `SWEEP_UNCLAIMED_AFTER` is 365 days while `warpForward` is capped at 3 hours, so a
+    ///      fuzz sequence could never reach the window. That reasoning is sound about
+    ///      `warpForward` and wrong about the conclusion: the fix is for the action to carry its
+    ///      OWN warp, not for the protocol's largest single money movement — the entire
+    ///      collateral balance, in one transfer — to sit outside the stateful suite.
+    ///
+    ///      Three things make it land as predicted rather than poisoning
+    ///      `invariant_handlerCallsLandAsPredicted`:
+    ///        • the balance is checked BEFORE the warp, because `sweepUnclaimed` rejects a zero
+    ///          balance with `ZeroAmount` — and a zero TOKEN balance is entirely reachable with
+    ///          `poolWad` still positive, since leftover dust below `scale` is worth 0 tokens;
+    ///        • the warp is taken only once the decision to sweep is final, so a declined
+    ///          selection does not silently advance the clock a year;
+    ///        • `seed % 6` rate-limits it. That is a rate limiter, NOT a tolerance: it exists so
+    ///          that the remaining depth of a run is not spent entirely in the post-sweep
+    ///          regime, and both orderings (sweep before any claim, sweep after some claims)
+    ///          still occur across a campaign.
+    function sweep(uint256 seed) external {
+        if (market.sweptAt() != 0) return;
+        IMarket.Status s = market.status();
+        if (s != IMarket.Status.Settled && s != IMarket.Status.Failed && s != IMarket.Status.Voided) return;
+        if (seed % 6 != 0) return;
+        if (usdc.balanceOf(address(market)) == 0) return; // would revert ZeroAmount
+
+        uint256 opensAt = uint256(market.resolvedAt()) + config.params(ConfigKeys.SWEEP_UNCLAIMED_AFTER);
+        if (block.timestamp < opensAt) vm.warp(opensAt);
+
+        ++gatedActions;
+        try market.sweepUnclaimed() {
+            ++callsSweep;
+            ++landedActions;
+        } catch (bytes memory err) {
+            _recordFailure(err);
+        }
+    }
+
     function claim(uint256 actorSeed) external {
+        // After a sweep the claim window is shut for everyone. That is not a reason to stop
+        // exercising the exits — it is the reason to keep exercising them: this is the regime in
+        // which `redeem` once answered with an arithmetic Panic and `liquidate` once succeeded
+        // and burned the caller's shares for nothing.
+        if (market.sweptAt() != 0) {
+            _requireClaimWindowClosed(actorSeed);
+            return;
+        }
+
         IMarket.Status s = market.status();
         address a = claimants(actorSeed);
 
@@ -451,6 +545,49 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
                 _recordFailure(err);
             }
         }
+    }
+
+    /// @dev The post-sweep dual of `_requireEntriesBlockedWhilePaused`. `AlreadySwept` is the
+    ///      FIRST statement of both `redeem` and `liquidate`, ahead of every amount check, so a
+    ///      holder with a real position must see exactly that selector — not `NothingToClaim`,
+    ///      which would mean the shares had already been consumed, and above all not a Panic.
+    ///      Deliberately without `vm.expectRevert`: that cheatcode binds to the next external
+    ///      call and its failure would be swallowed by the runner.
+    function _requireClaimWindowClosed(uint256 actorSeed) internal {
+        IMarket.Status s = market.status();
+        for (uint256 i = 0; i < 4; ++i) {
+            // `% 4` BEFORE the addition, exactly as `_pausedRedeem`/`_pausedLiquidate` do:
+            // `actorSeed` is raw fuzzer input and reaches `type(uint256).max`, so `actorSeed + i`
+            // overflows. `fail_on_revert = true` caught this on the first deep run.
+            address a = claimants(actorSeed % 4 + i);
+            if (positionOf(a) == 0) continue;
+
+            if (s == IMarket.Status.Settled) {
+                vm.prank(a);
+                try market.redeem(a) returns (uint256) {
+                    ++sweepLeaks;
+                } catch (bytes memory err) {
+                    _scoreSweptRejection(err);
+                }
+            } else {
+                vm.prank(a);
+                try market.liquidate(a) returns (uint256) {
+                    ++sweepLeaks;
+                } catch (bytes memory err) {
+                    _scoreSweptRejection(err);
+                }
+            }
+            return;
+        }
+    }
+
+    function _scoreSweptRejection(bytes memory err) internal {
+        if (_selectorOf(err) == Market.AlreadySwept.selector) {
+            ++callsPostSweepRejected;
+            return;
+        }
+        ++sweepLeaks;
+        if (_selectorOf(err) == PANIC_SELECTOR) sawArithmeticPanic = true;
     }
 
     // ── internal: gates & bounds ─────────────────────────────────────────────
@@ -540,10 +677,12 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         }
     }
 
-    /// @dev INV-9. The derivation of the bound lives in `MarketInvariants.t.sol`
-    ///      (`invariant_INV9_addLiquidityDoesNotMoveProbability`); here it is only applied.
+    /// @dev INV-9. The derivation of the bound lives in `InvariantBounds.inv9ProbabilityDrift`;
+    ///      here it is only applied. It is CALLED rather than restated — this file used to carry
+    ///      its own copy of `ceilDiv(8·WAD/(q₀+q₁)) + 2`, which is precisely the arrangement in
+    ///      which a corrected bound gets corrected in one place and not the other.
     function _checkInv9(uint256[2] memory qBefore, uint256 p0, uint256 p1) internal {
-        uint256 tol = Math.ceilDiv(8 * WAD, qBefore[0] + qBefore[1]) + 2;
+        uint256 tol = InvariantBounds.inv9ProbabilityDrift(qBefore);
         uint256 d0 = _absDiff(market.probability(0), p0);
         uint256 d1 = _absDiff(market.probability(1), p1);
         uint256 d = Math.max(d0, d1);
@@ -653,7 +792,12 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         return false;
     }
 
+    /// @dev The sweep gate here is NOT a weakening of INV-10. INV-10 says the PAUSE never closes
+    ///      an exit; `sweepUnclaimed` closes it deliberately and permanently, a year after
+    ///      resolution, and that closure is asserted separately through `sweepLeaks`. Counting it
+    ///      as an INV-10 violation would blame the pause for something the pause did not do.
     function _pausedRedeem(uint256 seed) internal returns (bool) {
+        if (market.sweptAt() != 0) return false;
         uint8 w = market.winningOutcome();
         for (uint256 i = 0; i < 4; ++i) {
             address a = claimants(seed % 4 + i);
@@ -675,7 +819,9 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
         return false;
     }
 
+    /// @dev See the note on `_pausedRedeem` for why the sweep is gated out rather than counted.
     function _pausedLiquidate(uint256 seed) internal returns (bool) {
+        if (market.sweptAt() != 0) return false;
         for (uint256 i = 0; i < 4; ++i) {
             address a = claimants(seed % 4 + i);
             if (positionOf(a) == 0) continue;
