@@ -8,7 +8,7 @@ export default function RisksPage() {
     <DocPage slug="risks">
         <P>Plainly, because each of these has cost somebody something.</P>
 
-        <div className="flex max-w-2xl flex-col gap-3">
+        <div className="flex flex-col gap-3">
           {[
             [
               "You misread a price as a probability",

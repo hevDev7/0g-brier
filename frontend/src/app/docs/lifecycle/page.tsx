@@ -12,7 +12,7 @@ export default function LifecyclePage() {
           because the way you get your money back is different in each.
         </P>
 
-        <div className="max-w-2xl">
+        <div>
           <StateRow
             state="Open"
             tone="open"

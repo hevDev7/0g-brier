@@ -4,6 +4,13 @@ import {AlertTriangle, Info, Lightbulb, Terminal} from "lucide-react";
 /**
  * The pieces the documentation is built from.
  *
+ * Nothing here caps its own width. Every block fills the column, so the body
+ * reaches the same right edge as the header — which is what the rest of the app
+ * does and what the docs alone did not. The cost is a long measure on a wide
+ * window: prose was held at roughly ninety characters a line and now runs to
+ * about a hundred and fifty, where the eye has further to travel to find the
+ * start of the next line. That was the trade, made deliberately.
+ *
  * Kept apart from the pages so each page reads as prose and structure rather
  * than as markup, and so the two shapes that carry the teaching — a worked
  * number and a correction of an expectation — are defined once and cannot drift
@@ -16,7 +23,7 @@ import {AlertTriangle, Info, Lightbulb, Terminal} from "lucide-react";
  */
 
 export function P({children}: {children: ReactNode}) {
-  return <p className="max-w-2xl text-[14px] leading-relaxed text-text-muted">{children}</p>;
+  return <p className="text-[14px] leading-relaxed text-text-muted">{children}</p>;
 }
 
 export function H3({children}: {children: ReactNode}) {
@@ -47,7 +54,7 @@ export function Note({
 }) {
   const {icon: Icon, border, text} = NOTE_KINDS[kind];
   return (
-    <aside className={`max-w-2xl rounded-r border-l-2 bg-bg-sunken px-4 py-3 ${border}`}>
+    <aside className={`rounded-r border-l-2 bg-bg-sunken px-4 py-3 ${border}`}>
       <p className={`mb-1 flex items-center gap-2 text-[13px] font-bold ${text}`}>
         <Icon size={14} aria-hidden />
         {title}
@@ -75,7 +82,7 @@ export function Correction({
   why: ReactNode;
 }) {
   return (
-    <div className="max-w-2xl overflow-hidden rounded border border-border">
+    <div className="overflow-hidden rounded border border-border">
       <div className="grid grid-cols-1 sm:grid-cols-2">
         <div className="border-b border-border p-4 sm:border-r sm:border-b-0">
           <p className="eyebrow mb-2 text-text-faint">You might expect</p>
@@ -96,7 +103,7 @@ export function Correction({
 /** A worked calculation. Numbers first, in mono, so they can be checked. */
 export function Worked({title, rows, note}: {title: string; rows: [string, string][]; note?: ReactNode}) {
   return (
-    <div className="max-w-2xl rounded border border-border">
+    <div className="rounded border border-border">
       <p className="border-b border-border px-4 py-2.5 text-[13px] font-bold text-text">{title}</p>
       <dl className="divide-y divide-border">
         {rows.map(([k, v]) => (
@@ -126,7 +133,7 @@ export function Step({
   children: ReactNode;
 }) {
   return (
-    <div className="flex max-w-2xl gap-4">
+    <div className="flex gap-4">
       <span
         aria-hidden
         className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border-strong font-mono text-[12px] font-bold text-text"
@@ -152,7 +159,7 @@ export function Step({
  */
 export function Run({cwd, children}: {cwd: string; children: string}) {
   return (
-    <div className="max-w-2xl overflow-hidden rounded border border-border">
+    <div className="overflow-hidden rounded border border-border">
       <p className="flex items-center gap-2 border-b border-border bg-bg-sunken px-3 py-1.5 font-mono text-[11px] text-text-muted">
         <Terminal size={12} aria-hidden className="shrink-0" />
         <span className="truncate">{cwd}</span>
@@ -167,7 +174,7 @@ export function Run({cwd, children}: {cwd: string; children: string}) {
 /** A shell command, or a small block of one. */
 export function Cmd({children}: {children: string}) {
   return (
-    <pre className="max-w-2xl overflow-x-auto rounded border border-border bg-bg-sunken p-3 font-mono text-[12.5px] leading-relaxed text-text">
+    <pre className="overflow-x-auto rounded border border-border bg-bg-sunken p-3 font-mono text-[12.5px] leading-relaxed text-text">
       <code>{children}</code>
     </pre>
   );

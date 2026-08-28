@@ -28,7 +28,7 @@ export function DocPage({slug, children}: {slug: string; children: ReactNode}) {
         <h1 className="text-[24px] leading-tight font-extrabold tracking-[-0.03em] text-balance text-text md:text-[30px]">
           {page.title}
         </h1>
-        <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-text-muted">{page.blurb}</p>
+        <p className="mt-2 text-[13px] leading-relaxed text-text-muted">{page.blurb}</p>
       </header>
 
       {/* The rail scans inside this. */}
