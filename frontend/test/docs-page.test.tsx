@@ -188,6 +188,36 @@ describe("what each page has to say", () => {
     }
   });
 
+  /**
+   * The dilution table is computed at render from `@brier/protocol`, so this
+   * checks the CLAIM the page makes about it rather than the digits: that profit
+   * keeps rising while the return on each unit staked collapses. Those two moving
+   * in opposite directions is the entire point, and a table that lost it would
+   * still look like a table.
+   */
+  it("payout shows profit rising while the return per unit collapses", () => {
+    const {container} = render(<Payout />);
+    const rows = [...container.querySelectorAll("tbody tr")].map((tr) =>
+      [...tr.querySelectorAll("td")].map((td) => Number(td.textContent!.replace(/[^0-9.-]/g, ""))),
+    );
+    // The prose names the count, so a row added or removed must break here
+    // rather than leaving the sentence quietly wrong.
+    expect(rows.length).toBe(6);
+    expect(container.textContent).toContain("at six sizes");
+
+    const profit = rows.map((r) => r[4]!);
+    const perUnit = rows.map((r) => r[5]!);
+    for (let i = 1; i < rows.length; i++) {
+      expect(profit[i], `profit fell from row ${i - 1} to ${i}`).toBeGreaterThan(profit[i - 1]!);
+      expect(perUnit[i], `per-unit rose from row ${i - 1} to ${i}`).toBeLessThan(perUnit[i - 1]!);
+    }
+    // The sentence the page draws from it, checked against the table itself.
+    const [first, last] = [rows[0]!, rows[rows.length - 1]!];
+    expect(Math.round(last[0]! / first[0]!)).toBe(80);          // 80x the stake
+    expect(Math.round(last[4]! / first[4]!)).toBe(23);          // 23x the profit
+    expect(container.textContent).toMatch(/before the 1% fee/i);
+  });
+
   it("payout shows the live measurement of a prize shrinking under its own order", () => {
     const text = textOf("payout");
     expect(text).toContain("1.4142×");
