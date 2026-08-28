@@ -26,18 +26,56 @@ function reached(status: MarketStatus): {closed: boolean; settled: boolean} {
   }
 }
 
+/**
+ * What the last milestone is CALLED depends on whether the market got there.
+ *
+ * Until a market resolves, the thing ahead of it is a deadline. Once it has
+ * resolved, the deadline is not what happened — the settlement is. This panel
+ * printed "Settlement deadline — reached" for both, and on a market that settled
+ * six minutes early that was wrong twice over: the deadline had not arrived, and
+ * the market had never been waiting on it. Only `Failed` genuinely reaches a
+ * deadline, because running out of time is precisely what `fail()` means.
+ */
+function resolutionLabel(status: MarketStatus): string | null {
+  switch (status) {
+    case "Proposed":
+    case "Open":
+    case "Closed":
+    case "Disputed":
+      return null;
+    case "Settled":
+      return "Settled";
+    case "Failed":
+      return "Failed — settlement deadline missed";
+    case "Voided":
+      return "Voided";
+  }
+}
+
 export function Lifecycle({market, mode}: {market: MarketDetail; mode: DataMode}) {
   const {closed, settled} = reached(market.status);
+  const resolution = resolutionLabel(market.status);
   const steps: {label: string; at: number | null; done: boolean}[] = [
     {label: "Created", at: market.createdAt, done: true},
     {label: "Trading closes", at: market.tradingEnd, done: closed},
-    {label: "Settlement deadline", at: market.settlementDeadline, done: settled},
+    // `resolvedAt` is the moment `settle`/`fail`/`void` landed. Falling back to
+    // the deadline when a mode cannot read it keeps the step honest about WHAT
+    // happened even where it cannot say when.
+    resolution === null
+      ? {label: "Settlement deadline", at: market.settlementDeadline, done: settled}
+      : {label: resolution, at: market.resolvedAt ?? market.settlementDeadline, done: true},
   ];
 
   // Not ornament: this gap is the window in which a settlement can still be
   // proposed and disputed, and therefore how long an agent's funds stay locked.
   // An observer has a right to see it as a duration, not to subtract two dates.
   const disputeWindow = market.settlementDeadline - market.tradingEnd;
+
+  // Once it is over, the interesting number is no longer how long the window WAS
+  // but how much of it the resolver actually used. A market that settled with
+  // time to spare and one that was rescued at the buzzer look identical
+  // otherwise, and they are not the same market to hold.
+  const early = market.resolvedAt === null ? null : market.settlementDeadline - market.resolvedAt;
 
   return (
     <Panel testId="lifecycle">
@@ -85,9 +123,25 @@ export function Lifecycle({market, mode}: {market: MarketDetail; mode: DataMode}
         ))}
       </ol>
       <p className="border-t border-border px-4 py-2.5 text-[12px] leading-relaxed text-text-muted md:px-5">
-        Dispute window <span className="font-mono text-text">{formatCountdown(disputeWindow)}</span>{" "}
-        — the time between trading closing and the settlement deadline, during which funds stay
-        locked.
+        {early === null ? (
+          <>
+            Dispute window{" "}
+            <span className="font-mono text-text">{formatCountdown(disputeWindow)}</span> — the time
+            between trading closing and the settlement deadline, during which funds stay locked.
+          </>
+        ) : early > 0 ? (
+          <>
+            Resolved <span className="font-mono text-text">{formatCountdown(early)}</span> before the
+            deadline, out of a{" "}
+            <span className="font-mono text-text">{formatCountdown(disputeWindow)}</span> window. The
+            deadline itself was never reached.
+          </>
+        ) : (
+          <>
+            Resolved at the deadline, on a{" "}
+            <span className="font-mono text-text">{formatCountdown(disputeWindow)}</span> window.
+          </>
+        )}
       </p>
     </Panel>
   );

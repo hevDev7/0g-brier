@@ -44,9 +44,35 @@ describe("Lifecycle", () => {
 
   it("a settled market has reached every step", () => {
     render(<Lifecycle market={settled} mode="mock" />);
-    for (const label of ["Created", "Trading closes", "Settlement deadline"]) {
+    for (const label of ["Created", "Trading closes", "Settled"]) {
       expect(step(label)).not.toHaveTextContent("not yet reached");
     }
+  });
+
+  /**
+   * A settlement that beat its deadline is the good case, and the panel said the
+   * deadline had been "reached" — of a market resolved with time to spare, and on
+   * a live page where the deadline was still six minutes away. A deadline is
+   * something a market runs INTO, which is what `fail()` is for; a settlement is
+   * something that happens instead.
+   */
+  it("names the settlement rather than the deadline it never reached", () => {
+    const early: MarketDetail = {
+      ...settled,
+      resolvedAt: settled.settlementDeadline - 3600,
+    };
+    render(<Lifecycle market={early} mode="mock" />);
+    expect(step("Settled")).toHaveTextContent(formatTimestamp(early.resolvedAt!));
+    expect(screen.queryByText("Settlement deadline")).toBeNull();
+    // And says by how much, because "settled at the buzzer" and "settled with a
+    // day to spare" are not the same market to have held.
+    expect(screen.getByText(/before the deadline/)).toHaveTextContent("1h 0m");
+  });
+
+  it("says a failed market did run out of time", () => {
+    const outOfTime: MarketDetail = {...settled, status: "Failed"};
+    render(<Lifecycle market={outOfTime} mode="mock" />);
+    expect(step("Failed")).toHaveTextContent("settlement deadline missed");
   });
 
   /**

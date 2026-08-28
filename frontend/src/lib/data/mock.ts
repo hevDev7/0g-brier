@@ -310,6 +310,7 @@ const FIXTURE_RECEIPT: SettlementReceipt = {
   provider: "0x0000000000000000000000000000000000000000",
   chatId: "stub-0001",
   simulated: true,
+    viaCommittee: true,
 };
 
 /** Nothing to report yet — resolution has not started, it is not being hidden. */
@@ -323,6 +324,7 @@ const PENDING_RECEIPT: SettlementReceipt = {
   provider: "0x0000000000000000000000000000000000000000",
   chatId: "",
   simulated: true,
+    viaCommittee: true,
 };
 
 export class MockSource implements DataSource {

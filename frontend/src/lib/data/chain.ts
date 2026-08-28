@@ -588,8 +588,17 @@ export class ChainSource implements DataSource {
       args: [address],
     });
     if (receiptRoot.toLowerCase() === ZERO_ROOT) return null;
+    // Read beside the root rather than inferred from it: a receipt says what the
+    // resolver claims, and this says what the protocol recorded.
+    const viaCommittee = await this.client.readContract({
+      address: moduleAddress,
+      abi: RESOLUTION_ABI,
+      functionName: "viaCommittee",
+      args: [address],
+    });
 
     const receipt = await specs.getReceipt(receiptRoot as Hex);
+    if (receipt !== null) return {...receipt, viaCommittee};
     // The chain says a receipt exists and storage cannot produce it. That is an
     // anomaly, not an absence, and reporting it as "no receipt was anchored"
     // would hide a broken record behind a true-sounding sentence.

@@ -108,6 +108,10 @@ function parseReceipt(json: unknown): SettlementReceipt | null {
 
   const provider = asString(inference.providerAddress);
   return {
+    // FALSE unless the chain says otherwise, and the chain is read separately.
+    // This document is written by whoever settled the market, so letting it
+    // declare itself a committee decision would make the flag worth nothing.
+    viaCommittee: false,
     outcome: outcome as Outcome | null,
     votes,
     judgeModel: model,

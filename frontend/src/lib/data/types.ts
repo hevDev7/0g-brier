@@ -222,6 +222,15 @@ export interface SettlementReceipt {
   chatId: string | null;
   /** true when the receipt came from stub mode. Must be conspicuous in the UI. */
   simulated: boolean;
+  /**
+   * Whether a COMMITTEE decided this, or a single allowlisted key did.
+   *
+   * The module keeps `viaCommittee` for exactly this reason — a settlement by
+   * one operator is a different claim from one reached by staked resolvers
+   * voting blind, and the contract refuses to let the shortcut hide. The UI
+   * called every settlement a "committee verdict" until this was read.
+   */
+  viaCommittee: boolean;
 }
 
 /**

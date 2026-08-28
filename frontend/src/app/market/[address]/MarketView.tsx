@@ -137,11 +137,11 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
           without this, /market/[address] overflowed by 256px at 375px wide.
         */}
         <div className="flex min-w-0 flex-col gap-5">
-          <ProbabilityPanel q={market.q} />
+          <ProbabilityPanel q={market.q} winningOutcome={market.winningOutcome} />
           {/* The dilution disclosure lives in the main column, directly under the
               probability, rather than in the sidebar: it is the only place a human
               is ever told the payout floats, so it must not sit below the fold. */}
-          <PayoutPanel q={market.q} />
+          <PayoutPanel q={market.q} winningOutcome={market.winningOutcome} />
           {renderChart(candles, interval, setInterval)}
           {renderPositions(positions, market, source.mode)}
           {renderTrades(trades, market.collateral)}

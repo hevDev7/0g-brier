@@ -22,6 +22,7 @@ const RECEIPT: SettlementReceipt = {
   provider: "0x0000000000000000000000000000000000000000",
   chatId: "stub-0001",
   simulated: true,
+    viaCommittee: true,
 };
 
 const ready: Query<SettlementReceipt> = {status: "ready", data: RECEIPT};

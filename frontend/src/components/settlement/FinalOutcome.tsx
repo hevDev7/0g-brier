@@ -47,6 +47,28 @@ export function FinalOutcome({
 }) {
   const outcome = market.winningOutcome;
 
+  /**
+   * Who decided — taken from the chain, and in three states rather than two.
+   *
+   * `ResolutionModule` keeps `viaCommittee` precisely so that a settlement made
+   * by one allowlisted key cannot pass itself off as one reached by staked
+   * resolvers voting blind. This panel headed every settlement "Committee
+   * verdict" regardless, including the ones a single operator key made, which
+   * prints the misrepresentation the flag exists to prevent.
+   *
+   * `receipt === null` is a third case and not a quiet `false`: the receipt has
+   * not been read — still loading, or a mode with no storage endpoint — so how
+   * the market was decided is simply not known yet. Collapsing it into "one
+   * resolver" is the same defect in the other direction, and it showed for real
+   * on the first paint of every settled page.
+   */
+  const eyebrow =
+    receipt === null
+      ? "Resolution"
+      : receipt.viaCommittee
+        ? "Committee verdict"
+        : "Settled by one resolver";
+
   // A null outcome means the market IS NOT RESOLVED — not "NO", and not an
   // unexplained empty panel. Outcome 0 is a real answer and must not collapse
   // into absence. Just like `unavailable` in Query<T>: not knowing is rendered
@@ -54,7 +76,7 @@ export function FinalOutcome({
   if (outcome === null) {
     return (
       <Panel testId="final-outcome">
-        <PanelHeader eyebrow="Committee verdict" title="Final outcome" icon={Gavel} />
+        <PanelHeader eyebrow="Resolution" title="Final outcome" icon={Gavel} />
         <p className="p-4 text-[14px] text-text-muted md:p-5">
           Not resolved yet — the chain has recorded no outcome for this market.
         </p>
@@ -67,8 +89,15 @@ export function FinalOutcome({
 
   return (
     <Panel testId="final-outcome" className="overflow-hidden">
-      <PanelHeader eyebrow="Committee verdict" title="Final outcome" icon={Gavel} />
+      <PanelHeader eyebrow={eyebrow} title="Final outcome" icon={Gavel} />
       {receipt?.simulated === true && <SimulatedBanner testId="final-outcome-simulated" />}
+      {receipt !== null && receipt.viaCommittee === false && (
+        <p data-testid="single-resolver-note" className="border-b border-border bg-bg-sunken px-4 py-3 text-[13px] leading-relaxed text-warn md:px-5">
+          One allowlisted key decided this, not a committee. No stake was at risk, no vote was
+          committed blind, and nothing was open to dispute — so this outcome rests on trusting that
+          key, and on the evidence it published below.
+        </p>
+      )}
       <div className="flex flex-col gap-3 p-4 md:p-5">
         <div className="flex items-baseline justify-between gap-4">
           <span className="text-[14px] text-text-muted">Winner</span>

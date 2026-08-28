@@ -50,3 +50,48 @@ describe("PayoutPanel", () => {
     expect(disclosure).toHaveTextContent(/below the one on screen, minus fee/i);
   });
 });
+
+/**
+ * Every panel on this page was written for a market whose answer is still open,
+ * and each kept its wording after the answer arrived. On a live settled market
+ * that produced: "CURRENT ESTIMATE — YES 55.0%" beside a decided outcome, and
+ * "Payout if NO wins — 1.49× per share" for a side that cannot win, in the same
+ * weight as the side that did. Both are prices quoted on an impossibility.
+ */
+describe("once the market has an answer", () => {
+  it("stops calling a settled market's last estimate the current one", () => {
+    render(<ProbabilityPanel q={q} winningOutcome={1} />);
+    expect(screen.queryByText(/current estimate/i)).toBeNull();
+    expect(screen.getByText(/final estimate before settlement/i)).toBeInTheDocument();
+    // The figures stay. They are the record the market is scored on, and 59.0%
+    // is what it actually believed — deleting it would hide the forecast.
+    expect(screen.getByText("59.0%")).toBeInTheDocument();
+    expect(screen.getByTestId("estimate-is-historic")).toHaveTextContent("YES won");
+  });
+
+  it("leaves an unresolved market saying exactly what it said before", () => {
+    render(<ProbabilityPanel q={q} />);
+    expect(screen.getByText(/current estimate/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("estimate-is-historic")).toBeNull();
+  });
+
+  it("prices the losing side at nothing instead of at what it would have paid", () => {
+    render(<PayoutPanel q={q} winningOutcome={1} />);
+    // 1.30× is what YES shares now redeem for; 1.56× is what NO shares would
+    // have paid in a world that did not happen, and must not be on the page.
+    expect(screen.getByText("1.30×")).toBeInTheDocument();
+    expect(screen.queryByText("1.56×")).toBeNull();
+    expect(screen.getByText("0.00×")).toBeInTheDocument();
+    expect(screen.queryByText(/payout if/i)).toBeNull();
+  });
+
+  it("stops offering an exit that closing already took away", () => {
+    render(<PayoutPanel q={q} winningOutcome={0} />);
+    const disclosure = screen.getByTestId("dilution-disclosure");
+    // The disclosure survives — dilution is why the payout is what it is — but
+    // it can no longer describe selling as something a reader might still do.
+    expect(disclosure).toHaveTextContent(/floated until the market closed/i);
+    expect(disclosure).toHaveTextContent(/nothing left to sell, only to redeem/i);
+    expect(disclosure).not.toHaveTextContent(/can only be sold while the market is Open/i);
+  });
+});

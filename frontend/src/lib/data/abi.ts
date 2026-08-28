@@ -124,6 +124,16 @@ export const RESOLUTION_ABI = [
     inputs: [{type: "address"}],
     outputs: [{type: "bytes32"}, {type: "address"}],
   },
+  {
+    // Whether a COMMITTEE decided it, or one allowlisted key did. The module
+    // keeps this flag so the shortcut cannot pass itself off as a committee, and
+    // reading it is the only way a page can tell the two apart.
+    type: "function",
+    name: "viaCommittee",
+    stateMutability: "view",
+    inputs: [{type: "address"}],
+    outputs: [{type: "bool"}],
+  },
 ] as const;
 
 /**

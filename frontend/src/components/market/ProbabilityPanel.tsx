@@ -2,6 +2,7 @@ import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {probabilityWad} from "@/lib/dpm-view";
 import {wadToPercent} from "@/lib/chart";
 import {formatProbability} from "@/lib/format";
+import type {Outcome} from "@/lib/data/types";
 
 /**
  * Shows P_i = p_i^2. The marginal price p_i NEVER appears here — it is only valid
@@ -11,14 +12,31 @@ import {formatProbability} from "@/lib/format";
  * figures above it come from `formatProbability`, which never leaves bigint —
  * the number a reader sees and the number a bar is drawn from take different
  * routes on purpose.
+ *
+ * `winningOutcome` is not decoration. These figures are derived from `q`, which
+ * stops moving at settlement — so on a resolved market they are still perfectly
+ * real, but they are a RECORD of what the market last believed, not an estimate
+ * of anything still open. Labelled "Current estimate" beside a known answer,
+ * they invite a reader to treat 55% as the chance of something that has already
+ * happened. Optional and defaulting to null: an unresolved market is the case
+ * where the panel means exactly what it always meant.
  */
-export function ProbabilityPanel({q}: {q: readonly [bigint, bigint]}) {
+export function ProbabilityPanel({
+  q,
+  winningOutcome = null,
+}: {
+  q: readonly [bigint, bigint];
+  winningOutcome?: Outcome | null;
+}) {
   const yes = probabilityWad(q, 1);
   const no = probabilityWad(q, 0);
 
   return (
     <Panel testId="probability-panel">
-      <PanelHeader eyebrow="Current estimate" title="Implied probability" />
+      <PanelHeader
+        eyebrow={winningOutcome === null ? "Current estimate" : "Final estimate before settlement"}
+        title="Implied probability"
+      />
       <div className="p-4 md:p-5">
         <div className="grid grid-cols-2 gap-4">
           {(
@@ -61,6 +79,13 @@ export function ProbabilityPanel({q}: {q: readonly [bigint, bigint]}) {
         <p className="mt-2 text-[12px] text-text-faint">
           Implied probability is the square of the marginal price, so the two sides sum to 100%.
         </p>
+        {winningOutcome !== null && (
+          <p data-testid="estimate-is-historic" className="mt-2 text-[12px] leading-relaxed text-text-muted">
+            {winningOutcome === 1 ? "YES" : "NO"} won. This is where the market stood when trading
+            closed, kept because it is the record the market is scored on — not a forecast of
+            anything still open.
+          </p>
+        )}
       </div>
     </Panel>
   );

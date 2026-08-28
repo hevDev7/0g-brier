@@ -187,6 +187,29 @@ describe("a settlement's receipt, read from 0G Storage", () => {
     expect(receipt?.criteria).toBeNull();
     expect(receipt?.reasoning).toContain("No resolver committee ran");
     expect(receipt?.sources[0]).toContain("chainscan-galileo");
+    // `route: "none"` means one key settled this. The flag says so.
+    expect(receipt?.viaCommittee).toBe(false);
+  });
+
+  /**
+   * The receipt is written by whoever settled the market, so nothing inside it
+   * can be evidence about that settlement's own legitimacy. `viaCommittee` is
+   * the protocol's record, read from the module beside the root, and the same
+   * unmodified document must come back with either answer depending only on what
+   * the chain says. (Tampering with the document to test this is impossible by
+   * construction — the root check rejects it first, which is the stronger
+   * guarantee. This pins the weaker one the root check does not cover: that the
+   * flag is not being derived from the document's own `route` field, which reads
+   * `"none"` in both runs below.)
+   */
+  it("takes viaCommittee from the chain, not from the document", async () => {
+    stubStorage(LIVE_RECEIPT);
+    const one = sourceWithModule({module: MODULE, root: RECEIPT_ROOT, viaCommittee: false});
+    expect((await one.getReceipt(MARKET))?.viaCommittee).toBe(false);
+
+    stubStorage(LIVE_RECEIPT);
+    const committee = sourceWithModule({module: MODULE, root: RECEIPT_ROOT, viaCommittee: true});
+    expect((await committee.getReceipt(MARKET))?.viaCommittee).toBe(true);
   });
 
   /**
@@ -200,7 +223,7 @@ describe("a settlement's receipt, read from 0G Storage", () => {
     await expect(s.getReceipt(MARKET)).rejects.toThrow(/anchored receipt .*no readable document/);
   });
 
-  function sourceWithModule(opts: {module: `0x${string}`; root: `0x${string}`}) {
+  function sourceWithModule(opts: {module: `0x${string}`; root: `0x${string}`; viaCommittee?: boolean}) {
     return new ChainSource({
       rpcUrl: "http://stub",
       chainId: 16602,
@@ -210,7 +233,7 @@ describe("a settlement's receipt, read from 0G Storage", () => {
     });
   }
 
-  function stubResolution({module, root}: {module: `0x${string}`; root: `0x${string}`}): Transport {
+  function stubResolution({module, root, viaCommittee = false}: {module: `0x${string}`; root: `0x${string}`; viaCommittee?: boolean}): Transport {
     const base = stubChain(LIVE_ROOT);
     return custom({
       request: async (args) => {
@@ -221,6 +244,16 @@ describe("a settlement's receipt, read from 0G Storage", () => {
             return encodeFunctionResult({abi: CONFIG_ABI, functionName: "addresses", result: module});
           }
           if (to.toLowerCase() === module.toLowerCase()) {
+            // Dispatched on the SELECTOR, not on the address. Answering every
+            // call to the module with `resolutionOf`'s encoding made the stub
+            // agree with whatever the code happened to ask for, which is the
+            // opposite of what the comment above this function promises — the
+            // first reader of `viaCommittee` got a 32-byte root back and viem
+            // refused to call it a boolean.
+            const call = decodeFunctionData({abi: RESOLUTION_ABI, data});
+            if (call.functionName === "viaCommittee") {
+              return encodeFunctionResult({abi: RESOLUTION_ABI, functionName: "viaCommittee", result: viaCommittee});
+            }
             return encodeFunctionResult({
               abi: RESOLUTION_ABI,
               functionName: "resolutionOf",

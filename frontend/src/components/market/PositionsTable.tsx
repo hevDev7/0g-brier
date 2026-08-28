@@ -1,8 +1,9 @@
 import {Layers} from "lucide-react";
-import {dpm} from "@brier/protocol";
+import {dpm, toTokensFloor} from "@brier/protocol";
 import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {Unavailable} from "@/components/primitives/Unavailable";
-import {formatPricePerShare, formatShares, shortAddress} from "@/lib/format";
+import {formatCollateral, formatPricePerShare, formatShares, shortAddress} from "@/lib/format";
+import {payoutPerShareWad} from "@/lib/dpm-view";
 import type {DataMode, MarketDetail, Position} from "@/lib/data/types";
 
 /**
@@ -20,6 +21,15 @@ import type {DataMode, MarketDetail, Position} from "@/lib/data/types";
  * `chain` mode returns `entryPriceWad: null`. That CELL renders
  * `<Unavailable capability="COST_BASIS">` while the other four stay populated —
  * the per-row rule (spec §2) applied at the level of a cell.
+ *
+ * ONCE THE MARKET IS SETTLED the last column stops being a price. The marginal
+ * price is still a real number after settlement — `q` has stopped moving, so it
+ * is frozen rather than stale — but it is no longer what the row is worth, and
+ * it reads as though it were: 73.91 shares beside "0.7413" invites the product,
+ * 54.79, when the position actually redeems for 99.70. The winning side pays
+ * `1/p` per share, which is the reciprocal, so the error is not small and it
+ * runs in the direction that understates. On the losing side the same column
+ * quotes a price for shares that are worth nothing at all.
  */
 export function PositionsTable({
   positions,
@@ -30,6 +40,7 @@ export function PositionsTable({
   market: MarketDetail;
   mode: DataMode;
 }) {
+  const winner = market.winningOutcome;
   return (
     <Panel testId="positions-table" className="overflow-hidden">
       <PanelHeader eyebrow="Observed exposure" title="Agent positions" icon={Layers} />
@@ -60,7 +71,7 @@ export function PositionsTable({
                   Entry price
                 </th>
                 <th scope="col" className="px-4 py-2.5 text-right font-medium">
-                  Current price
+                  {winner === null ? "Current price" : `Redeems for (${market.collateral.symbol})`}
                 </th>
               </tr>
             </thead>
@@ -70,6 +81,20 @@ export function PositionsTable({
                 // is the pool's state NOW, so it comes straight from market.q
                 // and is populated in every mode.
                 const currentPriceWad = dpm.price(market.q, position.outcome);
+                // shares x payout, both wad, so a wad comes back out — and it
+                // still has to be brought down to the collateral's own decimals
+                // before `formatCollateral`, which takes the smallest token unit.
+                // FLOOR, because money leaving the pool rounds the pool's way,
+                // which is the rule `redeem` itself follows on chain.
+                const redeemsFor =
+                  winner === null
+                    ? null
+                    : position.outcome === winner
+                      ? toTokensFloor(
+                          (position.shares * payoutPerShareWad(market.q, winner)) / 10n ** 18n,
+                          market.collateral.decimals,
+                        )
+                      : 0n;
                 return (
                   <tr
                     key={`${position.agent}-${position.outcome}-${index}`}
@@ -95,8 +120,15 @@ export function PositionsTable({
                         formatPricePerShare(position.entryPriceWad)
                       )}
                     </td>
-                    <td data-testid="current" className="px-4 py-2.5 text-right font-mono">
-                      {formatPricePerShare(currentPriceWad)}
+                    <td
+                      data-testid="current"
+                      className={`px-4 py-2.5 text-right font-mono ${
+                        redeemsFor === 0n ? "text-text-faint" : ""
+                      }`}
+                    >
+                      {redeemsFor === null
+                        ? formatPricePerShare(currentPriceWad)
+                        : formatCollateral(redeemsFor, market.collateral.decimals)}
                     </td>
                   </tr>
                 );
@@ -106,7 +138,9 @@ export function PositionsTable({
         </div>
       )}
       <p className="border-t border-border bg-bg-sunken/40 px-4 py-2 text-[11px] text-text-muted md:px-5">
-        Prices are per share in {market.collateral.symbol}, not probabilities.
+        {winner === null
+          ? `Prices are per share in ${market.collateral.symbol}, not probabilities.`
+          : `${winner === 1 ? "YES" : "NO"} won. Losing shares redeem for nothing; the amounts above are what the winning side can claim, not a price.`}
       </p>
     </Panel>
   );

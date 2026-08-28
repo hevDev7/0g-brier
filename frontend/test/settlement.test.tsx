@@ -27,6 +27,7 @@ const receipt: SettlementReceipt = {
   provider: "0x0000000000000000000000000000000000000000",
   chatId: "stub-0001",
   simulated: true,
+    viaCommittee: true,
 };
 
 describe("FinalOutcome", () => {
@@ -133,6 +134,7 @@ describe("ResolutionEvidence — an unresolved market", () => {
     provider: "0x0000000000000000000000000000000000000000",
     chatId: "",
     simulated: true,
+    viaCommittee: true,
   };
 
   it("shows a not-resolved-yet message rather than an unexplained empty panel", () => {
@@ -189,4 +191,54 @@ describe("ResolutionEvidence — resolved, but with nothing to show", () => {
     render(<ResolutionEvidence receipt={bare} />);
     expect(screen.getByText(/resolver cited no sources/i)).toBeInTheDocument();
   });
+});
+
+/**
+ * `ResolutionModule` keeps `viaCommittee` for exactly one reason: a settlement
+ * that one allowlisted key made and a settlement that staked resolvers reached
+ * by voting blind are not the same claim, and the second is the one worth
+ * trusting. The panel headed every settlement "COMMITTEE VERDICT" regardless —
+ * including the live one this deployment produced from a single operator key —
+ * which prints the misrepresentation the flag exists to prevent. The frontend
+ * read the flag nowhere at all; the docs page promised a committee, so the
+ * product was making a promise it had no way of keeping.
+ */
+describe("who decided", () => {
+  it("does not call one key a committee", () => {
+    render(<FinalOutcome market={m} receipt={{...receipt, viaCommittee: false}} />);
+    expect(screen.queryByText(/committee verdict/i)).toBeNull();
+    expect(screen.getByText(/settled by one resolver/i)).toBeInTheDocument();
+    // And says what is missing, since "one resolver" only means something to a
+    // reader who knows what the committee would have added.
+    const note = screen.getByTestId("single-resolver-note");
+    expect(note).toHaveTextContent(/no stake was at risk/i);
+    expect(note).toHaveTextContent(/nothing was open to dispute/i);
+  });
+
+  it("credits a genuine committee as one, with no caveat", () => {
+    render(<FinalOutcome market={m} receipt={{...receipt, viaCommittee: true}} />);
+    expect(screen.getByText(/committee verdict/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("single-resolver-note")).toBeNull();
+  });
+
+  /** The winner is still the winner either way — the caveat is about the process. */
+  it("does not let the caveat weaken the outcome itself", () => {
+    render(<FinalOutcome market={m} receipt={{...receipt, viaCommittee: false}} />);
+    expect(screen.getByTestId("winner")).toHaveTextContent("YES");
+  });
+});
+
+/**
+ * `null` is not `false`. A receipt that has not arrived says nothing about how
+ * the market was decided, and the heading claimed a single resolver on the first
+ * paint of every settled market — a beat before the receipt that would have
+ * justified it.
+ */
+it("does not guess how a market was decided before the receipt arrives", () => {
+  render(<FinalOutcome market={m} receipt={null} />);
+  expect(screen.queryByText(/committee verdict/i)).toBeNull();
+  expect(screen.queryByText(/settled by one resolver/i)).toBeNull();
+  expect(screen.queryByTestId("single-resolver-note")).toBeNull();
+  // The outcome itself is chain state and does not wait for a receipt.
+  expect(screen.getByTestId("winner")).toHaveTextContent("YES");
 });
