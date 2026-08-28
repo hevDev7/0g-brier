@@ -175,9 +175,18 @@ describe("Countdown", () => {
     expect(screen.getByText("2h 14m")).toBeInTheDocument();
   });
 
-  it("says closed once it has passed", () => {
+  /**
+   * Past the instant it counts to, it reports the WINDOW, not the market.
+   *
+   * A market stays `Open` on chain until somebody calls `close()`, and nothing
+   * obliges anyone to. So a countdown saying "closed" put that word beside an
+   * `Open` badge on the same row, and on the market page produced the sentence
+   * "closes in closed".
+   */
+  it("says the window ended, and does not claim the market is closed", () => {
     const now = 1_790_000_000;
     render(<Countdown until={now - 60} nowSeconds={now} />);
-    expect(screen.getByText("closed")).toBeInTheDocument();
+    expect(screen.getByText("trading ended")).toBeInTheDocument();
+    expect(screen.queryByText(/^closed$/i)).not.toBeInTheDocument();
   });
 });

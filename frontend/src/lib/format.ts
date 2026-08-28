@@ -90,9 +90,18 @@ export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-/** The two largest units; no seconds — second precision implies an accuracy blocks do not have. */
+/**
+ * A LENGTH OF TIME, in its two largest units. No seconds — second precision
+ * implies an accuracy blocks do not have.
+ *
+ * This used to return the word "closed" for anything at or below zero, which was
+ * wrong twice over. It is called for durations as well as countdowns — a dispute
+ * window of zero would have read "closed" — and "closed" is the name of a market
+ * STATUS, so a row could say `Open` and `closed` at once. Whether a deadline has
+ * passed is the caller's question; this function only formats the number.
+ */
 export function formatCountdown(secondsRemaining: number): string {
-  if (secondsRemaining <= 0) return "closed";
+  if (secondsRemaining <= 0) return "0m";
   const days = Math.floor(secondsRemaining / 86_400);
   const hours = Math.floor((secondsRemaining % 86_400) / 3_600);
   const minutes = Math.floor((secondsRemaining % 3_600) / 60);

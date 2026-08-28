@@ -131,8 +131,18 @@ describe("formatCountdown", () => {
     expect(formatCountdown(45 * 60)).toBe("45m");
   });
 
-  it("says closed once time is up", () => {
-    expect(formatCountdown(0)).toBe("closed");
-    expect(formatCountdown(-10)).toBe("closed");
+  /**
+   * It formats a LENGTH, and a length is never a status.
+   *
+   * This used to assert `"closed"`, which pinned a real defect in place: the same
+   * function formats durations — a dispute window of zero would have read
+   * "closed" — and `Closed` is the name of a market status, so a market list row
+   * showed `Open` and `closed` in adjacent columns. Whether a deadline has passed
+   * is the caller's question.
+   */
+  it("formats a spent duration as a duration, not as a status", () => {
+    expect(formatCountdown(0)).toBe("0m");
+    expect(formatCountdown(-10)).toBe("0m");
+    expect(formatCountdown(0)).not.toMatch(/closed/i);
   });
 });

@@ -111,12 +111,15 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={statusTone(market.status)} label={market.status} dot />
-            {/* A countdown only makes sense while trading is still running: on a
-                closed market formatCountdown returns "closed" and the line would
-                read "closes in closed". The status badge above already says it. */}
+            {/* The guard used to be `status === "Open"` alone, on the assumption
+                that an Open market is one still trading. It is not: a market stays
+                Open until somebody calls `close()`, and nothing obliges anyone to
+                do it promptly. So this rendered "closes in closed" on every market
+                past its tradingEnd — the exact string the old comment here claimed
+                it prevented. The condition that matters is the deadline. */}
             {market.status === "Open" && (
               <span className="text-[13px] text-text-muted">
-                closes in <Countdown until={market.tradingEnd} />
+                <Countdown until={market.tradingEnd} prefix="closes in " />
               </span>
             )}
             <CopyAddress address={market.address} />

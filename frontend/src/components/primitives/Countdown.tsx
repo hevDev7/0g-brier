@@ -15,7 +15,22 @@ import {formatCountdown} from "@/lib/format";
  * server genuinely DOES NOT KNOW the reader's clock, and guessing means showing a
  * wrong countdown and then silently correcting it.
  */
-export function Countdown({until, nowSeconds}: {until: number; nowSeconds?: number}) {
+export function Countdown({
+  until,
+  nowSeconds,
+  prefix,
+}: {
+  until: number;
+  nowSeconds?: number;
+  /**
+   * Shown only while there is time left. It lives here rather than beside the
+   * component because a caller writing `closes in <Countdown/>` cannot know
+   * whether the instant has passed without reading the clock during render,
+   * which React forbids — and doing it anyway is what produced "closes in
+   * closed" on every market past its tradingEnd.
+   */
+  prefix?: string;
+}) {
   const [now, setNow] = useState<number | null>(nowSeconds ?? null);
 
   useEffect(() => {
@@ -27,5 +42,18 @@ export function Countdown({until, nowSeconds}: {until: number; nowSeconds?: numb
     return () => clearInterval(id);
   }, [nowSeconds]);
 
-  return <span>{now === null ? "…" : formatCountdown(until - now)}</span>;
+  if (now === null) return <span>…</span>;
+  const remaining = until - now;
+  // Past the instant, a countdown has nothing left to count. It says the window
+  // has ended and NOT that the market is closed: `Closed` is an on-chain status
+  // a market only reaches when somebody calls `close()`, which nobody is
+  // obliged to do promptly. Saying "closed" here put that word beside an `Open`
+  // badge on the same row, and on the market page produced "closes in closed".
+  if (remaining <= 0) return <span>trading ended</span>;
+  return (
+    <span>
+      {prefix}
+      {formatCountdown(remaining)}
+    </span>
+  );
 }
