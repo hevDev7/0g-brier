@@ -8,9 +8,9 @@ import type {Trade} from "@/lib/data/types";
 const m = FIXTURE_MARKETS[0]!;
 const trades: Trade[] = [
   {id: "1", timestamp: 1, trader: "0x1111111111111111111111111111111111111111",
-   outcome: 1, sharesDelta: 10n ** 18n, tokens: 500_000n, fee: 0n, probAfterWad: 10n ** 18n / 2n},
+   outcome: 1, sharesDelta: 10n ** 18n, tokens: 500_000n, fee: 0n, probYesAfterWad: 10n ** 18n / 2n},
   {id: "2", timestamp: 2, trader: "0x2222222222222222222222222222222222222222",
-   outcome: 0, sharesDelta: -(10n ** 18n), tokens: 300_000n, fee: 0n, probAfterWad: 10n ** 18n / 2n},
+   outcome: 0, sharesDelta: -(10n ** 18n), tokens: 300_000n, fee: 0n, probYesAfterWad: 10n ** 18n / 2n},
 ];
 
 describe("MarketStats", () => {

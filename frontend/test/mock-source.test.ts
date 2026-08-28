@@ -67,7 +67,7 @@ describe("MockSource", () => {
     for (const market of FIXTURE_MARKETS) {
       const trades = await source.getTrades(market.address, 50);
       const mostRecent = trades[0]!;
-      expect(mostRecent.probAfterWad).toBe(dpm.probability(market.q, 1));
+      expect(mostRecent.probYesAfterWad).toBe(dpm.probability(market.q, 1));
     }
   });
 
@@ -273,7 +273,7 @@ describe("fixturePositions", () => {
         sharesDelta: 100n * WAD, // 100 shares
         tokens: 40_000_000n, // 40.000000 mUSDC -> 0.40/share
         fee: 0n,
-        probAfterWad: 0n,
+        probYesAfterWad: 0n,
       },
       {
         id: "synthetic-2",
@@ -283,7 +283,7 @@ describe("fixturePositions", () => {
         sharesDelta: 50n * WAD, // 50 more shares, SAME trader & outcome
         tokens: 30_000_000n, // 30.000000 mUSDC -> 0.60/share
         fee: 0n,
-        probAfterWad: 0n,
+        probYesAfterWad: 0n,
       },
     ];
 

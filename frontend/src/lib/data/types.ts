@@ -155,7 +155,17 @@ export interface Trade {
   sharesDelta: bigint;
   tokens: bigint;
   fee: bigint;
-  probAfterWad: bigint;
+  /**
+   * P(YES) after the trade — NOT the event's `probAfter` field.
+   *
+   * The contract emits `probability(qAfter, outcome)`: the probability of the
+   * side that was traded. That is a deliberate choice and the event carries
+   * `outcome` next to it, so the reading is recoverable — but a NO trade emits
+   * P(NO), and a consumer that takes the number at face value plots the
+   * complement of the series it thinks it is plotting. This field is normalised
+   * at the decode site so nothing downstream has to remember.
+   */
+  probYesAfterWad: bigint;
 }
 
 export interface Candle {

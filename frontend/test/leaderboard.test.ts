@@ -61,7 +61,7 @@ describe("leaderboard", () => {
       sharesDelta: tokens,
       tokens,
       fee: 0n,
-      probAfterWad: 10n ** 18n / 2n,
+      probYesAfterWad: 10n ** 18n / 2n,
     });
     const rows = leaderboard({
       markets: [] as MarketSummary[],
@@ -92,7 +92,7 @@ describe("leaderboard", () => {
         [
           {
             id: "1", timestamp: 1, trader: onlyTraded, outcome: 1,
-            sharesDelta: 5n, tokens: 5n, fee: 0n, probAfterWad: 10n ** 18n / 2n,
+            sharesDelta: 5n, tokens: 5n, fee: 0n, probYesAfterWad: 10n ** 18n / 2n,
           },
         ],
       ],
@@ -205,7 +205,7 @@ describe("agent identity on the leaderboard", () => {
         sharesDelta: 1n,
         tokens: 1n,
         fee: 0n,
-        probAfterWad: 5n * 10n ** 17n,
+        probYesAfterWad: 5n * 10n ** 17n,
       }]],
       balances: new Map(),
       balancesKnown: false,

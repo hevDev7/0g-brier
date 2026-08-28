@@ -4,8 +4,9 @@ import {formatCollateral, formatProbability, formatShares, shortAddress} from "@
 import type {CollateralInfo, Trade} from "@/lib/data/types";
 
 /**
- * P(YES) here is `Trade.probAfterWad`, which is already a probability — the
- * state the market was left in by that trade. The newest row therefore agrees
+ * P(YES) here is `Trade.probYesAfterWad`, which is already a probability and is
+ * always the YES side whichever side was traded — the state the market was left
+ * in by that trade. The newest row therefore agrees
  * with the probability panel by construction, not by coincidence; the fixtures
  * are built to converge on the market's q for exactly that reason.
  */
@@ -68,7 +69,7 @@ export function TradeTape({trades, collateral}: {trades: Trade[]; collateral: Co
                     {formatCollateral(trade.tokens, collateral.decimals)}
                   </td>
                   <td className="px-4 py-2.5 text-right font-mono text-text-muted">
-                    {formatProbability(trade.probAfterWad)}
+                    {formatProbability(trade.probYesAfterWad)}
                   </td>
                 </tr>
               ))}

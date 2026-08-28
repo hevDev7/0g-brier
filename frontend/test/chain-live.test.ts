@@ -116,7 +116,7 @@ describe.skipIf(!FACTORY)("LogSource against live Galileo", () => {
     const [m] = await source().listMarkets();
     const trades = await source().getTrades(m!.address, 50);
     const newest = trades[0]!;
-    expect(newest.probAfterWad).toBe(dpm.probability(m!.q, 1));
+    expect(newest.probYesAfterWad).toBe(dpm.probability(m!.q, 1));
   });
 
   it("supplies the createdAt that chain mode cannot", async () => {

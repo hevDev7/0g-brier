@@ -245,7 +245,7 @@ function fixtureTrades(m: MarketDetail): Trade[] {
       sharesDelta: shares,
       tokens,
       fee: (tokens * BigInt(m.feeBps)) / 10_000n,
-      probAfterWad: dpm.probability(q, 1),
+      probYesAfterWad: dpm.probability(q, 1),
     });
   }
   return trades.reverse(); // newest first

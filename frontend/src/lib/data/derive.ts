@@ -50,16 +50,16 @@ export function candlesFrom(trades: readonly Trade[], interval: Interval): Candl
     if (candle === undefined) {
       buckets.set(bucketStart, {
         bucketStart,
-        open: t.probAfterWad,
-        high: t.probAfterWad,
-        low: t.probAfterWad,
-        close: t.probAfterWad,
+        open: t.probYesAfterWad,
+        high: t.probYesAfterWad,
+        low: t.probYesAfterWad,
+        close: t.probYesAfterWad,
         volume: t.tokens,
       });
     } else {
-      if (t.probAfterWad > candle.high) candle.high = t.probAfterWad;
-      if (t.probAfterWad < candle.low) candle.low = t.probAfterWad;
-      candle.close = t.probAfterWad;
+      if (t.probYesAfterWad > candle.high) candle.high = t.probYesAfterWad;
+      if (t.probYesAfterWad < candle.low) candle.low = t.probYesAfterWad;
+      candle.close = t.probYesAfterWad;
       candle.volume += t.tokens;
     }
   }

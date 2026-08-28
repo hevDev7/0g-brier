@@ -1,4 +1,5 @@
 import type {PublicClient} from "viem";
+import {dpm} from "@0g-delphi/protocol";
 import {MARKET_CREATED_EVENT, TRADE_EVENT} from "./abi";
 import {ChainSource, type ChainSourceConfig} from "./chain";
 import {candlesFrom, positionsFrom} from "./derive";
@@ -117,7 +118,12 @@ export class LogSource implements DataSource {
           sharesDelta: a.sharesDelta!,
           tokens: a.tokens!,
           fee: a.fee!,
-          probAfterWad: a.probAfter!,
+          // From `qAfter`, not from `probAfter`. The event's own field is the
+          // probability of the TRADED side, so a NO trade reports P(NO); taking
+          // the complement would recover P(YES) only to within the ±2 wei that
+          // Σ probability is allowed to drift. The full q is right there in the
+          // log, so the exact number costs nothing.
+          probYesAfterWad: dpm.probability(a.qAfter!, 1),
         };
       }),
     );
