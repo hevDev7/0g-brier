@@ -59,10 +59,10 @@ contract Deploy is Script {
         DeployLib.Roles memory roles = DeployLib.resolveRoles(
             block.chainid,
             DeployLib.Roles({
-                governance: vm.envOr("GOVERNANCE", address(0)),
-                guardian: vm.envOr("GUARDIAN", address(0)),
-                treasury: vm.envOr("TREASURY", address(0)),
-                curatorSigner: vm.envOr("CURATOR_SIGNER", address(0))
+                governance: _address("GOVERNANCE"),
+                guardian: _address("GUARDIAN"),
+                treasury: _address("TREASURY"),
+                curatorSigner: _address("CURATOR_SIGNER")
             }),
             deployer
         );
@@ -155,6 +155,39 @@ contract Deploy is Script {
     ///      and for a testnet and wrong beyond them. A resolver key signs a settlement for
     ///      every market; it should not also be the key that can replace this contract.
     ///      Pass RESOLVER to separate them.
+    /// @notice Read an address, and refuse anything that is not one.
+    ///
+    /// @dev `vm.envOr(name, address(0))` returns the ZERO ADDRESS for a value it
+    ///      cannot parse — silently, with no distinction between "unset" and
+    ///      "wrong shape". The deploy would then stop with `GovernanceUnset`, which
+    ///      sends someone hunting for a value that is sitting right there and
+    ///      malformed.
+    ///
+    ///      The case worth catching by name is a PRIVATE KEY pasted where an address
+    ///      belongs. Four of the five things in `.env` are addresses and only the
+    ///      deployer's is a key, so the mistake is an easy one — and it ends with a
+    ///      key written into a file while the error message talks about something
+    ///      else entirely.
+    function _address(string memory name) internal view returns (address) {
+        string memory raw = vm.envOr(name, string(""));
+        bytes memory b = bytes(raw);
+        if (b.length == 0) return address(0);
+        if (b.length == 66) {
+            revert(
+                string.concat(
+                    "Deploy: ",
+                    name,
+                    " looks like a PRIVATE KEY (32 bytes). It wants an ADDRESS (20 bytes). ",
+                    "Only DEPLOYER_KEY is a private key. Rotate whatever you just pasted."
+                )
+            );
+        }
+        if (b.length != 42) {
+            revert(string.concat("Deploy: ", name, " is not an address - expected 0x plus 40 hex characters"));
+        }
+        return vm.parseAddress(raw);
+    }
+
     /// @notice The collateral a market settles in.
     ///
     /// @dev MockUSDC has an open `mintTo` and is deployed ONLY where that is harmless.
