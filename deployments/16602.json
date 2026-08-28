@@ -2,7 +2,7 @@
   "chainId": 16602,
   "contracts": {
     "AgentRegistry": "0xCFa1C50236cDc584aFf24830d337D51345AeD008",
-    "AgentRegistryImpl": "0x3B0Dc736eBC2099A6f9225D0bF9be20D885eE9D1",
+    "AgentRegistryImpl": "0xDd8dDfC2954984af51B727a7d6d9a31fF3e3Aa1A",
     "ConfigRegistry": "0x7527fE0C4Fa43518Dcb7179a55E520265725Cce9",
     "ConfigRegistryImpl": "0xf680B7fD81d4EC834219100839fE90090D36a284",
     "MarketFactory": "0x76d10eDf6d0A4E022689a8F079E100e790AB1E6d",
@@ -12,7 +12,9 @@
     "OutcomeShares": "0xe7fBf30DAcdF493faa3028EB37211F9B43c8cF94",
     "ResolutionModule": "0x24f0c8f68Db218E21807f44d25Ff44B4F84C0ED7",
     "ResolutionModuleImpl": "0x2EF79c905766e11695e29327d33d3e849967690c",
-    "Timelock": "0x4Bdcdd1d35cC21656Cc5Bcb61b47f0FcF805E831"
+    "Timelock": "0x4Bdcdd1d35cC21656Cc5Bcb61b47f0FcF805E831",
+    "ZgDataVerifier": "0x37bEca0dBb73938Ab564E7F86855d1C339426656",
+    "AgentCard": "0x201B9dc661E888AEd1978d3f8dB3A4B9F80874Bb"
   },
   "deployedAt": 1787910383,
   "deploymentBlock": 51818678

@@ -3,12 +3,18 @@ pragma solidity 0.8.28;
 
 import {CommitteeFixtures} from "../helpers/CommitteeFixtures.sol";
 import {IAgentRegistry} from "../../src/interfaces/IAgentRegistry.sol";
+import {ZgDataVerifier} from "../../src/core/ZgDataVerifier.sol";
+import {AgentCard} from "../../src/core/AgentCard.sol";
+import {ZgMerkle} from "../../src/math/ZgMerkle.sol";
 
 /// @dev `tokenURI` returned the empty string until this existed, because the contract
 ///      inherited OpenZeppelin's ERC721 and never overrode it. The identity was
 ///      perfectly well defined on chain — name, role, operator — and every explorer
 ///      and wallet showed a blank card, which is what prompted this file.
 contract AgentTokenURITest is CommitteeFixtures {
+    /// @dev Rendering moved out of the registry when ERC-7857 pushed it past EIP-170.
+    ///      The card is a separate contract now and has to be pointed at, which is the
+    ///      one thing these tests had to learn — everything they assert is unchanged.
     address internal trader = makeAddr("traderOperator");
     uint256 internal traderId;
 
@@ -18,6 +24,8 @@ contract AgentTokenURITest is CommitteeFixtures {
         _deployBase();
         _deployCommittee(3, 1_000e6);
         traderId = registry_.register(IAgentRegistry.Role.Trader, trader, "Nostradamus", bytes32(0));
+        registry_.setVerifier(address(new ZgDataVerifier()));
+        registry_.setCard(address(new AgentCard()));
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -33,7 +41,9 @@ contract AgentTokenURITest is CommitteeFixtures {
             assertEq(b[i], prefix[i], "not a base64 json data uri");
         }
         bytes memory payload = new bytes(b.length - prefix.length);
-        for (uint256 i; i < payload.length; i++) payload[i] = b[i + prefix.length];
+        for (uint256 i; i < payload.length; i++) {
+            payload[i] = b[i + prefix.length];
+        }
         return string(_b64decode(payload));
     }
 
@@ -57,7 +67,9 @@ contract AgentTokenURITest is CommitteeFixtures {
     function _b64decode(bytes memory data) internal pure returns (bytes memory) {
         bytes memory table = bytes("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/");
         uint8[128] memory rev;
-        for (uint8 i; i < 64; i++) rev[uint8(table[i])] = i;
+        for (uint8 i; i < 64; i++) {
+            rev[uint8(table[i])] = i;
+        }
 
         uint256 pad;
         while (pad < 2 && data.length > pad && data[data.length - 1 - pad] == "=") pad++;
@@ -94,13 +106,17 @@ contract AgentTokenURITest is CommitteeFixtures {
         assertTrue(_contains(json, '"name":"Nostradamus"'), "an unpublished agent lost its name");
     }
 
+    /// @dev The root is no longer a number chosen for this test: `updateMetadata` now
+    ///      makes the caller prove it, so the document is supplied and the root is
+    ///      whatever 0G Storage would address those exact bytes by.
     function test_publishingAPersonaPutsItsRootInTheMetadata() public {
-        bytes32 root = 0x1b2a15ea3aee8bf4bc2aa8c7651ad9b0241a2dbfd451137a5c5a64ea62bf8b10;
-        registry_.updateMetadata(traderId, root, "");
+        bytes memory persona = '{"name":"Nostradamus","style":"forecast first, size second"}';
+        bytes32 root = ZgMerkle.root(persona);
+        registry_.updateMetadata(traderId, root, abi.encodePacked(bytes1(0x00), persona));
 
         string memory json = _json(traderId);
         assertTrue(
-            _contains(json, '"value":"0x1b2a15ea3aee8bf4bc2aa8c7651ad9b0241a2dbfd451137a5c5a64ea62bf8b10"'),
+            _contains(json, string.concat('"value":"', vm.toString(root), '"')),
             "the root is not fetchable from the metadata"
         );
         assertFalse(_contains(json, "none published"), "still claims nothing is published");

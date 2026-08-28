@@ -2,6 +2,13 @@
 pragma solidity 0.8.28;
 
 import {ERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import {IERC7857} from "../interfaces/IERC7857.sol";
+import {IAgentCard} from "../interfaces/IAgentCard.sol";
+import {
+    IERC7857DataVerifier,
+    PreimageProofOutput,
+    TransferValidityProofOutput
+} from "../interfaces/IERC7857DataVerifier.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
@@ -20,7 +27,14 @@ import {IAgentRegistry} from "../interfaces/IAgentRegistry.sol";
 ///      by voting badly, so `activeStake` — bonded and not cooling down — is what the
 ///      ResolutionModule samples on and what it slashes. Everything else here is
 ///      bookkeeping around that one number.
-contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Ownable2StepUpgradeable, UUPSUpgradeable {
+contract AgentRegistry is
+    IAgentRegistry,
+    IERC7857,
+    Initializable,
+    ERC721Upgradeable,
+    Ownable2StepUpgradeable,
+    UUPSUpgradeable
+{
     using SafeERC20 for IERC20;
 
     struct Agent {
@@ -81,6 +95,32 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
     ///      worse than two addresses — the reader believes they can tell them apart.
     mapping(bytes32 => bool) public nameTaken;
 
+    // ── ERC-7857, appended after deployment for the same reason as everything above ──
+
+    /// @notice The oracle this token defers to for proofs about its data.
+    /// @dev Settable, because which proofs can be checked is a property of the
+    ///      deployment rather than of this contract. Unset means no ERC-7857 call that
+    ///      takes a proof will succeed — refused rather than waved through.
+    IERC7857DataVerifier public verifier;
+
+    /// @notice Who renders `tokenURI`. See the note on `tokenURI` for why it is not
+    ///         rendered here any more.
+    IAgentCard public card;
+
+    /// @dev ERC-7857 lets a token carry SEVERAL pieces of data. Agents registered
+    ///      before this existed carry one, in `Agent.metadataRoot`; `metadataRootOf`
+    ///      reads whichever of the two a given agent actually has, so no migration is
+    ///      needed and no agent is left with an empty document.
+    mapping(uint256 => bytes32[]) internal _dataHashes;
+    mapping(uint256 => string[]) internal _dataDescriptions;
+
+    /// @dev `authorizeUsage` grants the right to USE an agent's data without owning
+    ///      it. The list is the answer to `authorizedUsersOf`; the mapping is what
+    ///      keeps it free of duplicates, since an address authorised twice would be
+    ///      revoked once and still appear.
+    mapping(uint256 => address[]) internal _authorizedUsers;
+    mapping(uint256 => mapping(address => bool)) internal _usageGranted;
+
     error NotAgentOwner(uint256 agentId);
     error NotResolutionModule();
     error NotAResolver(uint256 agentId);
@@ -91,6 +131,17 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
     error NameTaken(bytes32 name);
     error NameEmpty();
     error OperatorAlreadyActs(address operator, uint256 agentId);
+    error VerifierUnset();
+    error CardUnset();
+    error ProofRejected(uint256 index);
+    error WrongReceiver(address expected, address got);
+    error DataHashMismatch(bytes32 expected, bytes32 got);
+    error ProofCountMismatch(uint256 expected, uint256 got);
+    error NoData();
+    error AlreadyAuthorized(address user);
+
+    event VerifierSet(address indexed verifier);
+    event CardSet(address indexed card);
 
     event AgentRegistered(
         uint256 indexed agentId, Role indexed role, address indexed owner, address operator, bytes32 name
@@ -188,10 +239,28 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
 
     /// @dev `proof` is accepted and ignored in v1, per spec §8.5: the parameter exists
     ///      so that P7's ERC-7857 verification is a change of body, not of signature.
+    /**
+     * @notice Replace an agent's data, proving the new bytes hash to the root claimed.
+     *
+     * @dev The `proof` argument existed here from the start and was discarded — the
+     *      body read `proof;` and moved on. Any owner could set `metadataRoot` to any
+     *      32 bytes, including a root no document has ever hashed to, and the chain
+     *      recorded it as the agent's metadata. `tokenURI` renders from it.
+     *
+     *      `newRoot` is kept alongside the proof rather than derived from it alone,
+     *      so the caller states what they believe they are storing and the contract
+     *      checks the two agree. A mismatch reverts with both numbers rather than
+     *      silently storing whatever the bytes happened to hash to.
+     */
     function updateMetadata(uint256 agentId, bytes32 newRoot, bytes calldata proof) external {
         _onlyAgentOwner(agentId);
-        proof;
-        _agents[agentId].metadataRoot = newRoot;
+
+        bytes[] memory proofs = new bytes[](1);
+        proofs[0] = proof;
+        bytes32 proven = _verifyPreimages(proofs)[0];
+        if (proven != newRoot) revert DataHashMismatch(newRoot, proven);
+
+        _setData(agentId, proven);
         emit MetadataUpdated(agentId, newRoot);
     }
 
@@ -288,8 +357,17 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
         return _agents[agentOf[operator]].name;
     }
 
+    /**
+     * @notice The agent's data root — its address on 0G Storage.
+     *
+     * @dev Reads the ERC-7857 array where there is one and the original single field
+     *      otherwise. Agents registered before ERC-7857 existed keep their root where
+     *      they always had it, so nothing had to be migrated and no agent was left
+     *      with an empty document for the length of an upgrade.
+     */
     function metadataRootOf(uint256 agentId) external view returns (bytes32) {
-        return _agents[agentId].metadataRoot;
+        bytes32[] storage hashes = _dataHashes[agentId];
+        return hashes.length == 0 ? _agents[agentId].metadataRoot : hashes[0];
     }
 
     function coolingOf(uint256 agentId) external view returns (uint256 amount, uint64 endsAt) {
@@ -338,112 +416,271 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
     ///      prompts, model, thresholds — it changes without the identity changing,
     ///      and it is far too large for a view that wallets call speculatively.
     ///      Its root is published as an attribute so a reader can go and fetch it.
+    /**
+     * @notice The wallet-facing card for an agent.
+     *
+     * @dev DELEGATED, and not for elegance. Implementing ERC-7857 pushed this contract
+     *      to 25,380 bytes against EIP-170's 24,576 and the upgrade reverted at the far
+     *      end of a broadcast. Turning the optimiser down fitted it with 53 bytes to
+     *      spare, which is not a fix — it is the same failure waiting for the next
+     *      change. Rendering is the right thing to move out: base64, an SVG and two
+     *      escapers, called by wallets and by nothing on any hot path.
+     *
+     *      Reverts rather than returning "" when unset. An empty string IS the blank
+     *      card that made `tokenURI` worth implementing in the first place; a revert
+     *      says "not configured" instead of quietly saying "this agent has nothing".
+     */
     function tokenURI(uint256 agentId) public view override returns (string memory) {
         _requireOwned(agentId);
+        IAgentCard c = card;
+        if (address(c) == address(0)) revert CardUnset();
         Agent storage a = _agents[agentId];
-
-        string memory name_ = _readName(a.name);
-        string memory persona = a.metadataRoot == bytes32(0)
-            ? "none published"
-            : Strings.toHexString(uint256(a.metadataRoot), 32);
-
-        string memory json = string.concat(
-            '{"name":"',
-            _jsonEscape(name_),
-            '","description":"An agent identity on Brier. The name and role are on chain; the persona, prompts and model configuration live in a 0G Storage document addressed by the Persona attribute.","image":"',
-            _image(name_, agentId),
-            '","attributes":[{"trait_type":"Role","value":"',
-            _roleName(a.role),
-            '"},{"trait_type":"Agent ID","value":',
-            Strings.toString(agentId),
-            '},{"trait_type":"Operator","value":"',
-            Strings.toHexString(a.operator),
-            '"},{"trait_type":"Persona","value":"',
-            persona,
-            '"}]}'
-        );
-        return string.concat("data:application/json;base64,", Base64.encode(bytes(json)));
+        return c.render(agentId, a.name, a.role, a.operator, a.metadataRoot);
     }
 
-    /// @dev A plain card. Deterministic hue per agent so two identities are
-    ///      distinguishable at a glance without storing anything.
-    function _image(string memory name_, uint256 agentId) internal pure returns (string memory) {
-        string memory hue = Strings.toString(uint256(keccak256(abi.encode(agentId))) % 360);
-        string memory svg = string.concat(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">',
-            '<rect width="400" height="400" fill="hsl(',
-            hue,
-            ',35%,16%)"/>',
-            '<text x="200" y="196" font-family="ui-monospace,monospace" font-size="15" fill="hsl(',
-            hue,
-            ',45%,68%)" text-anchor="middle">BRIER AGENT</text>',
-            '<text x="200" y="228" font-family="ui-monospace,monospace" font-size="26" fill="#f2f2f0" text-anchor="middle">',
-            _xmlEscape(name_),
-            "</text></svg>"
-        );
-        return string.concat("data:image/svg+xml;base64,", Base64.encode(bytes(svg)));
+    // ── ERC-7857 ──────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Point this registry at the oracle that checks proofs about its data.
+     * @dev Owner-only and deliberately not set at `initialize`: which proofs can be
+     *      checked at all is a property of the deployment, and a registry that named a
+     *      verifier before one existed would be claiming a guarantee it could not keep.
+     */
+    function setVerifier(address verifier_) external onlyOwner {
+        verifier = IERC7857DataVerifier(verifier_);
+        emit VerifierSet(verifier_);
     }
 
-    /// @dev `name` is a right-padded bytes32 string; the padding is not part of it.
-    function _readName(bytes32 raw) internal pure returns (string memory) {
-        uint256 len;
-        while (len < 32 && raw[len] != 0) len++;
-        bytes memory out = new bytes(len);
-        for (uint256 i; i < len; i++) out[i] = raw[i];
-        return string(out);
+    /// @notice Point this registry at the contract that renders its tokens.
+    function setCard(address card_) external onlyOwner {
+        card = IAgentCard(card_);
+        emit CardSet(card_);
     }
 
-    function _roleName(Role r) internal pure returns (string memory) {
-        if (r == Role.Creator) return "Creator";
-        if (r == Role.Curator) return "Curator";
-        if (r == Role.Resolver) return "Resolver";
-        return "Trader";
+    /**
+     * @notice Mint an agent from proofs of the data it carries.
+     *
+     * @dev The standard's own entry point. `register` remains the one this protocol
+     *      uses, because an agent here also needs a role, an operator key and a name —
+     *      none of which ERC-7857 knows about. This path fills those in with defaults
+     *      a caller can change afterwards: `Role.Trader`, no operator, and a name
+     *      derived from the token id, which is unique by construction and so cannot
+     *      collide with a name somebody already took.
+     */
+    function mint(bytes[] calldata _proofs, string[] calldata _dataDescriptionsIn, address _to)
+        external
+        payable
+        returns (uint256 _tokenId)
+    {
+        if (_proofs.length == 0) revert NoData();
+        if (_dataDescriptionsIn.length != _proofs.length) {
+            revert ProofCountMismatch(_proofs.length, _dataDescriptionsIn.length);
+        }
+        bytes32[] memory hashes = _verifyPreimages(_proofs);
+
+        address owner_ = _to == address(0) ? msg.sender : _to;
+        _tokenId = nextAgentId++;
+
+        bytes32 generated = _defaultName(_tokenId);
+        _agents[_tokenId] = Agent({
+            role: Role.Trader,
+            operator: address(0),
+            metadataRoot: hashes[0],
+            staked: 0,
+            cooling: 0,
+            cooldownEnds: 0,
+            name: generated
+        });
+        nameTaken[generated] = true;
+
+        for (uint256 i = 0; i < hashes.length; i++) {
+            _dataHashes[_tokenId].push(hashes[i]);
+            _dataDescriptions[_tokenId].push(_dataDescriptionsIn[i]);
+        }
+
+        _safeMint(owner_, _tokenId);
+        emit AgentRegistered(_tokenId, Role.Trader, owner_, address(0), generated);
+        emit Minted(_tokenId, msg.sender, owner_, hashes, _dataDescriptionsIn);
     }
 
-    /// @dev A name is 31 arbitrary bytes chosen by whoever registered it, so it can
-    ///      contain a quote and produce a document no parser will read. Escaped
-    ///      rather than filtered: the name shown must be the name registered.
-    function _jsonEscape(string memory input) internal pure returns (string memory) {
-        bytes memory b = bytes(input);
-        bytes memory out = new bytes(b.length * 2);
-        uint256 n;
-        for (uint256 i; i < b.length; i++) {
-            bytes1 c = b[i];
-            if (c == '"' || c == "\\") {
-                out[n++] = "\\";
-                out[n++] = c;
-            } else if (uint8(c) >= 0x20) {
-                out[n++] = c;
+    /**
+     * @notice Move an agent and its data to a new owner.
+     *
+     * @dev Ownership alone is `transferFrom`, which ERC-721 already provides and this
+     *      contract does not touch. What this adds is the data half: the caller has to
+     *      prove the receiver can reach the agent's data afterwards, and the proof has
+     *      to name THIS receiver. Without that binding one holder's proof could be
+     *      replayed to send a token somewhere its owner never intended.
+     *
+     *      For public data the verifier reports `oldDataHash == newDataHash`, because
+     *      nothing is re-encrypted and claiming otherwise would be claiming a
+     *      transformation that did not happen. The old hash is still checked against
+     *      what the agent actually holds, so a proof made for different data is
+     *      refused rather than allowed to overwrite it.
+     */
+    function transfer(address _to, uint256 _tokenId, bytes[] calldata _proofs) external {
+        _onlyAgentOwner(_tokenId);
+        address from = _ownerOf(_tokenId);
+        bytes32[] memory next = _verifyTransfer(_tokenId, _to, _proofs);
+
+        _replaceData(_tokenId, next);
+        _transfer(from, _to, _tokenId);
+        emit Transferred(_tokenId, from, _to);
+    }
+
+    /**
+     * @notice Copy an agent's data into a new token, leaving the original where it is.
+     * @dev The same proof obligation as `transfer`. The clone starts with no operator
+     *      and no stake: those belong to the agent that earned them, and carrying them
+     *      across would let anyone mint a copy of a staked resolver.
+     */
+    function clone(address _to, uint256 _tokenId, bytes[] calldata _proofs) external returns (uint256 _newTokenId) {
+        _onlyAgentOwner(_tokenId);
+        bytes32[] memory next = _verifyTransfer(_tokenId, _to, _proofs);
+
+        _newTokenId = nextAgentId++;
+        bytes32 generated = _defaultName(_newTokenId);
+        _agents[_newTokenId] = Agent({
+            role: _agents[_tokenId].role,
+            operator: address(0),
+            metadataRoot: next[0],
+            staked: 0,
+            cooling: 0,
+            cooldownEnds: 0,
+            name: generated
+        });
+        nameTaken[generated] = true;
+
+        string[] storage descriptions = _dataDescriptions[_tokenId];
+        for (uint256 i = 0; i < next.length; i++) {
+            _dataHashes[_newTokenId].push(next[i]);
+            _dataDescriptions[_newTokenId].push(i < descriptions.length ? descriptions[i] : "");
+        }
+
+        _safeMint(_to, _newTokenId);
+        emit AgentRegistered(_newTokenId, _agents[_newTokenId].role, _to, address(0), generated);
+        emit Cloned(_tokenId, _newTokenId, msg.sender, _to);
+    }
+
+    /// @notice Let another address use this agent's data without owning it.
+    function authorizeUsage(uint256 _tokenId, address _user) external {
+        _onlyAgentOwner(_tokenId);
+        if (_usageGranted[_tokenId][_user]) revert AlreadyAuthorized(_user);
+        _usageGranted[_tokenId][_user] = true;
+        _authorizedUsers[_tokenId].push(_user);
+        emit Authorization(msg.sender, _user, _tokenId);
+    }
+
+    function authorizedUsersOf(uint256 _tokenId) external view returns (address[] memory) {
+        return _authorizedUsers[_tokenId];
+    }
+
+    /// @dev Both bases declare it; ERC-721's implementation is the one that answers.
+    function ownerOf(uint256 tokenId) public view override(ERC721Upgradeable, IERC7857) returns (address) {
+        return super.ownerOf(tokenId);
+    }
+
+    /// @notice Every data hash an agent carries — its addresses on 0G Storage.
+    function dataHashesOf(uint256 agentId) external view returns (bytes32[] memory) {
+        bytes32[] storage hashes = _dataHashes[agentId];
+        if (hashes.length > 0) return hashes;
+        // An agent from before ERC-7857 carries exactly one, where it always was.
+        bytes32[] memory one = new bytes32[](1);
+        one[0] = _agents[agentId].metadataRoot;
+        return one;
+    }
+
+    function dataDescriptionsOf(uint256 agentId) external view returns (string[] memory) {
+        return _dataDescriptions[agentId];
+    }
+
+    // ── internals ─────────────────────────────────────────────────────────────
+
+    /// @dev Every hash returned here was COMPUTED by the verifier from bytes the
+    ///      caller supplied. None of them was accepted as an assertion.
+    function _verifyPreimages(bytes[] memory proofs) private returns (bytes32[] memory hashes) {
+        IERC7857DataVerifier v = verifier;
+        if (address(v) == address(0)) revert VerifierUnset();
+
+        PreimageProofOutput[] memory out = v.verifyPreimage(proofs);
+        if (out.length != proofs.length) revert ProofCountMismatch(proofs.length, out.length);
+
+        hashes = new bytes32[](out.length);
+        for (uint256 i = 0; i < out.length; i++) {
+            if (!out[i].isValid) revert ProofRejected(i);
+            hashes[i] = out[i].dataHash;
+        }
+    }
+
+    /// @dev Checks the three things a transfer proof has to establish here: that the
+    ///      verifier accepted it, that it was made for this receiver, and that it is
+    ///      about the data this agent actually holds.
+    function _verifyTransfer(uint256 agentId, address to, bytes[] calldata proofs)
+        private
+        returns (bytes32[] memory next)
+    {
+        IERC7857DataVerifier v = verifier;
+        if (address(v) == address(0)) revert VerifierUnset();
+
+        bytes32[] memory held = _heldHashes(agentId);
+        if (proofs.length != held.length) revert ProofCountMismatch(held.length, proofs.length);
+
+        TransferValidityProofOutput[] memory out = v.verifyTransferValidity(proofs);
+        if (out.length != proofs.length) revert ProofCountMismatch(proofs.length, out.length);
+
+        next = new bytes32[](out.length);
+        bytes16[] memory sealedKeys = new bytes16[](out.length);
+        for (uint256 i = 0; i < out.length; i++) {
+            if (!out[i].isValid) revert ProofRejected(i);
+            if (out[i].receiver != to) revert WrongReceiver(to, out[i].receiver);
+            if (out[i].oldDataHash != held[i]) revert DataHashMismatch(held[i], out[i].oldDataHash);
+            next[i] = out[i].newDataHash;
+            sealedKeys[i] = out[i].sealedKey;
+        }
+        // Published even when empty: for public data there is no key to seal, and an
+        // event that says so is how a reader tells "no secret" from "not disclosed".
+        emit PublishedSealedKey(to, agentId, sealedKeys);
+    }
+
+    function _heldHashes(uint256 agentId) private view returns (bytes32[] memory held) {
+        bytes32[] storage hashes = _dataHashes[agentId];
+        if (hashes.length > 0) return hashes;
+        held = new bytes32[](1);
+        held[0] = _agents[agentId].metadataRoot;
+    }
+
+    function _replaceData(uint256 agentId, bytes32[] memory hashes) private {
+        delete _dataHashes[agentId];
+        for (uint256 i = 0; i < hashes.length; i++) {
+            _dataHashes[agentId].push(hashes[i]);
+        }
+        _agents[agentId].metadataRoot = hashes[0];
+    }
+
+    /// @dev One root, written to both places, so the legacy field and the ERC-7857
+    ///      array can never disagree about what an agent's document is.
+    function _setData(uint256 agentId, bytes32 root) private {
+        bytes32[] memory one = new bytes32[](1);
+        one[0] = root;
+        _replaceData(agentId, one);
+    }
+
+    /// @dev "agent-<id>", unique by construction, so a token minted through the
+    ///      standard entry point cannot collide with a name somebody already took.
+    function _defaultName(uint256 agentId) private pure returns (bytes32 out) {
+        bytes memory digits;
+        uint256 n = agentId;
+        if (n == 0) {
+            digits = "0";
+        } else {
+            while (n > 0) {
+                digits = abi.encodePacked(bytes1(uint8(48 + (n % 10))), digits);
+                n /= 10;
             }
-            // Control bytes are dropped. JSON would need \u00XX for them, and a
-            // display name containing one is not a name anybody meant to register.
         }
-        assembly {
-            mstore(out, n)
+        bytes memory label = abi.encodePacked("agent-", digits);
+        assembly ("memory-safe") {
+            out := mload(add(label, 0x20))
         }
-        return string(out);
-    }
-
-    /// @dev The SVG is base64'd into the JSON, so it needs XML escaping only.
-    function _xmlEscape(string memory input) internal pure returns (string memory) {
-        bytes memory b = bytes(input);
-        bytes memory out = new bytes(b.length * 6);
-        uint256 n;
-        for (uint256 i; i < b.length; i++) {
-            bytes1 c = b[i];
-            if (c == "&") {
-                for (uint256 k; k < 5; k++) out[n++] = bytes("&amp;")[k];
-            } else if (c == "<") {
-                for (uint256 k; k < 4; k++) out[n++] = bytes("&lt;")[k];
-            } else if (c == ">") {
-                for (uint256 k; k < 4; k++) out[n++] = bytes("&gt;")[k];
-            } else if (uint8(c) >= 0x20) {
-                out[n++] = c;
-            }
-        }
-        assembly {
-            mstore(out, n)
-        }
-        return string(out);
     }
 }
