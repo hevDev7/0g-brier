@@ -103,6 +103,40 @@ export interface MarketDetail extends MarketSummary {
   /** The resolution rules, from the MarketSpec on 0G Storage. `null` for the same
    *  reason as `question`: the root is on chain, the text is not. */
   rules: string | null;
+  /**
+   * The prompt the creator committed the resolver to, from the MarketSpec.
+   *
+   * Distinct from `rules` and not a duplicate of it: the rules say what decides
+   * the question, this says what the resolver is INSTRUCTED to do about them.
+   * A settlement is judged against both, so a report that shows one and not the
+   * other cannot be checked.
+   */
+  settlementPrompt: string | null;
+  /**
+   * The data sources the creator committed to, from the MarketSpec. `null` when
+   * the document cannot be read — distinct from `[]`, which would claim the
+   * creator named none.
+   */
+  sources: readonly SpecSource[] | null;
+  /**
+   * The side that won, read from `Market.winningOutcome` on chain.
+   *
+   * `null` means NOT RESOLVED, never "NO" — outcome 0 IS "NO" and the two must
+   * not collapse. It comes from the chain rather than from the settlement
+   * receipt because the chain is what pays out: a mode with no receipt still
+   * knows who won, and a report that could not name the winner would be missing
+   * the one fact everything else explains.
+   */
+  winningOutcome: Outcome | null;
+  /** When `settle`/`fail`/`void` landed, unix seconds. `null` before that. */
+  resolvedAt: number | null;
+}
+
+/** One source a MarketSpec commits its resolver to. */
+export interface SpecSource {
+  kind: string;
+  url: string;
+  selector: string | null;
 }
 
 export interface Trade {

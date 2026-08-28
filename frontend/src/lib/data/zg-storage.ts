@@ -1,4 +1,5 @@
 import {concatHex, keccak256, type Hex} from "viem";
+import type {SpecSource} from "./types";
 
 /**
  * Reading a MarketSpec out of 0G Storage, and PROVING it is the one the market
@@ -116,18 +117,14 @@ export class SpecRootMismatchError extends Error {
  * these — a document that disagrees with its own market must not be able to
  * change what the market is by saying so.
  */
+export type {SpecSource};
+
 export interface MarketSpec {
   version: number;
   question: string;
   rules: string;
   sources: readonly SpecSource[];
   settlementPrompt: string | null;
-}
-
-export interface SpecSource {
-  kind: string;
-  url: string;
-  selector: string | null;
 }
 
 const asString = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);

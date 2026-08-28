@@ -28,6 +28,11 @@ export const MARKET_ABI = [
   {type: "function", name: "qArray", stateMutability: "view", inputs: [], outputs: [{type: "uint256[2]"}]},
   {type: "function", name: "poolWad", stateMutability: "view", inputs: [], outputs: [{type: "uint256"}]},
   {type: "function", name: "status", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
+  // The winner, and when it was decided. Both are plain public getters, so the
+  // single most important fact about a settled market needs no indexer and no
+  // 0G Storage document — it was simply never asked for.
+  {type: "function", name: "winningOutcome", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
+  {type: "function", name: "resolvedAt", stateMutability: "view", inputs: [], outputs: [{type: "uint64"}]},
   {type: "function", name: "tier", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
   {type: "function", name: "category", stateMutability: "view", inputs: [], outputs: [{type: "bytes32"}]},
   {type: "function", name: "tradingEnd", stateMutability: "view", inputs: [], outputs: [{type: "uint64"}]},

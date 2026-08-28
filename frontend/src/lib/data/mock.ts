@@ -31,11 +31,27 @@ const HOUR = 3_600;
 
 const NOW = 1_790_000_000;
 
-/** poolWad is derived, never typed — a fixture must not break a chain invariant. */
+/**
+ * poolWad is derived, never typed — a fixture must not break a chain invariant.
+ *
+ * The resolution fields default to "not resolved" and the MarketSpec extras to
+ * "none listed", so an OPEN fixture says nothing about a settlement it has not
+ * had. A settled fixture must state its own winner: defaulting that would let a
+ * fixture claim NO by omission, and outcome 0 is a real answer.
+ */
 function market(
-  partial: Omit<MarketDetail, "poolWad" | "collateral">,
+  partial: Omit<MarketDetail, "poolWad" | "collateral" | "winningOutcome" | "resolvedAt" | "sources" | "settlementPrompt"> &
+    Partial<Pick<MarketDetail, "winningOutcome" | "resolvedAt" | "sources" | "settlementPrompt">>,
 ): MarketDetail {
-  return {...partial, poolWad: dpm.costUp(partial.q), collateral: MUSDC};
+  return {
+    winningOutcome: null,
+    resolvedAt: null,
+    sources: [],
+    settlementPrompt: null,
+    ...partial,
+    poolWad: dpm.costUp(partial.q),
+    collateral: MUSDC,
+  };
 }
 
 export const FIXTURE_MARKETS: MarketDetail[] = [
@@ -89,6 +105,22 @@ export const FIXTURE_MARKETS: MarketDetail[] = [
     feeBps: 100,
     creator: "0xAaAaAaAa00000000000000000000000000000003",
     specRoot: "0xc3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2",
+    settlementPrompt:
+      "Read the euro-area annual HICP figure from the Eurostat flash release for " +
+      "October 2026. Answer YES if it is strictly below 2.0%, NO otherwise. Use only " +
+      "the flash release; ignore member-state preliminaries and later revisions.",
+    sources: [
+      {
+        kind: "http",
+        url: "https://ec.europa.eu/eurostat/web/hicp/data/database",
+        selector: "euro area, annual rate, flash",
+      },
+    ],
+    // The chain's own answer, not the receipt's. FIXTURE_RECEIPT agrees with it,
+    // and the settlement report reads THIS one — a receipt that disagreed with
+    // the contract that pays out would be the receipt that is wrong.
+    winningOutcome: 1,
+    resolvedAt: NOW - 1 * HOUR,
   }),
 ];
 

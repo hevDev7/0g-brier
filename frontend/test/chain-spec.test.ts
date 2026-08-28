@@ -33,6 +33,10 @@ function stubChain(specRoot: `0x${string}`): Transport {
     tradingEnd: 1790000000n,
     settlementDeadline: 1790086400n,
     collateral: TOKEN,
+    // 0 is a legitimate winner ("NO"), so an unresolved market is distinguished
+    // by resolvedAt being 0, not by the outcome.
+    winningOutcome: 0,
+    resolvedAt: 0n,
     creator: "0xaaaaaaaa00000000000000000000000000000001",
     specRoot,
     feeBps: 100,

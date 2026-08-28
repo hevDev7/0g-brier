@@ -10,6 +10,7 @@ import {
   type DataSource,
   type MarketDetail,
   type MarketStatus,
+  type Outcome,
   type MarketSummary,
   type Position,
   type SettlementReceipt,
@@ -231,12 +232,21 @@ export class ChainSource implements DataSource {
     const read = <T,>(functionName: MarketFn) =>
       this.client.readContract({address, abi: MARKET_ABI, functionName}) as Promise<T>;
 
-    const [base, feeBps, settlementDeadline, creator] = await Promise.all([
+    const [base, feeBps, settlementDeadline, creator, winner, resolvedAt] = await Promise.all([
       this.readMarket(address),
       read<number>("feeBps"),
       read<bigint>("settlementDeadline"),
       read<`0x${string}`>("creator"),
+      read<number>("winningOutcome"),
+      read<bigint>("resolvedAt"),
     ]);
+
+    // `winningOutcome` is 0 in storage until a resolution lands, and 0 is also a
+    // legitimate winner ("NO"). `resolvedAt` is what distinguishes them — it is
+    // the field the contract writes at the moment of resolution, and it cannot
+    // be zero afterwards. Reading the outcome alone would report every unresolved
+    // market as having settled NO.
+    const resolved = Number(resolvedAt) !== 0;
 
     return {
       ...base.summary,
@@ -245,6 +255,10 @@ export class ChainSource implements DataSource {
       creator,
       specRoot: base.specRoot,
       rules: base.spec?.rules ?? null,
+      settlementPrompt: base.spec?.settlementPrompt ?? null,
+      sources: base.spec?.sources ?? null,
+      winningOutcome: resolved ? ((winner === 1 ? 1 : 0) as Outcome) : null,
+      resolvedAt: resolved ? Number(resolvedAt) : null,
     };
   }
 

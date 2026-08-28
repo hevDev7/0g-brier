@@ -27,6 +27,10 @@ function stubChain(overrides: Record<string, unknown> = {}): Transport {
     tradingEnd: 1790000000n,
     settlementDeadline: 1790086400n,
     collateral: TOKEN,
+    // 0 is a legitimate winner ("NO"), so an unresolved market is distinguished
+    // by resolvedAt being 0, not by the outcome.
+    winningOutcome: 0,
+    resolvedAt: 0n,
     creator: "0xaaaaaaaa00000000000000000000000000000001",
     specRoot: `0x${"ab".repeat(32)}`,
     feeBps: 100,
@@ -55,6 +59,31 @@ function stubChain(overrides: Record<string, unknown> = {}): Transport {
 
 const source = (overrides?: Record<string, unknown>) =>
   new ChainSource({rpcUrl: "http://stub", chainId: 16602, factory: FACTORY, transport: stubChain(overrides)});
+
+/**
+ * `winningOutcome` is 0 until a resolution lands, and 0 is ALSO a legitimate
+ * winner. Reading it alone reports every open market as having settled NO —
+ * the same class of error as rendering a zero for something unknown, except
+ * this one names a loser.
+ */
+describe("who won, and whether anyone did", () => {
+  it("reports no winner while the market is unresolved", async () => {
+    const m = await source({status: 0, winningOutcome: 0, resolvedAt: 0n}).getMarket(MARKET);
+    expect(m.winningOutcome).toBeNull();
+    expect(m.resolvedAt).toBeNull();
+  });
+
+  it("reports NO as a winner, not as an absence, once resolved", async () => {
+    const m = await source({status: 4, winningOutcome: 0, resolvedAt: 1790000500n}).getMarket(MARKET);
+    expect(m.winningOutcome).toBe(0);
+    expect(m.resolvedAt).toBe(1790000500);
+  });
+
+  it("reports YES as a winner", async () => {
+    const m = await source({status: 4, winningOutcome: 1, resolvedAt: 1790000500n}).getMarket(MARKET);
+    expect(m.winningOutcome).toBe(1);
+  });
+});
 
 describe("ChainSource capabilities", () => {
   /**
