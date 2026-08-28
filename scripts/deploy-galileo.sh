@@ -114,9 +114,15 @@ fi
 #   "transaction gas price below minimum: gas tip cap 1"
 # So the tip is read from the node rather than assumed, and a chain that later
 # raises it does not need this script edited.
+# BOTH halves, or neither works. Setting only the tip leaves forge to derive
+# maxFeePerGas from the 7-wei base fee, and the node then rejects the very tip it
+# asked for: "max priority fee per gas higher than max fee per gas". The ceiling
+# must cover the tip plus room for the base fee to move under us.
 TIP="$(cast rpc eth_maxPriorityFeePerGas --rpc-url "$RPC" | tr -d '"')"
 TIP=$((TIP))
-echo "▶ priority fee $TIP wei (from the node, not a guess)"
+BASE="$(cast base-fee --rpc-url "$RPC")"
+MAXFEE=$(( TIP + BASE * 4 + 1000000000 ))
+echo "▶ fees: tip $TIP wei, base $BASE wei, cap $MAXFEE wei (all read from the node)"
 
 cd "$ROOT/contracts"
 if ! forge script script/Deploy.s.sol:Deploy \
@@ -124,6 +130,7 @@ if ! forge script script/Deploy.s.sol:Deploy \
   --broadcast \
   --slow \
   --priority-gas-price "$TIP" \
+  --with-gas-price "$MAXFEE" \
   -vv
 then
   if [[ -n "${BACKUP:-}" ]]; then

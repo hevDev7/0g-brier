@@ -15,3 +15,9 @@ lcov.info
 # fight the tool.
 frontend/AGENTS.md
 frontend/CLAUDE.md
+
+# Manifest safety copies made by scripts/deploy-galileo.sh before each run.
+# They exist so a failed broadcast cannot leave the repo pointing at addresses
+# that were only ever simulated; they are not history worth keeping.
+deployments/*.json.bak-*
+deployments/*.json.pre-clean-*
