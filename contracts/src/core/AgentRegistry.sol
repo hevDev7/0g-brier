@@ -575,6 +575,23 @@ contract AgentRegistry is
         return _authorizedUsers[_tokenId];
     }
 
+    /**
+     * @notice Announce ERC-7857 alongside ERC-721.
+     *
+     * @dev Without this a 7857-aware tool asking `supportsInterface` is told NO by a
+     *      contract that implements every function — and ERC-165 is the only way that
+     *      question can be asked programmatically. Implementing an interface and not
+     *      declaring it makes conformance something a reader has to take on faith,
+     *      which is the opposite of what the standard is for.
+     *
+     *      `type(IERC7857).interfaceId` rather than a literal: the id is the XOR of
+     *      the interface's selectors, so a hand-copied constant goes stale silently
+     *      the first time a signature changes.
+     */
+    function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+        return interfaceId == type(IERC7857).interfaceId || super.supportsInterface(interfaceId);
+    }
+
     /// @dev Both bases declare it; ERC-721's implementation is the one that answers.
     function ownerOf(uint256 tokenId) public view override(ERC721Upgradeable, IERC7857) returns (address) {
         return super.ownerOf(tokenId);

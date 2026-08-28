@@ -272,4 +272,18 @@ contract Erc7857Test is Test {
         registry.setCard(address(new AgentCard()));
         assertGt(bytes(registry.tokenURI(id)).length, 0, "still renders nothing");
     }
+
+    /**
+     * Conformance a machine can check.
+     *
+     * Every ERC-7857 function was implemented and `supportsInterface` still answered
+     * NO, because nothing declared the id. ERC-165 is the only way a wallet or an
+     * indexer can ask; without it, "this is an Agentic ID" is a claim in a README.
+     */
+    function test_theRegistryAnnouncesErc7857AndErc721() public view {
+        assertTrue(registry.supportsInterface(type(IERC7857).interfaceId), "ERC-7857 not announced");
+        assertTrue(registry.supportsInterface(0x80ac58cd), "ERC-721 stopped being announced");
+        assertTrue(registry.supportsInterface(0x01ffc9a7), "ERC-165 stopped being announced");
+        assertFalse(registry.supportsInterface(0xffffffff), "must not claim the invalid id");
+    }
 }
