@@ -15,10 +15,10 @@
  *   not neutral on a DPM book; it is a position against whatever the market says.
  * - It will not size on Kelly alone. See `sizeWithinImpact`.
  */
-import {WAD, toTokensCeil, toWad} from "@0g-delphi/protocol";
-import {loadDeployment} from "@0g-delphi/protocol/node";
-import {ZgStore} from "@0g-delphi/zg-storage";
-import {DelphiZeroClient, ZgInference, type Outcome} from "../src/index";
+import {WAD, toTokensCeil, toWad} from "@brier/protocol";
+import {loadDeployment} from "@brier/protocol/node";
+import {ZgStore} from "@brier/zg-storage";
+import {BrierClient, ZgInference, type Outcome} from "../src/index";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
 const ZG_INDEXER = process.env.ZG_INDEXER ?? "https://indexer-storage-testnet-turbo.0g.ai";
@@ -34,7 +34,7 @@ if (!key) throw new Error("set DEPLOYER_KEY (or AGENT_KEY) — the agent signs w
 const KEY = (key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`;
 
 const manifest = loadDeployment(CHAIN_ID, new URL("../../../deployments", import.meta.url).pathname);
-const client = new DelphiZeroClient({
+const client = new BrierClient({
   network: CHAIN_ID === 16602 ? "galileo" : "anvil",
   privateKey: KEY,
   factory: manifest.contracts.MarketFactory as `0x${string}`,
@@ -107,7 +107,8 @@ const belief = judgement.impliedProbabilityWad;
 /**
  * Kelly for DPM: f* = (P̂ − P) / (1 − P).
  *
- * The SHAPE is the same as Delphi's, and the variable is not. Net odds here are
+ * The SHAPE is the same as the LMSR form Gensyn's Delphi competition uses, and
+ * the variable is not. Net odds here are
  * `payout/cost − 1 = (1/p)/p − 1 = (1−P)/P`, so the denominator is one minus the
  * PROBABILITY. Feeding the marginal price into a formula of this shape — which
  * is what a ported LMSR agent does, because under LMSR the two are the same

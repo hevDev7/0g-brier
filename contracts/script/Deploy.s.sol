@@ -93,7 +93,7 @@ contract Deploy is Script {
         m.configProxy = address(config);
         DeployLib.applyDefaults(config, m.usdc);
 
-        m.outcomeShares = address(new OutcomeShares("https://delphi.0g/{id}.json"));
+        m.outcomeShares = address(new OutcomeShares("https://brier.0g/{id}.json"));
         m.marketImplementation = address(new Market());
         m.marketFactory = _deployFactory(config, deployer, m);
 

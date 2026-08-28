@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {WAD, dpm} from "@0g-delphi/protocol";
+import {WAD, dpm} from "@brier/protocol";
 import {payoutPerShareWad, probabilityWad} from "@/lib/dpm-view";
 
 const q: readonly [bigint, bigint] = [1000n * WAD, 1200n * WAD];

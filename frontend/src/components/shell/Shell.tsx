@@ -49,9 +49,9 @@ export function Shell({children}: {children: React.ReactNode}) {
             </span>
             <span>
               <span className="block text-[14px] leading-tight font-extrabold tracking-tight text-text">
-                0G DELPHI
+                BRIER
               </span>
-              <span className="eyebrow text-text-faint">instrument panel</span>
+              <span className="eyebrow text-text-faint">on 0G Chain</span>
             </span>
           </Link>
 

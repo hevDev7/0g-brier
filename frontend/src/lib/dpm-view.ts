@@ -1,4 +1,4 @@
-import {dpm, quote} from "@0g-delphi/protocol";
+import {dpm, quote} from "@brier/protocol";
 import type {Outcome} from "@/lib/data/types";
 
 type Q = readonly [bigint, bigint];
@@ -10,8 +10,8 @@ type Q = readonly [bigint, bigint];
  * numbers on chain, not from a reimplementation.
  *
  * This file computes NOTHING of its own; it only names the derivations the
- * screen uses. The formulas live in `@0g-delphi/protocol`, in a single copy,
- * which `@0g-delphi/agent-kit` uses too — two copies of the payout formula is
+ * screen uses. The formulas live in `@brier/protocol`, in a single copy,
+ * which `@brier/agent-kit` uses too — two copies of the payout formula is
  * the easiest way to make the screen and the agent disagree about the same
  * number.
  */

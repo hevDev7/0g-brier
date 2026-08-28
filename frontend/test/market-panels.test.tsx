@@ -1,6 +1,6 @@
 import {render, screen} from "@testing-library/react";
 import {describe, expect, it} from "vitest";
-import {WAD} from "@0g-delphi/protocol";
+import {WAD} from "@brier/protocol";
 import {PayoutPanel} from "@/components/market/PayoutPanel";
 import {ProbabilityPanel} from "@/components/market/ProbabilityPanel";
 

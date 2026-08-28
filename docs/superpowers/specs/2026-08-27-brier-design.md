@@ -1,4 +1,4 @@
-# 0G-Delphi — An Agent-Native Binary Prediction Market on 0G Chain
+# Brier — An Agent-Native Binary Prediction Market on 0G Chain
 
 **Status:** Design spec (v1) · **Date:** 2026-08-27 · **Target chain:** 0G Galileo testnet (16602) → 0G mainnet (16661)
 
@@ -6,7 +6,7 @@
 
 ## 1. Executive Summary
 
-0G-Delphi is a binary prediction market in which **the entire market lifecycle is driven by AI agents**: agents that design and fund markets, agents that guard their quality, agents that resolve their outcomes through TEE-verified inference, and a user's own agents that take buy/sell positions.
+Brier is a binary prediction market in which **the entire market lifecycle is driven by AI agents**: agents that design and fund markets, agents that guard their quality, agents that resolve their outcomes through TEE-verified inference, and a user's own agents that take buy/sell positions.
 
 Three choices shape this system:
 
@@ -14,7 +14,7 @@ Three choices shape this system:
 2. **Settlement is performed by a staked committee of agents** running inference on 0G Compute with mandatory TeeML attestation, storing the complete receipt on 0G Storage, through commit–reveal with a dispute window and slashing.
 3. **Agent risk limits are enforced in the contracts**, not in agent code. Every user has their own `AgentAccount`; an agent never holds the user's wallet key and cannot exceed the policy that was set.
 
-The main differentiator against Delphi (Gensyn), the closest existing reference: **Delphi forbids agents from creating markets** — "Agents cannot create markets. Markets must be created through the Delphi UI." In 0G-Delphi, market creation is a first-class agent action.
+The main differentiator against Delphi (Gensyn), the closest existing reference: **Delphi forbids agents from creating markets** — "Agents cannot create markets. Markets must be created through the Delphi UI." In Brier, market creation is a first-class agent action.
 
 ---
 
@@ -696,12 +696,12 @@ subscribe { channel: "agent", agentId }      → action, trade
 
 ---
 
-## 10. SDK — `@0g-delphi/agent-kit`
+## 10. SDK — `@brier/agent-kit`
 
 The ergonomics deliberately follow the Delphi SDK so a Delphi user understands it immediately, **plus** what they do not have.
 
 ```ts
-const client = new DelphiZeroClient({
+const client = new BrierClient({
   network: 'anvil' | 'galileo' | 'mainnet',
   signerType: 'private_key' | 'session',
   privateKey?: string,
@@ -780,7 +780,7 @@ LOCAL_RPC=http://127.0.0.1:8545
 
 STORAGE_MODE=real
 ZG_INDEXER_RPC=https://indexer-storage-testnet-turbo.0g.ai
-ZG_BLOB_DIR=/tmp/0g-delphi-blobs
+ZG_BLOB_DIR=/tmp/brier-blobs
 
 INFERENCE_MODE=compute
 ZG_COMPUTE_PREFERRED_PROVIDERS=            # optional; empty = choose automatically from listService()
@@ -815,7 +815,7 @@ CONFIRMATIONS=8
 ### 12.4 Repo structure
 
 ```
-0g-delphi/
+brier/
 ├─ contracts/                 Foundry
 │  ├─ src/{core,resolution,agents,periphery,mocks}/
 │  ├─ test/{unit,invariant,integration}/

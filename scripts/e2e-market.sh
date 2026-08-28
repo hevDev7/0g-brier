@@ -180,7 +180,7 @@ CATEGORY="$(cast format-bytes32-string "$(printf '%s' "$SPEC_DOC" | python3 -c "
 
 # The MarketSpec, and the root that commits to it.
 #
-# This used to be `cast keccak "0g-delphi-live-e2e"` — a hash of a string, with no
+# This used to be `cast keccak "brier-live-e2e"` — a hash of a string, with no
 # document behind it. The market it produced is readable in every respect EXCEPT
 # the question it asks, because `specRoot` is a 0G Storage content address and
 # that one addressed nothing. The document below is what the UI reads and what a

@@ -1,4 +1,4 @@
-import {WAD, toWad} from "@0g-delphi/protocol";
+import {WAD, toWad} from "@brier/protocol";
 import type {Candle, Interval, Outcome, Position, Trade} from "./types";
 
 /**

@@ -1,6 +1,6 @@
 import {ethers} from "ethers";
 import {createZGComputeNetworkBroker} from "@0gfoundation/0g-compute-ts-sdk";
-import {WAD, networkFor, isCategory, type Category, type ChainMode} from "@0g-delphi/protocol";
+import {WAD, networkFor, isCategory, type Category, type ChainMode} from "@brier/protocol";
 
 /**
  * What an agent knows about where an answer came from.

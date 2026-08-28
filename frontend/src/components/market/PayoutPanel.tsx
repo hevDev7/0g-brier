@@ -8,7 +8,7 @@ import {formatPayout} from "@/lib/format";
  * lie about the instrument it displays.
  *
  * That disclosure used to appear twice: here, and on the order ticket before
- * confirmation. Since execution moved to `@0g-delphi/agent-kit` the ticket is
+ * confirmation. Since execution moved to `@brier/agent-kit` the ticket is
  * gone — so the paragraph below is the ONLY place a human is ever told that the
  * payout in this market floats. It must not be trimmed, shrunk, or folded away
  * behind an interaction. It carries `data-testid="dilution-disclosure"` so the

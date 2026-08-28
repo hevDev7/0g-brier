@@ -473,7 +473,7 @@ contract MarketFactoryTest is Fixtures {
     ///      market-creation flow in production.
     function test_typedDataDigestMatchesEip712() public view {
         (, string memory name, string memory version, uint256 chainId, address verifying,,) = factory.eip712Domain();
-        assertEq(name, "0G-Delphi");
+        assertEq(name, "Brier");
         assertEq(version, "1");
         assertEq(chainId, block.chainid);
         assertEq(verifying, address(factory));
@@ -481,7 +481,7 @@ contract MarketFactoryTest is Fixtures {
         bytes32 domainSeparator = keccak256(
             abi.encode(
                 keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256(bytes("0G-Delphi")),
+                keccak256(bytes("Brier")),
                 keccak256(bytes("1")),
                 block.chainid,
                 address(factory)

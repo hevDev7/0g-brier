@@ -11,7 +11,7 @@ import {
 } from "viem";
 import {privateKeyToAccount} from "viem/accounts";
 import {keccak256, stringToHex, toBytes, pad} from "viem";
-import {WAD, dpm, quote, toWad, networkFor, type ChainMode} from "@0g-delphi/protocol";
+import {WAD, dpm, quote, toWad, networkFor, type ChainMode} from "@brier/protocol";
 import {AGENT_REGISTRY_ABI, CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "./abi";
 import {suggestFees} from "./fees";
 import type {Claim, Fill, MarketView, Outcome, Preview, Tier, MarketStatus} from "./types";
@@ -84,7 +84,7 @@ export interface ClientConfig {
  *
  * 1. **The chain's quote is what gets signed.** `preview()` reads
  *    `Market.quoteBuy` on chain and returns that number; the DPM mirror in
- *    `@0g-delphi/protocol` only supplies the things a view cannot — what the
+ *    `@brier/protocol` only supplies the things a view cannot — what the
  *    trade does to the probability and to the payout. An agent that sized from
  *    a local model and signed against it would be trading a copy.
  *
@@ -93,7 +93,7 @@ export interface ClientConfig {
  *    offer to be filled at any price, and a bound the SDK invented would be a
  *    risk decision made by the wrong party.
  */
-export class DelphiZeroClient {
+export class BrierClient {
   readonly account: Account;
   readonly address: `0x${string}`;
 

@@ -1,5 +1,5 @@
 import {Database} from "lucide-react";
-import {toTokensFloor} from "@0g-delphi/protocol";
+import {toTokensFloor} from "@brier/protocol";
 import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {Skeleton} from "@/components/primitives/Skeleton";
 import {Unavailable} from "@/components/primitives/Unavailable";

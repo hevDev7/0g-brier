@@ -93,7 +93,7 @@ export function AgentPicker() {
         <LockKeyhole size={16} className="mt-0.5 shrink-0 text-text-faint" aria-hidden />
         <p className="text-[12px] leading-relaxed text-text-muted">
           Observation only. Redeeming and liquidating are execution, and execution runs through
-          <span className="font-mono"> @0g-delphi/agent-kit</span> — never from a browser.
+          <span className="font-mono"> @brier/agent-kit</span> — never from a browser.
         </p>
       </Panel>
     </div>

@@ -23,9 +23,9 @@
  */
 import {createPublicClient, createWalletClient, defineChain, http, keccak256, encodeAbiParameters} from "viem";
 import {privateKeyToAccount} from "viem/accounts";
-import {loadDeployment} from "@0g-delphi/protocol/node";
-import {networkFor} from "@0g-delphi/protocol";
-import {ZgStore} from "@0g-delphi/zg-storage";
+import {loadDeployment} from "@brier/protocol/node";
+import {networkFor} from "@brier/protocol";
+import {ZgStore} from "@brier/zg-storage";
 import {ZgInference, suggestFees, type Judgement} from "../src/index";
 import {readFileSync} from "node:fs";
 import {execFileSync} from "node:child_process";

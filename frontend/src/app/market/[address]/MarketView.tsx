@@ -42,7 +42,7 @@ import type {
 /**
  * An INSPECTION page, not a place to transact (spec §1 F3): what the price is,
  * where it came from, who holds what, and on what evidence the market was
- * resolved. Buy, sell, redeem and liquidate all live in `@0g-delphi/agent-kit`,
+ * resolved. Buy, sell, redeem and liquidate all live in `@brier/agent-kit`,
  * outside the dApp — so there is no execution control in this file. Not hidden
  * and not disabled: ABSENT. A disabled button still promises something that will
  * never exist here, and this page's test asserts that no buy/sell/approve

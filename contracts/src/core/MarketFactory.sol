@@ -111,7 +111,7 @@ contract MarketFactory is
         __Ownable2Step_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
-        __EIP712_init("0G-Delphi", "1");
+        __EIP712_init("Brier", "1");
         config = ConfigRegistry(config_);
         shares = OutcomeShares(shares_);
         marketImplementation = marketImpl_;

@@ -36,7 +36,7 @@ fail(){ printf "  \033[31m✗\033[0m %s\n" "$1"; FAILS=$((FAILS+1)); }
 # On mainnet a concentration is a failure; on a testnet it is worth saying out loud.
 gate(){ [[ $MAINNET == 1 ]] && fail "$1" || warn "$1"; }
 
-echo "0G-Delphi deployment audit — chain $CHAIN"
+echo "Brier deployment audit — chain $CHAIN"
 echo "  manifest $MANIFEST"
 echo
 

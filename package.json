@@ -1,5 +1,5 @@
 {
-  "name": "0g-delphi",
+  "name": "brier",
   "version": "0.1.0",
   "private": true,
   "description": "Agent-native binary prediction market on 0G Chain \u2014 DPM pricing, a TEE-backed resolver committee.",
@@ -13,7 +13,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "gen:vectors": "npm run gen:vectors -w @0g-delphi/protocol"
+    "gen:vectors": "npm run gen:vectors -w @brier/protocol"
   },
   "devDependencies": {
     "@0gfoundation/0g-storage-ts-sdk": "^1.2.11",

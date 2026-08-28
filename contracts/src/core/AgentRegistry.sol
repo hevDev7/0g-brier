@@ -108,7 +108,7 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
     }
 
     function initialize(address owner_, address config_) external initializer {
-        __ERC721_init("0G-Delphi Agent", "0GAGENT");
+        __ERC721_init("Brier Agent", "BRIER");
         __Ownable_init(owner_);
         __Ownable2Step_init();
         __UUPSUpgradeable_init();
@@ -350,7 +350,7 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
         string memory json = string.concat(
             '{"name":"',
             _jsonEscape(name_),
-            '","description":"An agent identity on 0G-Delphi. The name and role are on chain; the persona, prompts and model configuration live in a 0G Storage document addressed by the Persona attribute.","image":"',
+            '","description":"An agent identity on Brier. The name and role are on chain; the persona, prompts and model configuration live in a 0G Storage document addressed by the Persona attribute.","image":"',
             _image(name_, agentId),
             '","attributes":[{"trait_type":"Role","value":"',
             _roleName(a.role),
@@ -376,7 +376,7 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
             ',35%,16%)"/>',
             '<text x="200" y="196" font-family="ui-monospace,monospace" font-size="15" fill="hsl(',
             hue,
-            ',45%,68%)" text-anchor="middle">0G-DELPHI AGENT</text>',
+            ',45%,68%)" text-anchor="middle">BRIER AGENT</text>',
             '<text x="200" y="228" font-family="ui-monospace,monospace" font-size="26" fill="#f2f2f0" text-anchor="middle">',
             _xmlEscape(name_),
             "</text></svg>"

@@ -2,7 +2,7 @@
 
 import {Moon, Sun} from "lucide-react";
 
-const STORAGE_KEY = "delphi-theme";
+const STORAGE_KEY = "brier-theme";
 
 /**
  * Holds no React state on purpose. Which icon shows is decided by the `.dark`

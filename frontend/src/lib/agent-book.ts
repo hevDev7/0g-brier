@@ -1,4 +1,4 @@
-import {dpm, toTokensFloor} from "@0g-delphi/protocol";
+import {dpm, toTokensFloor} from "@brier/protocol";
 import type {MarketStatus, MarketSummary, Outcome, Position} from "@/lib/data/types";
 
 const WAD = 10n ** 18n;

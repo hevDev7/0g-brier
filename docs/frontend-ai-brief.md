@@ -1,7 +1,7 @@
-# Build brief — 0G-Delphi human web UI
+# Build brief — Brier human web UI
 
 > **Status, 2026-08-28: this brief has been executed.** The three routes, the design system, and
-> the English migration all shipped; `docs/superpowers/specs/2026-08-27-0g-delphi-frontend-design.md`
+> the English migration all shipped; `docs/superpowers/specs/2026-08-27-brier-frontend-design.md`
 > and the code are now the authority, and this file is kept as the reasoning behind them. Four
 > things below are deliberately out of date, corrected inline where they appear:
 >
@@ -25,7 +25,7 @@ generator: it may import workspace packages, run `vitest`, and read the existing
 
 ## 0. Your job, in one paragraph
 
-0G-Delphi is an agent-native binary prediction market on 0G Chain. Pricing is Pennock's DPM
+Brier is an agent-native binary prediction market on 0G Chain. Pricing is Pennock's DPM
 (`C(q) = √(Σqᵢ²)`), settlement is decided by a committee of AI resolvers, and **every trade is
 executed by autonomous agents through an SDK — never by a human in a browser.** You are building
 the human web UI, which is therefore an *instrument panel*, not an exchange: it shows what the
@@ -48,7 +48,7 @@ exists in the `DataSource` contract, or from a field you added to that contract 
 | `frontend/src/lib/dpm-view.ts` | The only sanctioned source of probability and payout. |
 | `frontend/src/app/market/[address]/MarketView.tsx` | The `Query<T>` unwrapping pattern. Copy it exactly. |
 | `frontend/src/app/globals.css` | The design tokens. They already exist — do not invent a second palette. |
-| `docs/superpowers/specs/2026-08-27-0g-delphi-frontend-design.md` | The authority for routes, columns, and the visual system. |
+| `docs/superpowers/specs/2026-08-27-brier-frontend-design.md` | The authority for routes, columns, and the visual system. |
 | `frontend/node_modules/next/dist/docs/01-app/` | Next.js 16 is **not** the Next.js in your training data. Read before using an App Router API. |
 
 ---
@@ -126,7 +126,7 @@ All DPM math is wad (1e18). Collateral is 6 decimals. **No `Number()`, no `parse
 Double precision cannot represent a wad value, and a silent rounding on money is not acceptable.
 
 - Convert only at the token boundary, only with `toWad` / `toTokensFloor` / `toTokensCeil` from
-  `@0g-delphi/protocol`. Never write a `1e12` or `10n ** 12n` of your own.
+  `@brier/protocol`. Never write a `1e12` or `10n ** 12n` of your own.
 - Money **in** rounds up (`toTokensCeil`), money **out** rounds down (`toTokensFloor`). A pool
   depth reading is money out — it must never overstate what backs the market.
 - Every displayed number goes through `lib/format.ts`. If you need a format that does not exist
@@ -500,7 +500,7 @@ detail page's title should name the market.
   with `--bg`/`--text`/`--accent`), no Recharts or visx (they take `number`, and wad values must not
   become floats), no framer-motion, no icon package unless you inline the handful of SVGs you need.
   Charts are hand-rolled SVG built from `lib/chart.ts`, which is pure arithmetic and unit-tested.
-- **`@0g-delphi/protocol` is the single copy of the DPM math**, pinned to `DPMMath.sol` by a
+- **`@brier/protocol` is the single copy of the DPM math**, pinned to `DPMMath.sol` by a
   512-vector differential test and shared with the agent SDK. Import it. Adding modules to it is
   fine; **changing its arithmetic or reimplementing any of it in the frontend is not.** Two copies
   of the payout formula is the easiest way to make the screen and the agents disagree.
@@ -592,7 +592,7 @@ another market.
 
 ## 10. Self-check — numbers you must reproduce
 
-Computed from the live fixtures via `@0g-delphi/protocol`. If your UI disagrees with any of these,
+Computed from the live fixtures via `@brier/protocol`. If your UI disagrees with any of these,
 you have the probability/payout confusion described in L1.
 
 **Market 1 — `0x1111…1111`, Open, `q = [1000, 1200]` (NO, YES)**
@@ -635,7 +635,7 @@ your tape and your panel disagree, the bug is in your rendering, not in the data
 | Add a buy/sell/redeem/approve/connect control, even disabled | Violates the product's core separation; fails tests |
 | Add a signer, `wagmi`, or a `viem` write path | Same |
 | `Number()` / `parseFloat` / `.toFixed()` on money | wad is not representable in double |
-| Write your own `1e12` or decimal conversion | `@0g-delphi/protocol` has the correct rounding directions |
+| Write your own `1e12` or decimal conversion | `@brier/protocol` has the correct rounding directions |
 | Format a number inside a component | Formatting must be identical across screens |
 | Reimplement DPM math in the frontend | Two copies make the screen and the agents disagree |
 | Create `tailwind.config.js` | Tailwind v4 is CSS-first here |

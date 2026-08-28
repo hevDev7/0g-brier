@@ -1,4 +1,4 @@
-import {WAD, dpm, scaleFor} from "@0g-delphi/protocol";
+import {WAD, dpm, scaleFor} from "@brier/protocol";
 import {candlesFrom, positionsFrom} from "./derive";
 import {
   CAPABILITIES,

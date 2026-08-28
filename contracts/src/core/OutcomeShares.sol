@@ -5,7 +5,7 @@ import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {IMarketRegistry} from "../interfaces/IMarketRegistry.sol";
 
 /// @title OutcomeShares
-/// @notice Tradable outcome positions for every 0G-Delphi market.
+/// @notice Tradable outcome positions for every Brier market.
 /// @dev Authorization here is arithmetic, not administrative: `id` is derived from
 ///      the market address, and mint/burn derive it from `msg.sender`. A market
 ///      therefore has no way to name another market's id — there is no per-market

@@ -1,5 +1,5 @@
 {
-  "name": "@0g-delphi/agent-kit",
+  "name": "@brier/agent-kit",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,11 +12,11 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@0g-delphi/protocol": "0.1.0",
+    "@brier/protocol": "0.1.0",
     "viem": "^2.56.0",
     "@0gfoundation/0g-compute-ts-sdk": "^0.9.0",
     "ethers": "6.13.1",
-    "@0g-delphi/zg-storage": "0.1.0"
+    "@brier/zg-storage": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

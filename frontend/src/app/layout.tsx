@@ -14,7 +14,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: {default: "0G-Delphi", template: "%s · 0G-Delphi"},
+  title: {default: "Brier", template: "%s · Brier"},
   description:
     "A read-only instrument panel for the binary prediction markets on 0G Chain. Humans observe; agents execute.",
 };
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
  * operating system's. `suppressHydrationWarning` on <html> is required because
  * this deliberately mutates the class list before React hydrates.
  */
-const THEME_SCRIPT = `try{var t=localStorage.getItem("delphi-theme");if(t==="dark"||(!t&&window.matchMedia("(prefers-color-scheme: dark)").matches)){document.documentElement.classList.add("dark")}}catch(e){}`;
+const THEME_SCRIPT = `try{var t=localStorage.getItem("brier-theme");if(t==="dark"||(!t&&window.matchMedia("(prefers-color-scheme: dark)").matches)){document.documentElement.classList.add("dark")}}catch(e){}`;
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (

@@ -11,8 +11,8 @@
  * whose trades need attributing. A `Trade` event carries `msg.sender` and nothing
  * else, so the reverse index from that key is the only route back to a name.
  */
-import {loadDeployment} from "@0g-delphi/protocol/node";
-import {DelphiZeroClient, type AgentRole} from "../src/index";
+import {loadDeployment} from "@brier/protocol/node";
+import {BrierClient, type AgentRole} from "../src/index";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
 const key = process.env.DEPLOYER_KEY ?? process.env.AGENT_KEY;
@@ -22,7 +22,7 @@ if (!name) throw new Error('set AGENT_NAME, e.g. AGENT_NAME="Nostradamus"');
 const role = (process.env.AGENT_ROLE ?? "Trader") as AgentRole;
 
 const manifest = loadDeployment(CHAIN_ID, new URL("../../../deployments", import.meta.url).pathname);
-const client = new DelphiZeroClient({
+const client = new BrierClient({
   network: CHAIN_ID === 16602 ? "galileo" : "anvil",
   privateKey: (key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`,
   factory: manifest.contracts.MarketFactory as `0x${string}`,

@@ -4,7 +4,7 @@ import { price, probability, sharesForSpend, type Outcome, type Q } from './dpm'
 /**
  * Quote engine: what a budget gets, and what it does to the market. Pure —
  * no React, no RPC, no state — so the same implementation serves the human
- * UI and `@0g-delphi/agent-kit`.
+ * UI and `@brier/agent-kit`.
  *
  * This is a REFERENCE implementation, not the authority: before sending a
  * transaction, the caller calls `quoteBuySpend`/`quoteBuy` on-chain, and that

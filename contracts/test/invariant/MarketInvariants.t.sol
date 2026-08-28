@@ -388,7 +388,7 @@ contract MarketInvariantsTest is Fixtures {
 
     function _tradePhase() internal {
         for (uint256 i = 0; i < 8; ++i) {
-            uint256 s = uint256(keccak256(abi.encode("0g-delphi-invariant", i)));
+            uint256 s = uint256(keccak256(abi.encode("brier-invariant", i)));
             handler.buy(i, i, s);
             handler.addLiquidity(i, s >> 8);
             handler.roundTrip(i, i + 1, s >> 16);

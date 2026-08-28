@@ -34,4 +34,4 @@ jobs:
       - name: typecheck frontend
         run: npx tsc --noEmit -p frontend
       - name: build frontend
-        run: npm run build -w @0g-delphi/frontend
+        run: npm run build -w @brier/frontend

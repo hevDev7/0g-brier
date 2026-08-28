@@ -42,7 +42,7 @@ contract OutcomeSharesTest is Test {
     address internal alice = makeAddr("alice");
 
     function setUp() public {
-        shares = new OutcomeShares("https://delphi.0g/{id}.json");
+        shares = new OutcomeShares("https://brier.0g/{id}.json");
         registry = new StubRegistry();
         shares.setRegistry(address(registry));
         marketA = new FakeMarket(shares);

@@ -23,9 +23,9 @@ const allowedDevOrigins = (process.env.DEV_ALLOWED_HOSTS ?? "")
   .filter(Boolean);
 
 const nextConfig: NextConfig = {
-  // @0g-delphi/protocol exports raw .ts, not compiled JS. Without this, the
+  // @brier/protocol exports raw .ts, not compiled JS. Without this, the
   // build fails when importing the DPM mirror.
-  transpilePackages: ["@0g-delphi/protocol"],
+  transpilePackages: ["@brier/protocol"],
   allowedDevOrigins,
 };
 

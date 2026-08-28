@@ -1,4 +1,4 @@
-# 0G-Delphi — repo conventions
+# Brier — repo conventions
 
 Agent-native binary prediction market on 0G Chain. DPM (Pennock) pricing, an AI
 resolver committee, and a strict separation between the human web UI and the agent SDK.

@@ -1,14 +1,14 @@
-# 0G-Delphi P0 + P1 — Fondasi & Inti Market DPM
+# Brier P0 + P1 — Fondasi & Inti Market DPM
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the 0G-Delphi monorepo together with an on-chain DPM market engine proven solvent — to the point where one binary market can be created, traded, closed, resolved, and redeemed entirely on a local anvil, guarded by ten stateful-fuzz invariants.
+**Goal:** Build the Brier monorepo together with an on-chain DPM market engine proven solvent — to the point where one binary market can be created, traded, closed, resolved, and redeemed entirely on a local anvil, guarded by ten stateful-fuzz invariants.
 
 **Architecture:** Foundry contracts in `contracts/`, with `Market` as an immutable EIP-1167 clone that holds the funds, and `ConfigRegistry`/`MarketFactory` as UUPS behind it. Prices come from the dynamic pari-mutuel cost function `C(q) = √(q₀² + q₁²)`; the pool's cash is **set** to `costUp(q)` on every operation rather than accumulated, so solvency holds by construction. The TypeScript package `packages/protocol` holds the DPM mirror, the unit conversions, and the mode switches; that mirror generates the test vectors Solidity re-verifies (the differential test).
 
 **Tech Stack:** Foundry (forge 1.5.1-stable) · Solidity 0.8.28 · OpenZeppelin Contracts 5.4.0 + Contracts-Upgradeable 5.4.0 · Node 22 + npm workspaces · TypeScript 5 + vitest · anvil · GitHub Actions
 
-**Spec:** `docs/superpowers/specs/2026-08-27-0g-delphi-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-27-brier-design.md`
 
 ---
 
@@ -42,7 +42,7 @@ The spec was updated to match before any task was executed (Task 0).
 ## File Structure
 
 ```
-0g-delphi/
+brier/
 ├─ package.json                              npm workspaces root
 ├─ Makefile                                  jalan pintas: build, test, fmt, deploy, demo
 ├─ .github/workflows/ci.yml                  gerbang CI
@@ -80,7 +80,7 @@ The spec was updated to match before any task was executed (Task 0).
 ## Task 0: Align the spec with the two deviations
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-08-27-0g-delphi-design.md`
+- Modify: `docs/superpowers/specs/2026-08-27-brier-design.md`
 
 **Interfaces:**
 - Consumes: —
@@ -122,7 +122,7 @@ to:
 - [ ] **Step 3: Commit**
 
 ```bash
-git add docs/superpowers/specs/2026-08-27-0g-delphi-design.md
+git add docs/superpowers/specs/2026-08-27-brier-design.md
 git commit -m "docs: proportional removeLiquidity + ERC-1155 ids derived from the market address"
 ```
 
@@ -261,7 +261,7 @@ Expected: PASS — 2 lulus.
 
 ```json
 {
-  "name": "0g-delphi",
+  "name": "brier",
   "version": "0.1.0",
   "private": true,
   "description": "Agent-native binary prediction market on 0G Chain — DPM pricing, a TEE-backed resolver committee.",
@@ -270,7 +270,7 @@ Expected: PASS — 2 lulus.
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "gen:vectors": "npm run gen:vectors -w @0g-delphi/protocol"
+    "gen:vectors": "npm run gen:vectors -w @brier/protocol"
   }
 }
 ```
@@ -430,7 +430,7 @@ Expected: FAIL — the `../src/units.js` module is not found.
 
 ```json
 {
-  "name": "@0g-delphi/protocol",
+  "name": "@brier/protocol",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -803,7 +803,7 @@ pragma solidity 0.8.28;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /// @title MockUSDC
-/// @notice A 6-decimal test collateral for 0G-Delphi. Testnet/local ONLY.
+/// @notice A 6-decimal test collateral for Brier. Testnet/local ONLY.
 /// @dev Deliberately 6 decimals, not 18: every test must cross the decimal
 ///      normalization layer from day one, so a scaling bug does not first show up
 ///      when moving to a real stablecoin on mainnet.
@@ -815,7 +815,7 @@ contract MockUSDC is ERC20 {
 
     error FaucetCooldown(uint256 availableAt);
 
-    constructor() ERC20("0G-Delphi Mock USD", "mUSDC") {}
+    constructor() ERC20("Brier Mock USD", "mUSDC") {}
 
     function decimals() public pure override returns (uint8) {
         return 6;
@@ -2248,7 +2248,7 @@ contract OutcomeSharesTest is Test {
     address internal alice = makeAddr("alice");
 
     function setUp() public {
-        shares = new OutcomeShares("https://delphi.0g/{id}.json");
+        shares = new OutcomeShares("https://brier.0g/{id}.json");
         registry = new StubRegistry();
         shares.setRegistry(address(registry));
         marketA = new FakeMarket(shares);
@@ -2344,7 +2344,7 @@ import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {IMarketRegistry} from "../interfaces/IMarketRegistry.sol";
 
 /// @title OutcomeShares
-/// @notice Tradable outcome positions for every 0G-Delphi market.
+/// @notice Tradable outcome positions for every Brier market.
 /// @dev Authorization here is arithmetic, not administrative: `id` is derived from
 ///      the market address, and mint/burn derive it from `msg.sender`. A market
 ///      therefore has no way to name another market's id — there is no per-market
@@ -4559,7 +4559,7 @@ contract MarketFactory is Initializable, Ownable2StepUpgradeable, UUPSUpgradeabl
         __Ownable_init(owner_);
         __Ownable2Step_init();
         __UUPSUpgradeable_init();
-        __EIP712_init("0G-Delphi", "1");
+        __EIP712_init("Brier", "1");
         if (config_ == address(0) || shares_ == address(0) || marketImpl_ == address(0)) revert ZeroAddress();
         config = ConfigRegistry(config_);
         shares = OutcomeShares(shares_);
@@ -4638,7 +4638,7 @@ contract MarketFactory is Initializable, Ownable2StepUpgradeable, UUPSUpgradeabl
 Inside `run()`, after `DeployLib.applyDefaults(...)` and before `vm.stopBroadcast()`:
 
 ```solidity
-        OutcomeShares sharesContract = new OutcomeShares("https://delphi.0g/{id}.json");
+        OutcomeShares sharesContract = new OutcomeShares("https://brier.0g/{id}.json");
         Market marketImpl = new Market();
 
         MarketFactory factoryImpl = new MarketFactory();

@@ -1,7 +1,7 @@
 import {describe, expect, it} from "vitest";
 import {custom, decodeFunctionData, encodeFunctionResult, type Transport} from "viem";
-import {WAD, dpm} from "@0g-delphi/protocol";
-import {DelphiZeroClient} from "../src/client";
+import {WAD, dpm} from "@brier/protocol";
+import {BrierClient} from "../src/client";
 import {ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "../src/abi";
 import {UnreadableBeliefError, parseBelief, parseJudgement} from "../src/inference";
 import {decodeAgentName, encodeAgentName} from "../src/client";
@@ -60,7 +60,7 @@ function stub(overrides: Record<string, unknown> = {}): Transport {
 }
 
 const client = (overrides?: Record<string, unknown>) =>
-  new DelphiZeroClient({
+  new BrierClient({
     network: "anvil",
     privateKey: KEY,
     factory: FACTORY,
@@ -70,8 +70,9 @@ const client = (overrides?: Record<string, unknown>) =>
 
 describe("what an agent is shown", () => {
   /**
-   * The single most load-bearing test in this package. Delphi is LMSR, where the
-   * marginal price IS the implied probability. 0G-Delphi is DPM Pennock, where
+   * The single most load-bearing test in this package. Gensyn's Delphi
+   * competition runs on LMSR, where the
+   * marginal price IS the implied probability. Brier is DPM Pennock, where
    * the probability is the price SQUARED. An agent ported across that boundary
    * reads one for the other, overstates its edge, and keeps trading — so the two
    * are separate fields, and this asserts they are separate NUMBERS.

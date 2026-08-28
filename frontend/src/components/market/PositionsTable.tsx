@@ -1,5 +1,5 @@
 import {Layers} from "lucide-react";
-import {dpm} from "@0g-delphi/protocol";
+import {dpm} from "@brier/protocol";
 import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {Unavailable} from "@/components/primitives/Unavailable";
 import {formatPricePerShare, formatShares, shortAddress} from "@/lib/format";

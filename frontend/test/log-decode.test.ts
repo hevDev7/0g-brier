@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
 import {LogSource} from "@/lib/data/logs";
-import {dpm} from "@0g-delphi/protocol";
+import {dpm} from "@brier/protocol";
 
 /**
  * The decode step, with the chain stubbed out.

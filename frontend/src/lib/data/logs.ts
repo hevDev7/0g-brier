@@ -1,5 +1,5 @@
 import type {PublicClient} from "viem";
-import {dpm} from "@0g-delphi/protocol";
+import {dpm} from "@brier/protocol";
 import {MARKET_CREATED_EVENT, TRADE_EVENT} from "./abi";
 import {ChainSource, type ChainSourceConfig} from "./chain";
 import {candlesFrom, positionsFrom} from "./derive";

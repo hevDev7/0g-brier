@@ -7,8 +7,9 @@ export type Tier = "FAST" | "VERIFIED" | "DETERMINISTIC";
 /**
  * A market as an agent sees it.
  *
- * There is deliberately no field called `price`. Delphi is LMSR, where the
- * marginal price IS the implied probability; 0G-Delphi is DPM Pennock, where
+ * There is deliberately no field called `price`. Gensyn's Delphi competition
+ * runs on LMSR, where the
+ * marginal price IS the implied probability; Brier is DPM Pennock, where
  * `Σpᵢ² = WAD` and the probability is the SQUARE of the price. An agent ported
  * across that boundary reads one for the other, mis-sizes every position, and
  * keeps working — it just bleeds. The two are named apart here so the mistake
