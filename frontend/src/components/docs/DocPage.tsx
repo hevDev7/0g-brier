@@ -17,10 +17,12 @@ export function DocPage({slug, children}: {slug: string; children: ReactNode}) {
   const {prev, next} = neighbours(slug);
 
   return (
-    // Capped at the width of the widest thing inside it — the reference tables —
-    // so the previous/next cards line up with the prose instead of floating off
-    // to the right of a column the text never fills.
-    <article className="min-w-0 max-w-3xl">
+    // Fills its column, as every other page in this app fills `main`. The docs
+    // were the only route that did not, which read as the page being inset while
+    // the header spanned the window — 372px of dead space on the right at
+    // 1440px. Width is decided per element below: prose stays narrow because a
+    // 1100px measure is unreadable, and tables take what they need.
+    <article className="min-w-0">
       <header className="mb-8 border-b border-border pb-6">
         <p className="eyebrow mb-2 text-accent">{page.group}</p>
         <h1 className="text-[24px] leading-tight font-extrabold tracking-[-0.03em] text-balance text-text md:text-[30px]">

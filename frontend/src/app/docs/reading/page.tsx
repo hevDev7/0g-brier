@@ -8,7 +8,7 @@ export default function ReadingPage() {
     <DocPage slug="reading">
         <P>What each number on a market page means, and what it does not.</P>
 
-        <div className="max-w-2xl overflow-x-auto rounded border border-border">
+        <div className="overflow-x-auto rounded border border-border">
           <table className="w-full border-collapse text-[13px]">
             <thead>
               <tr className="border-b border-border bg-bg-sunken text-left">

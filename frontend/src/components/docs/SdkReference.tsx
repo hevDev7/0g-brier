@@ -19,7 +19,7 @@ export function MethodGroup({
   methods: {sig: string; does: ReactNode}[];
 }) {
   return (
-    <div className="max-w-3xl">
+    <div>
       <p className="eyebrow mb-2 text-text-faint">{title}</p>
       {note && <p className="mb-3 text-[13px] leading-relaxed text-text-muted">{note}</p>}
       <div className="overflow-x-auto rounded border border-border">
@@ -42,7 +42,7 @@ export function MethodGroup({
 
 export function ErrorTable({rows}: {rows: {name: string; when: string; fix: string}[]}) {
   return (
-    <div className="max-w-3xl overflow-x-auto rounded border border-border">
+    <div className="overflow-x-auto rounded border border-border">
       <table className="w-full border-collapse text-[13px]">
         <thead>
           <tr className="border-b border-border bg-bg-sunken text-left">
@@ -76,7 +76,7 @@ export function PortingTable({
   rows: {from: string; to: string; trap?: ReactNode}[];
 }) {
   return (
-    <div className="max-w-3xl overflow-x-auto rounded border border-border">
+    <div className="overflow-x-auto rounded border border-border">
       <table className="w-full border-collapse text-[13px]">
         <thead>
           <tr className="border-b border-border bg-bg-sunken text-left">

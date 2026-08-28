@@ -28,7 +28,7 @@ export default function ParametersPage() {
           result. The tier is shown on every market page.
         </P>
 
-        <div className="max-w-3xl overflow-x-auto rounded border border-border">
+        <div className="overflow-x-auto rounded border border-border">
           <table className="w-full border-collapse text-[13px]">
             <thead>
               <tr className="border-b border-border bg-bg-sunken text-left">
