@@ -2,7 +2,6 @@ import {Suspense} from "react";
 import {PageHeading} from "@/components/primitives/PageHeading";
 import {SkeletonRows} from "@/components/primitives/Skeleton";
 import {MarketList} from "@/components/market/MarketList";
-import {ObservationLegend} from "@/components/source/ObservationLegend";
 import {SourceNotes} from "@/components/source/SourceNotes";
 
 export const metadata = {title: "Markets"};
@@ -32,11 +31,6 @@ export default function Home() {
       >
         <MarketList />
       </Suspense>
-      {/* The legend sits after the table because it explains what a reader has
-          just met in it, not what they are about to. */}
-      <div className="mt-5">
-        <ObservationLegend />
-      </div>
     </>
   );
 }

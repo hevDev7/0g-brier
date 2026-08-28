@@ -1,7 +1,6 @@
 import {render, screen, within} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {describe, expect, it} from "vitest";
-import {ObservationLegend} from "@/components/source/ObservationLegend";
 import {SourceNotes} from "@/components/source/SourceNotes";
 import {AppProviders} from "@/hooks/provider";
 import {CAPABILITY_LABELS} from "@/components/primitives/Unavailable";
@@ -62,27 +61,5 @@ describe("SourceNotes", () => {
     await user.click(toggle);
     await user.click(toggle);
     expect(screen.queryByTestId("source-notes")).not.toBeInTheDocument();
-  });
-});
-
-describe("ObservationLegend", () => {
-  it("names all four states a figure can be in", () => {
-    render(<ObservationLegend />);
-    for (const state of ["LOADING", "EMPTY", "UNAVAILABLE", "ERROR"]) {
-      expect(screen.getByText(state)).toBeInTheDocument();
-    }
-  });
-
-  it("draws the distinction the product rests on: unknown is not zero", () => {
-    render(<ObservationLegend />);
-    expect(screen.getByTestId("observation-legend")).toHaveTextContent(
-      /never a zero, which would be a claim/i,
-    );
-  });
-
-  /** A legend is not a control: a retry button here would describe nothing. */
-  it("offers no controls", () => {
-    render(<ObservationLegend />);
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });
