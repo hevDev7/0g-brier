@@ -2,9 +2,9 @@
   "chainId": 16602,
   "contracts": {
     "ConfigRegistry": "0x8b25998dDd7107F660764A8f5A730bCc4EF9db03",
-    "ConfigRegistryImpl": "0x7bd1a75707e520677c47cD14E07d831bf6E1076C",
+    "ConfigRegistryImpl": "0x229cC68Ff2AC472432A404135f8113439D687d2d",
     "MarketFactory": "0x9fBF6525Da42aE3320DF73211F4e00eaef617d5e",
-    "MarketFactoryImpl": "0x23BE85dA2D464727c909cB50B93692B3353CE50a",
+    "MarketFactoryImpl": "0xcC7C42BFe52C9556520e0fe75048FcF5174D7CFB",
     "MarketImplementation": "0x0BbAC9D3747e71Ffb3263f5eBe00efb55642d3ef",
     "MockUSDC": "0x683e55853F72950F42Fc0d6B035c405556EaFdb6",
     "OutcomeShares": "0x552d6f8571CA61dD0de6cfc28847400AF784f415",
