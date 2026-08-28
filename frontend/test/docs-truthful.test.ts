@@ -117,4 +117,51 @@ describe("the documentation does not describe things that are not there", () => 
     expect(PAGES).toContain('["VERIFIED", "3 of 5 must agree", "6 hours"]');
     expect(PAGES).toContain('["DETERMINISTIC", "2 of 3 must agree", "2 hours"]');
   });
+
+  /**
+   * Commands the documentation tells a reader to type must exist.
+   *
+   * This page once printed `npm run register`, `npm run scan`, `npm run claim`,
+   * `npm run metadata` and `npm run whoami`. None of them existed anywhere the
+   * reader could get: they were scripts in an agent project the author had
+   * written and never shipped. A newcomer following the page reached a terminal
+   * and got "Missing script", with nothing to tell them whether they had made a
+   * mistake or the documentation had.
+   */
+  it("only tells the reader to run scripts that ship", () => {
+    const examples = new Set(
+      readdirSync(join(ROOT, "packages/agent-kit/examples")).filter((f) => f.endsWith(".ts")),
+    );
+    const referenced = [...PAGES.matchAll(/npx tsx examples\/([\w.-]+)/g)].map((m) => m[1]!);
+
+    expect(referenced.length).toBeGreaterThan(2);
+    expect(referenced.filter((f) => !examples.has(f))).toEqual([]);
+  });
+
+  it("does not invent npm scripts", () => {
+    const claimed = [...PAGES.matchAll(/npm run ([\w-]+)/g)].map((m) => m[1]!);
+    // agent-kit is the package the docs send people to. Anything claimed here
+    // has to be a script it actually defines.
+    const scripts = Object.keys(
+      (JSON.parse(read("packages/agent-kit/package.json")) as {scripts?: Record<string, string>}).scripts ?? {},
+    );
+    expect(claimed.filter((c) => !scripts.includes(c))).toEqual([]);
+  });
+
+  /**
+   * Every command carries the directory it runs in.
+   *
+   * The `Run` primitive requires a `cwd`, so this checks the primitive is the one
+   * being used: a `Cmd` holding a shell invocation is a command with nowhere to
+   * run it, which is the shape the complaint was about.
+   */
+  it("never prints a shell command without saying where to run it", () => {
+    const bareShellCmds = [...PAGES.matchAll(/<Cmd>\{?`?([^`<]*(?:npx|npm|cast|git clone)[^`<]*)/g)].map(
+      (m) => m[1]!.trim().split("\n")[0]!,
+    );
+    // `cast` lines are self-contained — they name an RPC and an address and run
+    // from anywhere. Anything invoking the project's own tooling must not be bare.
+    const projectCmds = bareShellCmds.filter((c) => /npx tsx|npm run/.test(c));
+    expect(projectCmds).toEqual([]);
+  });
 });

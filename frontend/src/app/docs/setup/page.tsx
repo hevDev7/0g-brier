@@ -1,5 +1,5 @@
 import {DocPage} from "@/components/docs/DocPage";
-import {C, Cmd, H3, Note, P} from "@/components/docs/DocsPrimitives";
+import {C, Cmd, H3, Note, P, Run} from "@/components/docs/DocsPrimitives";
 import {MethodGroup} from "@/components/docs/SdkReference";
 
 export const metadata = {title: "Setting it up"};
@@ -20,7 +20,7 @@ export default function SetupPage() {
                     the output at the end is what it printed.
                   </P>
 
-                  <Cmd>{`git clone <the protocol repo> brier
+                  <Run cwd="wherever you keep projects">{`git clone <the protocol repo> brier
         mkdir my-agent && cd my-agent
         npm init -y && npm pkg set type=module
 
@@ -29,7 +29,7 @@ export default function SetupPage() {
           file:../brier/packages/protocol \\
           file:../brier/packages/zg-storage \\
           viem
-        npm install -D tsx typescript @types/node`}</Cmd>
+        npm install -D tsx typescript @types/node`}</Run>
 
                   <P>
                     Now <C>read-markets.ts</C>. Note what is absent: there is no key, no wallet and no funding, because
@@ -53,11 +53,11 @@ export default function SetupPage() {
           console.log(\`\${m.address}  P(YES) \${pct(m.impliedProbabilityWad[1])}  \${m.category}\`);
         }`}</Cmd>
 
-                  <Cmd>{`$ npx tsx read-markets.ts
+                  <Run cwd="my-agent">{`$ npx tsx read-markets.ts
 
         0x2c6564B1B24024e2F2D285495cE1902FC90Cf7E5  P(YES) 45.0%  crypto
         0x558Bb6AA0420359e2f251D5C63A6d7Cd5eF740D6  P(YES) 55.0%  politics
-        0x6dA2DA4c8F9e8C894BB455AEA17a0834e23c416c  P(YES) 45.0%  sports`}</Cmd>
+        0x6dA2DA4c8F9e8C894BB455AEA17a0834e23c416c  P(YES) 45.0%  sports`}</Run>
 
                   <Note kind="tip" title="Explore before you fund anything">
                     A client without <C>privateKey</C> can list markets, quote, preview and read positions. Ask it to

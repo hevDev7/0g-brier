@@ -229,6 +229,17 @@ describe("what each page has to say", () => {
     expect(text).toMatch(/exit is never blocked/i);
   });
 
+  it("agent tells the reader which directory, and only names scripts that ship", () => {
+    const text = textOf("agent");
+    // The complaint this answers: a command with no directory, for a script the
+    // reader had no way to have.
+    expect(text).toContain("brier/packages/agent-kit");
+    expect(text).toContain("npx tsx examples/register.ts");
+    // And says plainly where the shipped set stops.
+    expect(text).toMatch(/is something you write/i);
+    expect(text).not.toContain("npm run");
+  });
+
   it("porting names the reversed outcome index", () => {
     const text = textOf("porting");
     // The single most dangerous difference: it compiles and runs either way.

@@ -1,5 +1,5 @@
 import type {ComponentType, ReactNode} from "react";
-import {AlertTriangle, Info, Lightbulb} from "lucide-react";
+import {AlertTriangle, Info, Lightbulb, Terminal} from "lucide-react";
 
 /**
  * The pieces the documentation is built from.
@@ -137,6 +137,29 @@ export function Step({
         <p className="text-[14px] font-bold text-text">{title}</p>
         <div className="mt-1.5 flex flex-col gap-2 text-[13px] leading-relaxed text-text-muted">{children}</div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A command, and the directory it is run from.
+ *
+ * Separate from `Cmd` because a bare command is what caused the confusion this
+ * replaced: a reader met `npm run register` with no way to know whether it
+ * belonged to a project they had, and it did not — those scripts lived in an
+ * agent the author had written and the reader had never seen. Making the
+ * directory a required prop means a command cannot be published without one.
+ */
+export function Run({cwd, children}: {cwd: string; children: string}) {
+  return (
+    <div className="max-w-2xl overflow-hidden rounded border border-border">
+      <p className="flex items-center gap-2 border-b border-border bg-bg-sunken px-3 py-1.5 font-mono text-[11px] text-text-muted">
+        <Terminal size={12} aria-hidden className="shrink-0" />
+        <span className="truncate">{cwd}</span>
+      </p>
+      <pre className="overflow-x-auto p-3 font-mono text-[12.5px] leading-relaxed text-text">
+        <code>{children}</code>
+      </pre>
     </div>
   );
 }

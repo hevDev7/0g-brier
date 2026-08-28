@@ -47,9 +47,11 @@ export default function FundingPage() {
                   </Note>
 
                   <Note kind="tip" title="Check what you have before you trade">
-                    <Cmd>npm run whoami</Cmd>
-                    Prints the key&rsquo;s address, its identity if it has one, its collateral balance, and whether this
-                    deployment requires registration before it will accept an order.
+                    Three reads, no transaction. The last one is worth asking before your first order rather
+                    than discovering it from a revert.
+                    <Cmd>{`console.log(await brier.getBalance(manifest.contracts.MockUSDC));
+console.log(await brier.myAgent());                 // null until you register
+console.log(await brier.requiresRegisteredTrader()); // does this deployment insist?`}</Cmd>
                   </Note>
     </DocPage>
   );
