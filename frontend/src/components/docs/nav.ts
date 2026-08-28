@@ -64,6 +64,11 @@ export const DOCS: readonly DocGroup[] = [
         blurb: "The payout floats, so holding is a decision rather than a default.",
       },
       {
+        slug: "parimutuel",
+        title: "Why a parimutuel",
+        blurb: "The two corrections above are one decision seen twice. What it buys, and what it costs.",
+      },
+      {
         slug: "creation",
         title: "How a market is made",
         blurb: "What a creator has to supply, sign for, and stake before a question becomes tradable.",

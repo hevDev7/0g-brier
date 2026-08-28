@@ -11,6 +11,7 @@ import Features from "@/app/docs/features/page";
 import Reading from "@/app/docs/reading/page";
 import Probability from "@/app/docs/probability/page";
 import Payout from "@/app/docs/payout/page";
+import Parimutuel from "@/app/docs/parimutuel/page";
 import Creation from "@/app/docs/creation/page";
 import Lifecycle from "@/app/docs/lifecycle/page";
 import Settlement from "@/app/docs/settlement/page";
@@ -37,6 +38,7 @@ const ROUTES: Record<string, () => ReactElement> = {
   reading: Reading,
   probability: Probability,
   payout: Payout,
+  parimutuel: Parimutuel,
   creation: Creation,
   lifecycle: Lifecycle,
   settlement: Settlement,
@@ -202,6 +204,33 @@ describe("what each page has to say", () => {
     // A state described only by what it allows is the one a reader gets wrong.
     expect(text.match(/Cannot:/g)?.length).toBe(4);
     expect(text.match(/Can:/g)?.length).toBe(4);
+  });
+
+  /**
+   * The page's central claim is arithmetic: whichever side wins, the total paid
+   * equals the pool. Recomputed here from the q it quotes, so a mistyped figure
+   * fails rather than reading plausibly — the same standard the worked payout
+   * example is held to.
+   */
+  it("parimutuel shows a pool that balances whichever side wins", () => {
+    // Six decimals, matching the page. At four the recomputation misses by
+    // twenty-three micro-units — close enough to look right, which is why the
+    // page quotes the precision that actually reproduces.
+    const [qNo, qYes] = [707.106781, 781.013648];
+    const C = Math.sqrt(qNo ** 2 + qYes ** 2);
+    expect(C.toFixed(6)).toBe("1053.556984");
+    // Payout per share is 1/p, and p = q/C, so q × (1/p) collapses to C on
+    // BOTH sides. That identity is the reason nobody has to subsidise the book.
+    expect((qNo * (C / qNo)).toFixed(6)).toBe(C.toFixed(6));
+    expect((qYes * (C / qYes)).toFixed(6)).toBe(C.toFixed(6));
+    expect((C / qNo).toFixed(4)).toBe("1.4900");
+    expect((C / qYes).toFixed(4)).toBe("1.3490");
+
+    const text = textOf("parimutuel");
+    for (const n of ["1053.556984", "1.4900×", "1.3490×", "707.106781"]) expect(text).toContain(n);
+    // And the trade it is explaining, which is the point of the page.
+    expect(text).toMatch(/needs a subsidy/i);
+    expect(text).toMatch(/price of that, not a defect/i);
   });
 
   it("creation names every gate the factory actually enforces", () => {
