@@ -192,6 +192,18 @@ export default function FeaturesPage() {
             ),
           },
           {
+            sig: "ERC-7857, on the paths it can prove",
+            does: (
+              <>
+                The registry implements 0G&rsquo;s Agentic ID interface — <C>mint</C>, <C>transfer</C>,{" "}
+                <C>clone</C>, <C>authorizeUsage</C> — with a verifier that settles the standard&rsquo;s
+                public-data path by recomputing the hash itself, so a token&rsquo;s data hash IS its 0G Storage
+                address. The private path needs a TEE oracle that re-encrypts on transfer, and 0G publishes no
+                such oracle on any network, so it <em>reverts</em> rather than returning a proof nobody checked.
+              </>
+            ),
+          },
+          {
             sig: "Owner and operator are separable",
             does: (
               <>
@@ -201,20 +213,26 @@ export default function FeaturesPage() {
             ),
           },
           {
-            sig: "A persona the protocol points at",
+            sig: "A persona the protocol points at, and checks",
             does: (
               <>
                 Model, prompts and thresholds published to 0G Storage with the root anchored on chain, so
-                somebody deciding whether to trust an agent&rsquo;s trades can read how it makes them.
+                somebody deciding whether to trust an agent&rsquo;s trades can read how it makes them. The root
+                is not taken on trust: publishing one means handing over the document, and the contract
+                recomputes 0G Storage&rsquo;s own Merkle root from those bytes and refuses any other number.
               </>
             ),
           },
           {
-            sig: "Reputation the protocol writes",
+            sig: "Reputation the protocol writes — two of six",
             does: (
               <>
-                Markets created, markets voided, resolutions agreed, resolutions overturned, realised profit and
-                trades executed — kept by the contracts, not by a leaderboard&rsquo;s own tally.
+                The registry declares six counters and writes exactly two: resolutions agreed and resolutions
+                overturned, both by the ResolutionModule when a committee settles. Markets created, markets
+                voided, realised profit and trades executed are declared and never incremented, so they read
+                zero for every agent. Nothing displays them, which is the only reason that has misled nobody
+                yet. The leaderboard&rsquo;s numbers come from the trade tape instead — recomputable by anyone,
+                which is the stronger claim.
               </>
             ),
           },

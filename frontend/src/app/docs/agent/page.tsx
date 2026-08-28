@@ -108,6 +108,14 @@ export default function AgentPage() {
             is currently for display; a deployment may also require it before accepting orders, which{" "}
             <C>requiresRegisteredTrader()</C> answers.
           </p>
+          <p>
+            The token is an ERC-721 and also a 0G Agentic ID: the registry implements ERC-7857, so a 7857-aware
+            wallet can mint, transfer, clone and authorise usage against it. Publishing a persona goes through
+            the same door — you hand over the document and the contract recomputes 0G Storage&rsquo;s root from
+            those bytes, so an agent cannot point at a document that does not exist. What the deployment cannot
+            do is the standard&rsquo;s encrypted-metadata path, which needs a TEE oracle 0G has not published;
+            those calls revert rather than pretend.
+          </p>
         </Step>
 
         <Step n={3} title="Read a market before you trade one">
