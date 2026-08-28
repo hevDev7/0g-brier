@@ -23,6 +23,7 @@ const RECEIPT: SettlementReceipt = {
   chatId: "stub-0001",
   simulated: true,
     viaCommittee: true,
+    route: "0g-compute",
 };
 
 const ready: Query<SettlementReceipt> = {status: "ready", data: RECEIPT};

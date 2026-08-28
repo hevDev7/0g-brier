@@ -53,6 +53,54 @@ function VoteRow({vote, finalOutcome}: {vote: ResolverVote; finalOutcome: Outcom
   );
 }
 
+const ZERO = "0x0000000000000000000000000000000000000000";
+
+function InferenceProvenance({receipt}: {receipt: SettlementReceipt}) {
+  const attested = receipt.votes.some((v) => v.teeVerified);
+  const provider = receipt.provider.toLowerCase() === ZERO ? null : receipt.provider;
+
+  if (receipt.route === "0g-compute" || provider !== null) {
+    return (
+      <div className="flex flex-col gap-2 text-[13px]">
+        <p className="leading-relaxed text-text-muted">
+          {attested ? (
+            <>
+              Run on <span className="text-text">0G Compute</span> inside a TEE. The attestation says
+              this provider ran this model over this input — not that the answer is right.
+            </>
+          ) : (
+            <>
+              Run on <span className="text-text">0G Compute</span>, but{" "}
+              <span className="text-warn">no attestation could be established</span>. Treat it as
+              unverified: a provider that cannot attest is a remote API.
+            </>
+          )}
+        </p>
+        <Field label="Provider" value={provider ?? "not recorded"} />
+        <Field label="Request" value={receipt.chatId ?? "not recorded"} />
+      </div>
+    );
+  }
+
+  return (
+    <p data-testid="no-attestation" className="text-[13px] leading-relaxed text-warn">
+      No attestation. This judgement was made on a private endpoint
+      {receipt.route === null ? "" : ` (${receipt.route})`}, and nothing on chain or in this
+      document lets you check which model ran or what it was given. The reasoning and the sources
+      below are still verbatim — but they are the resolver&rsquo;s own account of itself.
+    </p>
+  );
+}
+
+function Field({label, value}: {label: string; value: string}) {
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-2">
+      <span className="text-text-muted">{label}</span>
+      <span className="font-mono text-[12px] break-all text-text">{value}</span>
+    </p>
+  );
+}
+
 /**
  * The evidence that makes a resolution inspectable rather than merely trusted:
  * each resolver's vote, the criteria used, the reasoning verbatim, and the
@@ -98,6 +146,22 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
             ))}
           </ul>
         )}
+      </Section>
+
+      {/*
+        WHAT BACKS THE BADGE. A "TEE" chip beside a model name is a claim this page
+        makes; what makes it checkable is the provider that ran it and the request
+        id under which the attestation is recorded. Both were parsed into the
+        receipt and neither was ever rendered, so the strongest thing the protocol
+        can say about a settlement reached the screen as four characters and no way
+        to follow them up.
+
+        The absence is said OUT LOUD rather than left as a missing chip. A reader
+        does not notice a badge that is not there, and "this ran somewhere nobody
+        can check" is the fact they most need when it is true.
+      */}
+      <Section title="Where the judgement ran">
+        <InferenceProvenance receipt={receipt} />
       </Section>
 
       <Section title="Resolution criteria">

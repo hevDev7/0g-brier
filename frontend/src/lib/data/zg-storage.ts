@@ -122,6 +122,7 @@ function parseReceipt(json: unknown): SettlementReceipt | null {
       ? provider
       : "0x0000000000000000000000000000000000000000") as `0x${string}`,
     chatId: asString(inference.chatID),
+    route: asString(inference.route),
     simulated,
   };
 }

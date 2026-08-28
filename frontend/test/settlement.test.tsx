@@ -28,6 +28,7 @@ const receipt: SettlementReceipt = {
   chatId: "stub-0001",
   simulated: true,
     viaCommittee: true,
+    route: "0g-compute",
 };
 
 describe("FinalOutcome", () => {
@@ -135,6 +136,7 @@ describe("ResolutionEvidence — an unresolved market", () => {
     chatId: "",
     simulated: true,
     viaCommittee: true,
+    route: "0g-compute",
   };
 
   it("shows a not-resolved-yet message rather than an unexplained empty panel", () => {
@@ -241,4 +243,77 @@ it("does not guess how a market was decided before the receipt arrives", () => {
   expect(screen.queryByTestId("single-resolver-note")).toBeNull();
   // The outcome itself is chain state and does not wait for a receipt.
   expect(screen.getByTestId("winner")).toHaveTextContent("YES");
+});
+
+/**
+ * A "TEE" chip beside a model name is a claim this page makes. What makes it
+ * checkable is the provider that ran the model and the request id the
+ * attestation is recorded under — both were parsed into the receipt and neither
+ * was ever rendered, so the strongest thing the protocol can say about a
+ * settlement reached the screen as four characters with no way to follow them up.
+ */
+describe("where the judgement ran", () => {
+  const attested: SettlementReceipt = {
+    ...receipt,
+    route: "0g-compute",
+    provider: "0xa48f01287233509FD694a22Bf840225062E67836",
+    chatId: "532aaa97-7852-47ed-b353-9c52f8eb6333",
+    votes: [{model: "qwen/qwen2.5-omni-7b", outcome: 1, teeVerified: true, simulated: false}],
+  };
+
+  it("shows what backs the badge, not only the badge", () => {
+    render(<ResolutionEvidence market={m} receipt={attested} mode="chain" />);
+    expect(screen.getByText("0xa48f01287233509FD694a22Bf840225062E67836")).toBeInTheDocument();
+    expect(screen.getByText("532aaa97-7852-47ed-b353-9c52f8eb6333")).toBeInTheDocument();
+  });
+
+  /** What TeeML attests is narrow, and the page must not widen it. */
+  it("does not claim the attestation makes the answer correct", () => {
+    const {container} = render(<ResolutionEvidence market={m} receipt={attested} mode="chain" />);
+    expect(container.textContent).toContain("not that the answer is right");
+  });
+
+  /**
+   * The absence is said out loud rather than left as a missing chip. A reader
+   * does not notice a badge that is not there, and "this ran somewhere nobody can
+   * check" is the fact they most need when it is true.
+   */
+  it("says so when nothing attested the judgement", () => {
+    render(
+      <ResolutionEvidence
+        market={m}
+        receipt={{
+          ...receipt,
+          route: "anthropic",
+          provider: "0x0000000000000000000000000000000000000000",
+          chatId: null,
+          votes: [{model: "claude-sonnet-4-6", outcome: 1, teeVerified: false, simulated: false}],
+        }}
+        mode="chain"
+      />,
+    );
+    const note = screen.getByTestId("no-attestation");
+    expect(note).toHaveTextContent(/no attestation/i);
+    expect(note).toHaveTextContent(/private endpoint \(anthropic\)/i);
+    // The reasoning is still worth reading, and the page says which it is.
+    // The apostrophe is typographic on screen (&rsquo;), so the pattern matches
+    // either rather than pinning a character the copy may reasonably change.
+    expect(note).toHaveTextContent(/resolver.s own account of itself/i);
+  });
+
+  /**
+   * A provider that ran it and could not attest is neither of the two clean
+   * cases, and collapsing it into "verified" would be the worse mistake.
+   */
+  it("distinguishes an unattested 0G Compute run from a verified one", () => {
+    const {container} = render(
+      <ResolutionEvidence
+        market={m}
+        receipt={{...attested, votes: [{model: "qwen/qwen2.5-omni-7b", outcome: 1, teeVerified: false, simulated: false}]}}
+        mode="chain"
+      />,
+    );
+    expect(container.textContent).toContain("no attestation could be established");
+    expect(container.textContent).not.toContain("not that the answer is right");
+  });
 });

@@ -311,6 +311,7 @@ const FIXTURE_RECEIPT: SettlementReceipt = {
   chatId: "stub-0001",
   simulated: true,
     viaCommittee: true,
+    route: "0g-compute",
 };
 
 /** Nothing to report yet — resolution has not started, it is not being hidden. */
@@ -325,6 +326,7 @@ const PENDING_RECEIPT: SettlementReceipt = {
   chatId: "",
   simulated: true,
     viaCommittee: true,
+    route: "0g-compute",
 };
 
 export class MockSource implements DataSource {

@@ -224,6 +224,16 @@ export interface SettlementReceipt {
   provider: `0x${string}`;
   /** The inference's id at the provider, or `null` when no model was consulted. */
   chatId: string | null;
+  /**
+   * Which engine the resolver ran on, verbatim from the receipt — "0g-compute",
+   * "anthropic", "none" for a scripted settlement, or `null` on a receipt
+   * written before the field existed.
+   *
+   * Read rather than inferred from `provider`. A page that reasoned "there is a
+   * provider address, so it must have been 0G Compute" would be reconstructing
+   * the one fact the field exists to state.
+   */
+  route: string | null;
   /** true when the receipt came from stub mode. Must be conspicuous in the UI. */
   simulated: boolean;
   /**
