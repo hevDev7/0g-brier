@@ -59,4 +59,46 @@ describe("the documentation does not describe things that are not there", () => 
       expect(c, `"Delphi" used without saying whose: ${c}`).toMatch(/Gensyn|Delphi SDK|Delphi agent/);
     }
   });
+
+  /**
+   * Addresses and the deployment block, against the manifest the frontend and
+   * every agent actually read. A configuration reference whose addresses have
+   * gone stale is worse than none: it looks authoritative and points at nothing,
+   * and a reader gets an empty market list with no error to explain it.
+   */
+  it("quotes addresses that match the live manifest", () => {
+    const manifest = JSON.parse(read("deployments/16602.json"));
+    const {contracts, deploymentBlock} = manifest as {
+      contracts: Record<string, string>;
+      deploymentBlock: number;
+    };
+
+    expect(PAGE).toContain(String(deploymentBlock));
+
+    // The faucet is the one address a reader must paste, so it is quoted whole.
+    expect(PAGE).toContain(contracts.MockUSDC);
+
+    // The rest are abbreviated on purpose — the page tells readers to take them
+    // from the manifest, and a full stale address invites a copy. Abbreviations
+    // still have to be abbreviations OF something real.
+    for (const name of ["MarketFactory", "AgentRegistry", "ResolutionModule", "OutcomeShares", "ConfigRegistry"]) {
+      const addr = contracts[name]!;
+      const abbreviated = `${addr.slice(0, 10)}…${addr.slice(-4)}`;
+      expect(PAGE, `${name} is not quoted as ${abbreviated}`).toContain(abbreviated);
+    }
+  });
+
+  it("quotes economic parameters that match the deployment defaults", () => {
+    const lib = read("contracts/script/DeployLib.sol");
+    // Read the intent from the deploy script rather than trusting the page.
+    expect(lib).toContain("setParam(ConfigKeys.FEE_BPS, 100)");
+    expect(lib).toContain("setParam(ConfigKeys.DISPUTE_WINDOW_FAST, 24 hours)");
+    expect(lib).toContain("setParam(ConfigKeys.DISPUTE_WINDOW_VERIFIED, 6 hours)");
+    expect(lib).toContain("setParam(ConfigKeys.DISPUTE_WINDOW_DETERMINISTIC, 2 hours)");
+
+    expect(PAGE).toContain("FEE_BPS            100");
+    expect(PAGE).toContain('["FAST", "1 resolver", "24 hours"]');
+    expect(PAGE).toContain('["VERIFIED", "3 of 5 must agree", "6 hours"]');
+    expect(PAGE).toContain('["DETERMINISTIC", "2 of 3 must agree", "2 hours"]');
+  });
 });

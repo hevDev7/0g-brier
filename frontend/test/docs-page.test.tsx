@@ -130,4 +130,53 @@ describe("the documentation page", () => {
     // check, and a trader who assumes otherwise waits for nothing.
     expect(container.textContent).toMatch(/exit is never blocked/i);
   });
+
+  /**
+   * The configuration reference. Its whole value is being right about values a
+   * reader will paste, so these are checked against the live deployment rather
+   * than against the page's own prose.
+   */
+  it("gives the concrete numbers a newcomer needs to actually start", () => {
+    const {container} = render(<DocsPage />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("16602");                              // chain
+    expect(text).toContain("https://faucet.0g.ai");               // gas
+    expect(text).toContain("10,000 mUSDC");                       // collateral per claim
+    expect(text).toContain("0.1 0G per wallet per day");
+    expect(text).toContain("claim()");
+  });
+
+  it("warns about Galileo's two-part gas price, which most tools get wrong", () => {
+    const {container} = render(<DocsPage />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("7 wei");
+    expect(text).toContain("4 gwei");
+    // Both failure messages, because they look unrelated and have one cause.
+    expect(text).toContain("transaction gas price below minimum");
+    expect(text).toContain("max priority fee per gas higher than max fee per gas");
+  });
+
+  it("states the dispute windows, and that they run opposite to the guess", () => {
+    const {container} = render(<DocsPage />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("24 hours");   // FAST — weakest evidence, most time
+    expect(text).toContain("6 hours");    // VERIFIED
+    expect(text).toContain("2 hours");    // DETERMINISTIC
+    expect(text).toMatch(/runs backwards from the obvious guess/i);
+  });
+
+  it("numbers its sections from the contents list rather than from literals", () => {
+    const {container} = render(<DocsPage />);
+    const links = [...container.querySelectorAll('nav[aria-label="Contents"] a')];
+    links.forEach((link, i) => {
+      const id = link.getAttribute("href")!.slice(1);
+      const eyebrow = container.querySelector(`#${id} p`)?.textContent;
+      // The section's own number must match its position in the contents, or the
+      // page disagrees with its own index — which a reader notices and an author
+      // never does.
+      expect(eyebrow, `section "${id}" is numbered ${eyebrow}, listed at ${i + 1}`).toBe(
+        String(i + 1).padStart(2, "0"),
+      );
+    });
+  });
 });
