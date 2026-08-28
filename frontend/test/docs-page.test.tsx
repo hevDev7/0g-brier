@@ -179,4 +179,33 @@ describe("the documentation page", () => {
       );
     });
   });
+
+  /**
+   * The quickstart. Its only job is to work when pasted, so the test pins the
+   * facts that make it work rather than its prose.
+   */
+  it("is honest that there is no npm package", () => {
+    const {container} = render(<DocsPage />);
+    const text = container.textContent ?? "";
+    expect(text).toMatch(/no npm package yet/i);
+    // The consequence, not just the fact: unpublished plus TypeScript source
+    // means a path dependency and tsx, which changes how you plan a project.
+    expect(text).toContain("file:../brier/packages/agent-kit");
+    expect(text).toContain("tsx");
+  });
+
+  it("shows a first script that needs no key, wallet or funding", () => {
+    const {container} = render(<DocsPage />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("new BrierClient({");
+    expect(text).toContain("listMarkets()");
+    // The point of the example: reading costs nothing and risks nothing.
+    expect(text).toMatch(/no privateKey/i);
+    expect(text).toContain("canWrite");
+  });
+
+  it("shows the one field that turns a reader into a trader", () => {
+    const {container} = render(<DocsPage />);
+    expect(container.textContent).toContain("privateKey: process.env.AGENT_KEY");
+  });
 });

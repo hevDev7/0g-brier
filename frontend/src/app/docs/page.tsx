@@ -386,18 +386,82 @@ export default function DocsPage() {
 
         {/* ── setup ─────────────────────────────────────────────────────── */}
         <Section id="setup" eyebrow={num("setup")} title="Setting it up">
+          <Note kind="warn" title="There is no npm package yet">
+            <C>npm install @brier/agent-kit</C> will not work. The three packages are unpublished and export
+            TypeScript source directly rather than compiled JavaScript, so an agent depends on them{" "}
+            <strong>by path</strong> and runs under <C>tsx</C>. That is a real constraint, not a preference:
+            plan for a checkout beside your project rather than a version in a lockfile.
+          </Note>
+
+          <H3>From nothing to reading the book</H3>
           <P>
-            The SDK is a workspace package rather than something published to npm, so an agent depends on it by
-            path. Point it at a checkout of the protocol repository beside your own.
+            Four commands and fifteen lines. Every one of them was run in an empty directory to check it, and
+            the output at the end is what it printed.
           </P>
 
-          <Cmd>{`{
-  "dependencies": {
-    "@brier/agent-kit":  "file:../brier/packages/agent-kit",
-    "@brier/protocol":   "file:../brier/packages/protocol",
-    "@brier/zg-storage": "file:../brier/packages/zg-storage"
-  }
+          <Cmd>{`git clone <the protocol repo> brier
+mkdir my-agent && cd my-agent
+npm init -y && npm pkg set type=module
+
+npm install \\
+  file:../brier/packages/agent-kit \\
+  file:../brier/packages/protocol \\
+  file:../brier/packages/zg-storage \\
+  viem
+npm install -D tsx typescript @types/node`}</Cmd>
+
+          <P>
+            Now <C>read-markets.ts</C>. Note what is absent: there is no key, no wallet and no funding, because
+            reading needs none of it.
+          </P>
+
+          <Cmd>{`import {loadDeployment} from "@brier/protocol/node";
+import {BrierClient} from "@brier/agent-kit";
+
+const manifest = loadDeployment(16602, "../brier/deployments");
+
+// No privateKey — this client reads, and refuses to sign.
+const brier = new BrierClient({
+  network: "galileo",
+  factory: manifest.contracts.MarketFactory as \`0x\${string}\`,
+  outcomeShares: manifest.contracts.OutcomeShares as \`0x\${string}\`,
+});
+
+const pct = (w: bigint) => \`\${(Number(w) / 1e16).toFixed(1)}%\`;
+for (const m of (await brier.listMarkets()).filter((m) => m.status === "Open")) {
+  console.log(\`\${m.address}  P(YES) \${pct(m.impliedProbabilityWad[1])}  \${m.category}\`);
 }`}</Cmd>
+
+          <Cmd>{`$ npx tsx read-markets.ts
+
+0x2c6564B1B24024e2F2D285495cE1902FC90Cf7E5  P(YES) 45.0%  crypto
+0x558Bb6AA0420359e2f251D5C63A6d7Cd5eF740D6  P(YES) 55.0%  politics
+0x6dA2DA4c8F9e8C894BB455AEA17a0834e23c416c  P(YES) 45.0%  sports`}</Cmd>
+
+          <Note kind="tip" title="Explore before you fund anything">
+            A client without <C>privateKey</C> can list markets, quote, preview and read positions. Ask it to
+            sign and it refuses by name — <C>cannot redeem: this client has no private key, so it can only
+            read</C> — before it spends a single RPC call finding out. Check <C>brier.canWrite</C> rather than
+            catching the throw.
+          </Note>
+
+          <H3>Adding a key</H3>
+          <P>
+            One field turns the same client into one that trades. Everything else stays as it was.
+          </P>
+
+          <Cmd>{`const brier = new BrierClient({
+  network: "galileo",
+  privateKey: process.env.AGENT_KEY as \`0x\${string}\`,   // ← the only addition
+  factory: manifest.contracts.MarketFactory as \`0x\${string}\`,
+  outcomeShares: manifest.contracts.OutcomeShares as \`0x\${string}\`,
+});`}</Cmd>
+
+          <Note kind="info" title="loadDeployment takes a directory, and the path is relative to the process">
+            Not to the file that calls it. Running the same script from a different working directory is the
+            usual reason a manifest that plainly exists is reported missing. An absolute path, or one built from{" "}
+            <C>import.meta.url</C>, removes the question.
+          </Note>
 
           <H3>Environment</H3>
           <P>

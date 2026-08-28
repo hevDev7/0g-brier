@@ -67,9 +67,17 @@ export interface AgentIdentity {
 
 export interface ClientConfig {
   network: ChainMode;
-  /** The agent's OWN key. It never holds a user's — see spec §8.4 for the
-   *  AgentAccount that will hold user funds under an on-chain policy. */
-  privateKey: `0x${string}`;
+  /**
+   * The agent's OWN key. It never holds a user's — see spec §8.4 for the
+   * AgentAccount that will hold user funds under an on-chain policy.
+   *
+   * OPTIONAL, because reading needs no signer. Omitting it gives a client that
+   * can list markets, quote and preview, and that refuses every write with a
+   * message naming the reason. The alternative was telling newcomers to pass a
+   * throwaway key to look around, which teaches exactly the wrong habit and
+   * invites somebody to paste a real one.
+   */
+  privateKey?: `0x${string}`;
   factory: `0x${string}`;
   outcomeShares: `0x${string}`;
   rpcUrl?: string;
@@ -94,11 +102,15 @@ export interface ClientConfig {
  *    risk decision made by the wrong party.
  */
 export class BrierClient {
-  readonly account: Account;
+  /** `null` on a read-only client. */
+  readonly account: Account | null;
+  /** The zero address when there is no key, so logging one never throws. */
   readonly address: `0x${string}`;
+  /** Whether this client can sign. Check it rather than catching the throw. */
+  readonly canWrite: boolean;
 
   private readonly publicClient: PublicClient;
-  private readonly wallet: WalletClient;
+  private readonly wallet: WalletClient | null;
   private readonly factory: `0x${string}`;
   private readonly shares: `0x${string}`;
   private readonly tokens = new Map<string, {symbol: string; decimals: number}>();
@@ -116,12 +128,30 @@ export class BrierClient {
       rpcUrls: {default: {http: [config.rpcUrl ?? net.rpcUrl]}},
     });
     const transport = config.transport ?? http(config.rpcUrl ?? net.rpcUrl);
-    this.account = privateKeyToAccount(config.privateKey);
-    this.address = this.account.address;
+    this.account = config.privateKey ? privateKeyToAccount(config.privateKey) : null;
+    this.address = this.account?.address ?? `0x${"0".repeat(40)}`;
+    this.canWrite = this.account !== null;
     this.publicClient = createPublicClient({chain, transport});
-    this.wallet = createWalletClient({account: this.account, chain, transport});
+    this.wallet = this.account ? createWalletClient({account: this.account, chain, transport}) : null;
     this.factory = config.factory;
     this.shares = config.outcomeShares;
+  }
+
+  /**
+   * Refuse early, before any RPC.
+   *
+   * The guard inside `send` is the backstop, but every write reads first — a
+   * market view, an allowance, a registry address — so a read-only client that
+   * discovered its limitation there would already have spent three round trips
+   * on a chain where each takes about a second and a half.
+   */
+  private requireSigner(verb: string): void {
+    if (this.account === null) {
+      throw new Error(
+        `cannot ${verb}: this client has no private key, so it can only read. ` +
+          "Pass `privateKey` to BrierClient to sign.",
+      );
+    }
   }
 
   // ── reads ────────────────────────────────────────────────────────────────
@@ -271,6 +301,7 @@ export class BrierClient {
     operator?: `0x${string}`;
     metadataRoot?: `0x${string}`;
   }): Promise<AgentIdentity> {
+    this.requireSigner("registerAgent");
     const registry = await this.requireAgentRegistry();
     const operator = args.operator ?? this.address;
     const role = AGENT_ROLES.indexOf(args.role ?? "Trader");
@@ -328,18 +359,21 @@ export class BrierClient {
    * agent, not merely operate it.
    */
   async setAgentMetadata(agentId: bigint, metadataRoot: `0x${string}`): Promise<`0x${string}`> {
+    this.requireSigner("setAgentMetadata");
     const registry = await this.requireAgentRegistry();
     return this.send(registry, AGENT_REGISTRY_ABI, "updateMetadata", [agentId, metadataRoot, "0x"]);
   }
 
   /** Rename an agent. Releases the old handle for someone else. */
   async setAgentName(agentId: bigint, name: string): Promise<`0x${string}`> {
+    this.requireSigner("setAgentName");
     const registry = await this.requireAgentRegistry();
     return this.send(registry, AGENT_REGISTRY_ABI, "setName", [agentId, encodeAgentName(name)]);
   }
 
   /** Rotate the key that trades for an agent. The old key stops being it. */
   async setAgentOperator(agentId: bigint, operator: `0x${string}`): Promise<`0x${string}`> {
+    this.requireSigner("setAgentOperator");
     const registry = await this.requireAgentRegistry();
     return this.send(registry, AGENT_REGISTRY_ABI, "setOperator", [agentId, operator]);
   }
@@ -514,6 +548,7 @@ export class BrierClient {
     collateral: `0x${string}`,
     minimum: bigint,
   ): Promise<`0x${string}` | null> {
+    this.requireSigner("ensureAllowance");
     const current = await this.publicClient.readContract({
       address: collateral,
       abi: ERC20_ABI,
@@ -533,6 +568,7 @@ export class BrierClient {
     sharesOut: bigint;
     maxTokensIn: bigint;
   }): Promise<Fill> {
+    this.requireSigner("buyShares");
     await this.requireIdentityIfGated();
     const before = await this.balanceOfCollateral(args.market);
     const hash = await this.send(args.market, MARKET_ABI, "buy", [
@@ -553,6 +589,7 @@ export class BrierClient {
     sharesIn: bigint;
     minTokensOut: bigint;
   }): Promise<Fill> {
+    this.requireSigner("sellShares");
     await this.requireIdentityIfGated();
     const before = await this.balanceOfCollateral(args.market);
     const hash = await this.send(args.market, MARKET_ABI, "sell", [
@@ -572,6 +609,7 @@ export class BrierClient {
    * test saying so.
    */
   async redeem(market: `0x${string}`): Promise<Claim> {
+    this.requireSigner("redeem");
     const view = await this.getMarket(market);
     if (view.winningOutcome === null) {
       throw new Error(`market ${market} has not been resolved — there is nothing to redeem`);
@@ -589,6 +627,7 @@ export class BrierClient {
    * Also works while paused.
    */
   async liquidate(market: `0x${string}`): Promise<Claim> {
+    this.requireSigner("liquidate");
     const view = await this.getMarket(market);
     const [no, yes, seedNo, seedYes] = await Promise.all([
       this.getPosition(market, 0),
@@ -735,6 +774,15 @@ export class BrierClient {
     functionName: string,
     args: readonly unknown[],
   ): Promise<`0x${string}`> {
+    if (this.wallet === null || this.account === null) {
+      // Named at the point of use rather than at construction: a read-only
+      // client is a legitimate thing to build, and the failure belongs where
+      // somebody actually asks it to sign.
+      throw new Error(
+        `cannot ${functionName}: this client has no private key, so it can only read. ` +
+          "Pass `privateKey` to BrierClient to sign.",
+      );
+    }
     const fees = await suggestFees(this.publicClient);
     const hash = await this.wallet.writeContract({
       address,

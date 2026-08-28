@@ -387,3 +387,54 @@ describe("agent names as the chain stores them", () => {
     expect(decodeAgentName(encodeAgentName("🤖 oracle"))).toBe("🤖 oracle");
   });
 });
+
+/**
+ * A client with no key.
+ *
+ * Reading is the first thing anybody does and it needs no signer, so requiring
+ * one meant telling newcomers to invent a throwaway key to look around — which
+ * teaches the wrong habit with keys and invites somebody to paste a real one.
+ */
+describe("a client built without a private key", () => {
+  const readOnly = () =>
+    new BrierClient({
+      network: "galileo",
+      factory: "0x0000000000000000000000000000000000000001",
+      outcomeShares: "0x0000000000000000000000000000000000000002",
+    });
+
+  it("says plainly that it cannot write", () => {
+    const c = readOnly();
+    expect(c.canWrite).toBe(false);
+    expect(c.account).toBeNull();
+  });
+
+  it("reports the zero address rather than throwing when asked who it is", () => {
+    // An agent that logs its own address on startup should not crash before it
+    // has reached the line explaining it has no key.
+    expect(readOnly().address).toBe(`0x${"0".repeat(40)}`);
+  });
+
+  it("refuses a write by naming the call and the reason", async () => {
+    const c = readOnly();
+    await expect(
+      c.buyShares({
+        market: "0x0000000000000000000000000000000000000003",
+        outcome: 1,
+        sharesOut: 10n ** 18n,
+        maxTokensIn: 1_000_000n,
+      }),
+    ).rejects.toThrow(/no private key/i);
+  });
+
+  it("still signs when a key IS given", () => {
+    const c = new BrierClient({
+      network: "galileo",
+      privateKey: `0x${"1".repeat(64)}`,
+      factory: "0x0000000000000000000000000000000000000001",
+      outcomeShares: "0x0000000000000000000000000000000000000002",
+    });
+    expect(c.canWrite).toBe(true);
+    expect(c.address).not.toBe(`0x${"0".repeat(40)}`);
+  });
+});
