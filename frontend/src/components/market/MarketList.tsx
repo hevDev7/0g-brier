@@ -15,7 +15,8 @@ import {useCandlesByMarket, useTradesByMarket} from "@/hooks/useMarketRows";
 import {useMarkets} from "@/hooks/useMarkets";
 import {useDataSource} from "@/hooks/provider";
 import {probabilityWad} from "@/lib/dpm-view";
-import {delta24h, statusTone, volumeOf} from "@/lib/market-rows";
+import {delta24h, tradingState, volumeOf} from "@/lib/market-rows";
+import {useNowSeconds} from "@/lib/use-now";
 import {
   formatCollateral,
   formatCountdown,
@@ -52,6 +53,8 @@ export function MarketList(): React.JSX.Element {
 }
 
 function MarketsBody({markets}: {markets: MarketSummary[]}) {
+  // One clock for the whole table. See `useNowSeconds` for why it is not per row.
+  const now = useNowSeconds();
   const addresses = useMemo(() => markets.map((m) => m.address), [markets]);
   // Hooks are called unconditionally on a stable-length input: `markets` is
   // already `ready` here, so the fan-out cannot change arity between renders.
@@ -97,7 +100,7 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
 
   return (
     <div className="flex flex-col gap-5">
-      <SummaryTiles markets={markets} trades={trades} />
+      <SummaryTiles markets={markets} trades={trades} now={now} />
 
       <Panel testId="market-table" className="overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-border p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -226,6 +229,7 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
               <tbody>
                 {rows.map(({market, index}) => (
                   <MarketRow
+                    now={now}
                     key={market.address}
                     market={market}
                     trades={trades[index]}
@@ -255,11 +259,15 @@ function MarketRow({
   market,
   trades,
   candles,
+  now,
 }: {
   market: MarketSummary;
   trades: Query<Trade[]> | undefined;
   candles: Query<Candle[]> | undefined;
+  /** Passed in, not read here: one clock for the whole table. */
+  now: number | null;
 }) {
+  const state = tradingState(market, now);
   // The live mode, not a guess. A cell that names the wrong mode is worse than
   // one that names none: it sends a reader to a source that would not help.
   const {mode} = useDataSource();
@@ -308,7 +316,10 @@ function MarketRow({
         <Badge tone="neutral" label={market.tier} />
       </td>
       <td className="px-3 py-4">
-        <Badge tone={statusTone(market.status)} label={market.status} dot />
+        {/* The chain status alone is not what a reader needs: it says `Open` for a
+            market whose every exit reverts. `tradingState` answers what can be
+            done, and keeps the raw status in the title. */}
+        <Badge tone={state.tone} label={state.label} dot title={state.hint} />
       </td>
       <td
         className="px-3 py-4 text-right font-mono text-[13px] text-text-muted"
@@ -388,8 +399,19 @@ function VolumeCell({
   }
 }
 
-function SummaryTiles({markets, trades}: {markets: MarketSummary[]; trades: Query<Trade[]>[]}) {
-  const open = markets.filter((m) => m.status === "Open").length;
+function SummaryTiles({
+  markets,
+  trades,
+  now,
+}: {
+  markets: MarketSummary[];
+  trades: Query<Trade[]>[];
+  now: number | null;
+}) {
+  // "Open now" has to mean tradable now. Counting `status === "Open"` counted
+  // markets whose trading had ended and which nobody had closed yet — the tile
+  // said three were open while all three refused every order.
+  const open = markets.filter((m) => tradingState(m, now).label === "Open").length;
 
   // Summing across markets is only meaningful when they share a collateral:
   // adding a 6-decimal token to an 18-decimal one produces a number that means

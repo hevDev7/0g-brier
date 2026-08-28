@@ -54,6 +54,33 @@ export type Tone = "neutral" | "positive" | "negative" | "warning" | "verified";
  * markets that need attention without reading twenty words. That is information
  * the label does not carry at a glance, which is what earns it colour here.
  */
+/**
+ * What the reader can actually do, which is not the same question as `status`.
+ *
+ * `Open` means only that `close()` has not been called. It says nothing about
+ * `tradingEnd`, and nothing obliges anyone to call `close()` promptly — on a
+ * deployment with no keeper, nobody does. So a market sat there badged a green
+ * `Open` while every exit reverted: `sell` with `TradingEnded`, `redeem` with
+ * `NotSettled`, `liquidate` with `NotLiquidatable`. Green means "go" in every
+ * interface a reader has ever used, and there was nowhere to go.
+ *
+ * `now === null` before the browser reports a clock; the chain status is shown
+ * unrefined rather than guessed at, and sharpens once the clock arrives.
+ */
+export function tradingState(
+  market: {status: MarketStatus; tradingEnd: number},
+  now: number | null,
+): {label: string; tone: Tone; hint: string} {
+  if (market.status === "Open" && now !== null && now >= market.tradingEnd) {
+    return {
+      label: "Awaiting close",
+      tone: "warning",
+      hint: "Trading has ended. The market stays Open on chain until someone calls close(), and nothing can be bought, sold or redeemed until it is.",
+    };
+  }
+  return {label: market.status, tone: statusTone(market.status), hint: `On-chain status: ${market.status}`};
+}
+
 export function statusTone(status: MarketStatus): Tone {
   switch (status) {
     case "Open":

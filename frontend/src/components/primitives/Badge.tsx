@@ -27,9 +27,21 @@ const DOTS: Record<Tone, string> = {
  * is what lets a reader find the one row that is not Open without reading seven
  * words.
  */
-export function Badge({tone, label, dot = false}: {tone: Tone; label: string; dot?: boolean}) {
+export function Badge({
+  tone,
+  label,
+  dot = false,
+  title,
+}: {
+  tone: Tone;
+  label: string;
+  dot?: boolean;
+  /** Hover text. Where a badge shows a derived state, this carries the raw one. */
+  title?: string;
+}) {
   return (
     <span
+      title={title}
       className={`inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 font-mono text-[11px] font-medium tracking-[0.08em] whitespace-nowrap uppercase ${TONES[tone]}`}
     >
       {dot && <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${DOTS[tone]}`} />}
