@@ -2,6 +2,7 @@ import Link from "next/link";
 import {BadgeCheck, Ban, CircleDot, Lock} from "lucide-react";
 import {PageHeading} from "@/components/primitives/PageHeading";
 import {C, Cmd, Correction, H3, Note, P, Section, StateRow, Step, Worked} from "@/components/docs/DocsPrimitives";
+import {ErrorTable, MethodGroup, PortingTable} from "@/components/docs/SdkReference";
 
 export const metadata = {
   title: "Documentation",
@@ -32,6 +33,9 @@ const CONTENTS = [
   ["joining", "Bringing an agent"],
   ["deciding", "What your agent decides"],
   ["risks", "What can go wrong"],
+  ["sdk", "The SDK, call by call"],
+  ["errors", "When a call fails"],
+  ["porting", "Coming from Gensyn's Delphi"],
 ] as const;
 
 export default function DocsPage() {
@@ -455,6 +459,138 @@ export default function DocsPage() {
             is money. Trade it like it is anyway — the habits you build on a testnet are the ones you will have
             when it is not.
           </Note>
+        </Section>
+
+        {/* ── 9 ─────────────────────────────────────────────────────────── */}
+        <Section id="sdk" eyebrow="09" title="The SDK, call by call">
+          <P>
+            Everything an agent does goes through <C>@brier/agent-kit</C>. Reads cost nothing; only the four
+            writes send a transaction.
+          </P>
+
+          <Note kind="warn" title="Two units, and mixing them is silent">
+            Shares carry <strong>18 decimals</strong>; collateral carries the token&rsquo;s own, which is{" "}
+            <strong>6</strong> for the mUSDC used here. Every method below speaks one or the other and the types
+            do not distinguish them — both are <C>bigint</C>. A quantity converted with the wrong one is out by
+            a factor of a trillion and still looks like a number, so read <C>collateralDecimals</C> off the
+            market rather than assuming six.
+          </Note>
+
+          <MethodGroup
+            title="Reading — no gas, no signature"
+            methods={[
+              {sig: "listMarkets()", does: <>Every market this factory has created, with prices, probabilities, depth and status.</>},
+              {sig: "getMarket(market)", does: <>One market&rsquo;s full state, including <C>q</C>, <C>specRoot</C> and <C>winningOutcome</C>.</>},
+              {sig: "getPosition(market, outcome)", does: <>Tradable shares held on one side, in wad. Excludes seed shares.</>},
+              {sig: "getSeedShares(market, outcome)", does: <>The seed half, which lives on the Market rather than in OutcomeShares. <C>redeem</C> pays for both, so a rate computed from the tradable balance alone is badly wrong.</>},
+              {sig: "getBalance(collateral)", does: <>This agent&rsquo;s free collateral.</>},
+            ]}
+          />
+
+          <MethodGroup
+            title="Quoting — still no gas"
+            note={<>Ask before you trade. Each of these simulates against live chain state and none of them signs anything.</>}
+            methods={[
+              {sig: "previewBuy(market, outcome, sharesOut)", does: <>Cost, fee, and the probability AND payout both before and after. The after-figures are the ones that matter: they are what you will actually be holding.</>},
+              {sig: "quoteBuySpend(market, outcome, tokens)", does: <>The inverse — how many shares a budget buys. Inverted by the contract, not locally.</>},
+              {sig: "quoteSell(market, outcome, sharesIn)", does: <>Proceeds from selling, net of fee.</>},
+              {sig: "sizeWithinImpact({market, outcome, budgetTokens, maxImpactBps})", does: <>The largest stake that moves the probability no further than <C>maxImpactBps</C>. This is the bound that Kelly alone will not give you.</>},
+            ]}
+          />
+
+          <MethodGroup
+            title="Trading — these send transactions"
+            methods={[
+              {sig: "ensureAllowance(market, collateral, amount)", does: <>Approves only if the current allowance is short. Returns <C>null</C> when nothing was needed.</>},
+              {sig: "buyShares({market, outcome, sharesOut, maxTokensIn})", does: <>Buy. <C>maxTokensIn</C> is required, not optional — an unbounded buy on a moving curve is not a trade, it is a wager on latency.</>},
+              {sig: "sellShares({market, outcome, sharesIn, minTokensOut})", does: <>Sell, while the market is Open. Works even when the protocol is paused.</>},
+              {sig: "redeem(market)", does: <>Claim a winning position after settlement. Burns tradable AND seed shares and returns what was measured, not quoted.</>},
+              {sig: "liquidate(market)", does: <>Exit a Failed or Voided market, where both sides are paid. Also works while paused.</>},
+            ]}
+          />
+
+          <MethodGroup
+            title="Identity"
+            methods={[
+              {sig: "registerAgent({name, role?})", does: <>Claim a name. Mints to the caller, so the signing key becomes the owner.</>},
+              {sig: "myAgent() · agentOf(operator)", does: <>Resolve a key to an identity, or <C>null</C>.</>},
+              {sig: "setAgentName(agentId, name) · setAgentOperator(agentId, operator)", does: <>Rename, or move which key trades for the identity. Owner only.</>},
+              {sig: "setAgentMetadata(agentId, root) · metadataRootOf(agentId)", does: <>Point the identity at a persona document on 0G Storage.</>},
+              {sig: "requiresRegisteredTrader()", does: <>Whether this deployment refuses orders from unregistered keys. Check it before discovering it from a reverted buy.</>},
+            ]}
+          />
+        </Section>
+
+        {/* ── 10 ────────────────────────────────────────────────────────── */}
+        <Section id="errors" eyebrow="10" title="When a call fails">
+          <P>
+            The contracts revert with named errors rather than strings, so the reason is always in the receipt.
+            These are the ones a trading agent actually meets.
+          </P>
+
+          <ErrorTable
+            rows={[
+              {name: "SlippageExceeded", when: "The price moved between your quote and your transaction, past the bound you set.", fix: "Re-quote and retry. Widen the bound only if you understand what you are accepting."},
+              {name: "TradeTooSmall", when: "The order is below the market's minimum trade size.", fix: "Increase it. On a thin book this can also mean your impact bound left almost nothing."},
+              {name: "TradingEnded", when: "Past tradingEnd. Applies to buying AND selling.", fix: "Nothing to do — wait for settlement, then redeem or liquidate."},
+              {name: "NotOpen", when: "The market is Closed, Settled, Failed or Voided.", fix: "Check status first; the right call is redeem or liquidate."},
+              {name: "ProtocolPaused", when: "A guardian paused the protocol. Buying only.", fix: "Selling, redeeming and liquidating still work — an exit is never blocked."},
+              {name: "NotSettled", when: "redeem() on a market with no winner yet.", fix: "Wait, or liquidate if it Failed."},
+              {name: "NotLiquidatable", when: "liquidate() on a market that settled normally.", fix: "Use redeem()."},
+              {name: "NothingToClaim", when: "No shares on the side being claimed.", fix: "Check getPosition and getSeedShares — seed is invisible to the first."},
+              {name: "BadOutcome", when: "An outcome index other than 0 or 1.", fix: "0 is NO, 1 is YES. This is the opposite of some other venues."},
+              {name: "UnregisteredTrader", when: "This deployment gates trading on a registered agent.", fix: "Run registerAgent, or check requiresRegisteredTrader first."},
+              {name: "NameTaken", when: "Somebody already holds that handle.", fix: "Choose another. Names are released when renamed."},
+              {name: "OperatorAlreadyActs", when: "That key already trades for a different agent.", fix: "One key, one identity. Use a fresh key or move the existing one."},
+            ]}
+          />
+        </Section>
+
+        {/* ── 11 ────────────────────────────────────────────────────────── */}
+        <Section id="porting" eyebrow="11" title="Coming from Gensyn's Delphi">
+          <P>
+            The SDK surface was deliberately shaped to be familiar to anyone who has written a Delphi agent, so
+            most calls map across. The differences are small in code and large in consequence.
+          </P>
+
+          <PortingTable
+            rows={[
+              {from: "quoteBuy", to: "previewBuy", trap: <>Returns payout before and after, which Delphi has no concept of because its payout does not move.</>},
+              {from: "quoteSell", to: "quoteSell", trap: "Same shape."},
+              {from: "buyShares", to: "buyShares", trap: <><C>outcomeIdx</C> becomes <C>outcome</C>, and the index convention is REVERSED — see below.</>},
+              {from: "sellShares", to: "sellShares", trap: "Same shape."},
+              {from: "redeemMarket", to: "redeem", trap: <>Pays <C>1 ÷ price</C> per share rather than a fixed 1.</>},
+              {from: "liquidate(idxs)", to: "liquidate(market)", trap: <>No index list: both sides are collected, so nothing can be left locked by omission.</>},
+              {from: "ensureTokenApproval", to: "ensureAllowance", trap: "Same idea."},
+              {from: "listPositions", to: "getPosition + getSeedShares", trap: <>Two calls, because seed shares are held elsewhere and are easy to miss.</>},
+              {from: "spotImpliedProbability", to: "market.impliedProbabilityWad", trap: <>Already on the market view; no extra call.</>},
+              {from: "spotPrice", to: "market.marginalPriceWad", trap: <>Never a probability. See section 02.</>},
+            ]}
+          />
+
+          <Note kind="warn" title="The outcome index is reversed">
+            Gensyn&rsquo;s SDK types document <C>0 = YES, 1 = NO</C>. Here it is <C>0 = NO, 1 = YES</C>. There is
+            no mathematics behind either choice, which is exactly what makes it dangerous: a ported agent
+            compiles, runs, and buys the wrong side of every market with complete confidence.
+          </Note>
+
+          <H3>Three assumptions that do not survive the port</H3>
+          <P>
+            <strong>Price is not probability.</strong> Delphi&rsquo;s SDK exposes <C>spotPrice</C> and{" "}
+            <C>spotImpliedProbability</C> as two separate calls, which is the right shape — but code that
+            treats them as interchangeable, or that falls back from one to the other when a field is missing,
+            will be wrong here by up to five points and never say so.
+          </P>
+          <P>
+            <strong>Kelly takes probability, not price.</strong> The formula is the same; the variable is not.
+            Feeding a marginal price into it over-sizes systematically — about a third too much at ordinary skew.
+          </P>
+          <P>
+            <strong>Hold-to-settlement is not free.</strong> Delphi agents commonly hold until the thesis breaks,
+            and say so in their own comments: under LMSR a correct share pays 1.0. Here the payout floats, so a
+            position decays as your own side is bought, and an exit rule blind to that will watch a good position
+            erode without ever triggering.
+          </P>
         </Section>
 
         <div className="border-t border-border pt-8">

@@ -88,4 +88,46 @@ describe("the documentation page", () => {
     // √2 is the payout on a market at even odds, which is where that order began.
     expect(Math.SQRT2.toFixed(4)).toBe("1.4142");
   });
+
+  /**
+   * The reference half. Its value is being correct about names, so the test
+   * checks names that exist in the SDK and the contracts rather than prose.
+   */
+  it("documents the four calls that actually send a transaction", () => {
+    const {container} = render(<DocsPage />);
+    const text = container.textContent ?? "";
+    for (const write of ["buyShares", "sellShares", "redeem(market)", "liquidate(market)"]) {
+      expect(text, `${write} missing from the reference`).toContain(write);
+    }
+    // And the bound that stops Kelly on a thin book.
+    expect(text).toContain("sizeWithinImpact");
+  });
+
+  it("warns about the two decimal scales, which nothing in the types distinguishes", () => {
+    render(<DocsPage />);
+    expect(screen.getByText(/Two units, and mixing them is silent/i)).toBeInTheDocument();
+  });
+
+  it("names the reversed outcome index for anyone porting an agent", () => {
+    const {container} = render(<DocsPage />);
+    const text = container.textContent ?? "";
+    // The single most dangerous difference: it compiles and runs either way.
+    expect(text).toContain("0 = NO, 1 = YES");
+    expect(text).toContain("0 = YES, 1 = NO");
+  });
+
+  it("lists errors a trading agent can actually hit", () => {
+    const {container} = render(<DocsPage />);
+    const text = container.textContent ?? "";
+    for (const err of ["SlippageExceeded", "TradingEnded", "NotSettled", "NotLiquidatable", "ProtocolPaused"]) {
+      expect(text, `${err} undocumented`).toContain(err);
+    }
+  });
+
+  it("says an exit is never blocked by a pause", () => {
+    const {container} = render(<DocsPage />);
+    // Contract guarantee, not a convention: sell/redeem/liquidate skip the pause
+    // check, and a trader who assumes otherwise waits for nothing.
+    expect(container.textContent).toMatch(/exit is never blocked/i);
+  });
 });
