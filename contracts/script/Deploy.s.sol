@@ -10,11 +10,28 @@ import {MockUSDC} from "../src/mocks/MockUSDC.sol";
 import {OutcomeShares} from "../src/core/OutcomeShares.sol";
 import {Market} from "../src/core/Market.sol";
 import {MarketFactory} from "../src/core/MarketFactory.sol";
+import {ResolutionModule} from "../src/core/ResolutionModule.sol";
 import {DeployLib} from "./DeployLib.sol";
 
 /// @notice Deploys P0+P1: MockUSDC, ConfigRegistry, OutcomeShares, the Market implementation,
 ///         and MarketFactory (both behind an ERC1967Proxy) + the default parameters.
 contract Deploy is Script {
+    /// @dev Grouped rather than passed positionally. Ten bare addresses in a row exhausts
+    ///      the EVM stack ("stack too deep"), and well before that it stops being possible
+    ///      to tell at the call site which address is which.
+    struct Manifest {
+        address configProxy;
+        address configImpl;
+        address outcomeShares;
+        address marketImplementation;
+        address marketFactory;
+        address marketFactoryImpl;
+        address usdc;
+        address resolutionModule;
+        address resolutionModuleImpl;
+        uint256 fromBlock;
+    }
+
     function run() external {
         uint256 pk = vm.envUint("DEPLOYER_KEY");
         address deployer = vm.addr(pk);
@@ -67,17 +84,26 @@ contract Deploy is Script {
         config.setAddress(ConfigKeys.TREASURY, treasury);
         config.setAddress(ConfigKeys.CURATOR_SIGNER, curatorSigner);
 
+        // After MARKET_FACTORY, not before: the module checks every market it records
+        // against the factory, and initialising it into a registry that cannot answer
+        // `isMarket` would leave it unable to anchor anything.
+        (address resolutionModule, address resolutionImpl) = _deployResolutionModule(config, deployer);
+
         vm.stopBroadcast();
 
         _writeManifest(
-            address(config),
-            address(impl),
-            address(sharesContract),
-            address(marketImpl),
-            address(factory),
-            address(factoryImpl),
-            address(usdc),
-            fromBlock
+            Manifest({
+                configProxy: address(config),
+                configImpl: address(impl),
+                outcomeShares: address(sharesContract),
+                marketImplementation: address(marketImpl),
+                marketFactory: address(factory),
+                marketFactoryImpl: address(factoryImpl),
+                usdc: address(usdc),
+                resolutionModule: resolutionModule,
+                resolutionModuleImpl: resolutionImpl,
+                fromBlock: fromBlock
+            })
         );
 
         console2.log("ConfigRegistry (proxy):", address(config));
@@ -86,32 +112,48 @@ contract Deploy is Script {
         console2.log("MockUSDC:              ", address(usdc));
         console2.log("Treasury:              ", treasury);
         console2.log("Curator signer:        ", curatorSigner);
+        console2.log("ResolutionModule:      ", resolutionModule);
     }
 
-    function _writeManifest(
-        address configProxy,
-        address configImpl,
-        address outcomeShares,
-        address marketImplementation,
-        address marketFactory,
-        address marketFactoryImpl,
-        address usdc,
-        uint256 fromBlock
-    ) internal {
+    /// @dev Split out of `run` because `run` had run out of stack slots, and it earns its
+    ///      place: the deployer is made the first resolver here, which is right for anvil
+    ///      and for a testnet and wrong beyond them. A resolver key signs a settlement for
+    ///      every market; it should not also be the key that can replace this contract.
+    ///      Pass RESOLVER to separate them.
+    function _deployResolutionModule(ConfigRegistry config, address deployer)
+        internal
+        returns (address module, address implementation)
+    {
+        ResolutionModule impl = new ResolutionModule();
+        ResolutionModule deployed = ResolutionModule(
+            address(
+                new ERC1967Proxy(
+                    address(impl), abi.encodeCall(ResolutionModule.initialize, (deployer, address(config)))
+                )
+            )
+        );
+        deployed.setResolver(vm.envOr("RESOLVER", deployer), true);
+        config.setAddress(ConfigKeys.RESOLUTION_MODULE, address(deployed));
+        return (address(deployed), address(impl));
+    }
+
+    function _writeManifest(Manifest memory m) internal {
         string memory contractsKey = "contracts";
-        vm.serializeAddress(contractsKey, "ConfigRegistry", configProxy);
-        vm.serializeAddress(contractsKey, "ConfigRegistryImpl", configImpl);
-        vm.serializeAddress(contractsKey, "OutcomeShares", outcomeShares);
-        vm.serializeAddress(contractsKey, "MarketImplementation", marketImplementation);
-        vm.serializeAddress(contractsKey, "MarketFactory", marketFactory);
+        vm.serializeAddress(contractsKey, "ConfigRegistry", m.configProxy);
+        vm.serializeAddress(contractsKey, "ConfigRegistryImpl", m.configImpl);
+        vm.serializeAddress(contractsKey, "OutcomeShares", m.outcomeShares);
+        vm.serializeAddress(contractsKey, "MarketImplementation", m.marketImplementation);
+        vm.serializeAddress(contractsKey, "MarketFactory", m.marketFactory);
         // The implementation address behind the UUPS proxy — exactly what an upgrade operation
         // needs, mirroring ConfigRegistryImpl.
-        vm.serializeAddress(contractsKey, "MarketFactoryImpl", marketFactoryImpl);
-        string memory contractsJson = vm.serializeAddress(contractsKey, "MockUSDC", usdc);
+        vm.serializeAddress(contractsKey, "MarketFactoryImpl", m.marketFactoryImpl);
+        vm.serializeAddress(contractsKey, "MockUSDC", m.usdc);
+        vm.serializeAddress(contractsKey, "ResolutionModuleImpl", m.resolutionModuleImpl);
+        string memory contractsJson = vm.serializeAddress(contractsKey, "ResolutionModule", m.resolutionModule);
 
         string memory root = "manifest";
         vm.serializeUint(root, "chainId", block.chainid);
-        vm.serializeUint(root, "deploymentBlock", fromBlock);
+        vm.serializeUint(root, "deploymentBlock", m.fromBlock);
         vm.serializeUint(root, "deployedAt", block.timestamp);
         string memory out = vm.serializeString(root, "contracts", contractsJson);
 

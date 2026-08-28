@@ -7,7 +7,9 @@
     "MarketFactoryImpl": "0x23BE85dA2D464727c909cB50B93692B3353CE50a",
     "MarketImplementation": "0x0BbAC9D3747e71Ffb3263f5eBe00efb55642d3ef",
     "MockUSDC": "0x683e55853F72950F42Fc0d6B035c405556EaFdb6",
-    "OutcomeShares": "0x552d6f8571CA61dD0de6cfc28847400AF784f415"
+    "OutcomeShares": "0x552d6f8571CA61dD0de6cfc28847400AF784f415",
+    "ResolutionModule": "0x41943f455A05A2Fa46505c8fF9Ea151D5f72578F",
+    "ResolutionModuleImpl": "0x39cEf334FBA69Ca5Bba359f62464E8951F687677"
   },
   "deployedAt": 1787868522,
   "deploymentBlock": 51733910
