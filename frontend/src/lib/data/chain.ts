@@ -12,6 +12,7 @@ import {
 } from "viem";
 import {AGENT_REGISTRY_ABI, CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, RESOLUTION_ABI} from "./abi";
 import {ZgStore, type MarketSpec} from "./zg-storage";
+import type {DocumentStore} from "@brier/zg-storage";
 import {
   CapabilityUnavailableError,
   type Candle,
@@ -146,6 +147,31 @@ function batchedHttp(rpcUrl: string): Transport {
   ]);
 }
 
+/**
+ * `localStorage`, where there is one and it will admit to working.
+ *
+ * Server-rendered on every first paint, so `window` genuinely does not exist
+ * half the time this runs. Even in a browser the property can THROW rather than
+ * be absent — a private window, or site data switched off — so the touch below
+ * is a real access inside a try, not a `typeof` check that would pass and then
+ * fail on first use.
+ *
+ * Nothing here is load-bearing. Without it the store keeps its in-memory cache
+ * and the page behaves exactly as it did; with it, documents that were already
+ * proved once are not fetched again on the next visit.
+ */
+function documentStore(): DocumentStore | null {
+  try {
+    const store = globalThis.localStorage;
+    const probe = "brier.zg.probe";
+    store.setItem(probe, "1");
+    store.removeItem(probe);
+    return store;
+  } catch {
+    return null;
+  }
+}
+
 /** How many JSON-RPC calls one HTTP body carries. */
 function callsIn(body: BodyInit | null | undefined): number {
   if (typeof body !== "string") return 1;
@@ -232,6 +258,34 @@ export class ChainSource implements DataSource {
   private readonly factory: `0x${string}`;
   /** Absent when no 0G Storage indexer is configured. */
   private readonly specs: ZgStore | null;
+
+  /**
+   * Start fetching documents that something else already knows the roots of.
+   *
+   * 0G Storage is a different network from the EVM RPC and answers in about
+   * 600ms, and `readMarket` cannot ask for a document until it has read
+   * `specRoot` — so the storage fetch lands in a wave AFTER every chain read,
+   * and the market table waits on the last of them. Measured on Galileo: the
+   * table appeared 30ms after the slowest spec arrived.
+   *
+   * The creation log carries `specRoot` too, so an indexer-backed reader knows
+   * every root a full round trip earlier than this class can. Handing them over
+   * puts the fetches in flight immediately; `ZgStore` dedupes by root, so the
+   * `getSpec` inside `readMarket` joins a request already running rather than
+   * starting a second one.
+   *
+   * A PREFETCH, never a substitute. The root that binds is the one in the
+   * market's own storage, which `readMarket` still reads and still uses. If a
+   * log ever disagreed with it, this would have warmed a cache entry nobody
+   * asks for — wasted, not wrong. Errors are swallowed for the same reason:
+   * whatever went wrong will happen again, in the call whose result is used,
+   * where it is reported properly.
+   */
+  prefetchSpecs(roots: readonly `0x${string}`[]): void {
+    const specs = this.specs;
+    if (!specs) return;
+    for (const root of roots) void specs.get(root).catch(() => {});
+  }
   /** `undefined` = not looked up yet; `null` = looked, and there is none. */
   private registryAddress: `0x${string}` | null | undefined;
   /**
@@ -254,7 +308,9 @@ export class ChainSource implements DataSource {
 
   constructor(config: ChainSourceConfig) {
     this.factory = config.factory;
-    this.specs = config.zgIndexerUrl ? new ZgStore(config.zgIndexerUrl) : null;
+    this.specs = config.zgIndexerUrl
+      ? new ZgStore(config.zgIndexerUrl, undefined, documentStore())
+      : null;
     this.capabilities = new Set<Capability>([
       "LIST_MARKETS",
       "MARKET_STATE",

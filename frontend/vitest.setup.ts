@@ -22,6 +22,21 @@ expect.extend(matchers);
 // find duplicate nodes left over from another test instead of only their own.
 afterEach(cleanup);
 
+// `ZgStore` now keeps verified documents in `localStorage`, which jsdom shares
+// across every test in a file. That is the point in a browser — a document
+// proved once need not be fetched again on the next visit — and poison in a
+// test run: one case caching a spec made the next one, which asserts the root
+// is unknown, read it straight back out and pass for the wrong reason. Cleared
+// between tests so each starts from a cold cache; a test that wants to exercise
+// the warm path warms it itself.
+afterEach(() => {
+  try {
+    globalThis.localStorage?.clear();
+  } catch {
+    // No storage in this environment, which is the cold state anyway.
+  }
+});
+
 // The same type augmentation must be declared from HERE (frontend/) rather than
 // imported from `@testing-library/jest-dom/vitest`, for an identical reason: the
 // `declare module "vitest"` in that file resolves 'vitest' from the jest-dom

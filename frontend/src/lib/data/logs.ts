@@ -1,6 +1,7 @@
 import type {PublicClient} from "viem";
 import {dpm} from "@brier/protocol";
 import {MARKET_CREATED_EVENT, TRADE_EVENT} from "./abi";
+import type {GetLogsReturnType} from "viem";
 import {ChainSource, type ChainSourceConfig} from "./chain";
 import {candlesFrom, positionsFrom} from "./derive";
 import {
@@ -49,6 +50,9 @@ export interface LogSourceConfig extends ChainSourceConfig {
   fromBlock: bigint;
 }
 
+/** What `getLogs` gives back for `MarketCreated`, named so two members can share it. */
+type CreatedLog = GetLogsReturnType<undefined, [typeof MARKET_CREATED_EVENT]>[number];
+
 export class LogSource implements DataSource {
   readonly mode: DataMode = "indexer";
 
@@ -95,6 +99,9 @@ export class LogSource implements DataSource {
    * refetch a second later still goes to the chain.
    */
   private readonly tapes = new Map<string, Promise<Trade[]>>();
+
+  /** See `createdLogs`. Held only while the scan is in flight. */
+  private createdLogsPending: Promise<CreatedLog[]> | null = null;
   /** The creation index while it is being built, for the same reason. `null`
    *  when nothing is in flight. */
   private created: Promise<Map<string, number>> | null = null;
@@ -193,13 +200,33 @@ export class LogSource implements DataSource {
     return pending;
   }
 
-  private async readCreatedAt(): Promise<Map<string, number>> {
-    const logs = await this.client.getLogs({
+  /**
+   * The creation scan itself, memoised for the same burst as `created`.
+   *
+   * Two things come out of these logs — when each market was created, and which
+   * document each committed to — and they are wanted at opposite ends of the
+   * load. Sharing the promise is what lets the second consumer read the roots
+   * without a second scan; without it, prefetching would have cost the round
+   * trip it was meant to save.
+   */
+  private createdLogs(): Promise<CreatedLog[]> {
+    if (this.createdLogsPending !== null) return this.createdLogsPending;
+    const pending = this.client.getLogs({
       address: this.factory,
       event: MARKET_CREATED_EVENT,
       fromBlock: this.fromBlock,
       toBlock: "latest",
     });
+    this.createdLogsPending = pending;
+    const forget = () => {
+      if (this.createdLogsPending === pending) this.createdLogsPending = null;
+    };
+    pending.then(forget, forget);
+    return pending;
+  }
+
+  private async readCreatedAt(): Promise<Map<string, number>> {
+    const logs = await this.createdLogs();
     // Concurrently, not in a loop that awaits. The loop was one round trip per
     // market, in series, for a set of timestamps that have nothing to do with
     // each other — thirteen markets meant thirteen sequential waits on an
@@ -219,8 +246,33 @@ export class LogSource implements DataSource {
   // ── delegated to the chain, then enriched ────────────────────────────────
 
   async listMarkets(): Promise<MarketSummary[]> {
-    const [markets, created] = await Promise.all([this.chain.listMarkets(), this.createdAt()]);
-    return markets.map((m) => ({...m, createdAt: created.get(m.address.toLowerCase()) ?? null}));
+    // Started before the prefetch, and deliberately in this order: `createdAt`
+    // puts the creation scan in flight synchronously, so the prefetch below
+    // joins that same request instead of opening a second one. Neither is
+    // awaited here — the chain reads must not queue behind either.
+    const created = this.createdAt();
+    this.prefetchSpecsFromLogs();
+
+    const markets = await this.chain.listMarkets();
+    const at = await created;
+    return markets.map((m) => ({...m, createdAt: at.get(m.address.toLowerCase()) ?? null}));
+  }
+
+  /**
+   * Hand the spec roots in the creation log to the chain source, so the
+   * documents are on their way before anything asks for them.
+   *
+   * Failure is deliberately quiet. Nothing here is load-bearing: every root is
+   * read again from the market itself, and a scan that fails will fail again in
+   * `createdAt`, where the reader is told about it.
+   */
+  private prefetchSpecsFromLogs(): void {
+    void this.createdLogs()
+      .then((logs) => {
+        this.chain.prefetchSpecs(logs.flatMap((l) => (l.args.specRoot ? [l.args.specRoot] : [])));
+      })
+      // Reported by the call that needs the answer, not by the one that guessed.
+      .catch(() => {});
   }
 
   async getMarket(address: `0x${string}`): Promise<MarketDetail> {

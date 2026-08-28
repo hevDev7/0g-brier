@@ -271,3 +271,63 @@ describe("a settlement's receipt, read from 0G Storage", () => {
     });
   }
 });
+
+/**
+ * 0G Storage is a different network from the EVM RPC and answers in about
+ * 600ms. On a market list every row needs a document and the table cannot
+ * finish until the slowest lands — measured on Galileo, it appeared 30ms after
+ * the last spec arrived. Those bytes never change, so the second visit has no
+ * reason to ask again.
+ *
+ * The argument for caching a root is unusually strong and unusually narrow: the
+ * key IS the hash of the value, so there is no staleness. That argument survives
+ * the cache outliving the page. What it does NOT survive is skipping the check
+ * — a document read back off the reader's own disk is exactly the one an
+ * attacker can reach, so it is re-proved every time.
+ */
+describe("documents remembered across visits", () => {
+  it("does not ask the network twice for bytes it has already proved", async () => {
+    const first = stubStorage(LIVE_SPEC);
+    expect((await source({indexer: INDEXER}).listMarkets())[0]!.question).toContain("ETH/USD");
+    expect(first).toHaveBeenCalledTimes(1);
+
+    // A NEW source, as a second page load would build: nothing in memory, and
+    // the fetch is stubbed to fail so that using it at all is a test failure.
+    const second = vi.fn(async () => {
+      throw new Error("the network was consulted for a document already proved");
+    });
+    vi.stubGlobal("fetch", second);
+    expect((await source({indexer: INDEXER}).listMarkets())[0]!.question).toContain("ETH/USD");
+    expect(second).not.toHaveBeenCalled();
+  });
+
+  it("re-proves what it stored, and refuses bytes that no longer hash to the root", async () => {
+    stubStorage(LIVE_SPEC);
+    await source({indexer: INDEXER}).listMarkets();
+
+    // Someone edits the entry — a browser console, an extension, another tab.
+    // The stored key names a hash, so the swap is detectable without asking
+    // anyone, and it must not be believed.
+    const key = Object.keys(localStorage).find((k) => k.startsWith("brier.zg."))!;
+    expect(key).toBeDefined();
+    localStorage.setItem(key, LIVE_SPEC.replace("above $4,000", "above $9,000"));
+
+    const refetch = stubStorage(LIVE_SPEC);
+    const row = (await source({indexer: INDEXER}).listMarkets())[0]!;
+    expect(row.question).toContain("$4,000");
+    expect(row.question).not.toContain("$9,000");
+    // Not merely ignored — discarded, and the real document fetched instead.
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(key)).toBe(LIVE_SPEC);
+  });
+
+  it("does not remember that a root was empty", async () => {
+    // An absent root answers with an envelope that hashes to nothing, so there
+    // would be no way to re-prove it on the way out — and an unverifiable
+    // "there is nothing here" on the reader's own disk is the entry that would
+    // make a real document disappear. Re-asking costs one request.
+    stubStorage('{"code":101,"message":"File not found","data":null}');
+    expect((await source({indexer: INDEXER}).listMarkets())[0]!.question).toBeNull();
+    expect(Object.keys(localStorage).filter((k) => k.startsWith("brier.zg."))).toHaveLength(0);
+  });
+});

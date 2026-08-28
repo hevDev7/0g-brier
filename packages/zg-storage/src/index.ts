@@ -140,20 +140,50 @@ function isAbsentEnvelope(text: string): boolean {
 const REQUEST_TIMEOUT_MS = 10_000;
 
 /**
+ * The subset of Web Storage this needs, so a caller can hand over
+ * `localStorage` without this module depending on a browser existing.
+ */
+export interface DocumentStore {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+/** Namespaced so clearing these cannot take anything else with it. */
+const PERSIST_PREFIX = "brier.zg.";
+
+/**
  * Fetches documents by root, verifies them, and caches them.
  *
  * Caching is unconditionally safe here in a way it almost never is: the key IS
  * the hash of the value. A root cannot come to mean different bytes later, so
  * there is no staleness to reason about and no invalidation to get wrong.
+ *
+ * That argument does not weaken when the cache outlives the page, which is why
+ * `persist` exists. 0G Storage is a different network from the EVM RPC and
+ * answers in about 600ms; on a market list every row needs a document, and the
+ * table cannot finish until the slowest of them lands. Those bytes never change
+ * — so on a second visit there is no reason to ask for them again.
+ *
+ * The bytes are stored, not the parsed value, and they are RE-VERIFIED on the
+ * way out. Trusting a parsed object off the reader's own disk would quietly
+ * drop the one guarantee this class exists to provide, and would do it in the
+ * place easiest to tamper with. Recomputing a Merkle root over a few kilobytes
+ * costs nothing next to a network round trip, and a stored entry that fails the
+ * check is discarded and refetched rather than believed.
  */
 export class ZgStore {
   private readonly indexerUrl: string;
   private readonly cache = new Map<Hex, unknown>();
   private readonly inflight = new Map<Hex, Promise<unknown>>();
   private readonly fetchImpl: typeof fetch;
+  private readonly persist: DocumentStore | null;
 
-  constructor(indexerUrl: string, fetchImpl?: typeof fetch) {
+  constructor(indexerUrl: string, fetchImpl?: typeof fetch, persist?: DocumentStore | null) {
     this.indexerUrl = indexerUrl;
+    // Absent by default. A node script that runs once gains nothing from a
+    // cache that outlives it, and there is no `localStorage` there to use.
+    this.persist = persist ?? null;
     // `fetch` is a METHOD of the global object in a browser, and throws
     // "Illegal invocation" when called with any other receiver — which is what
     // `private readonly fetchImpl = fetch` plus `this.fetchImpl(…)` does. The
@@ -181,6 +211,12 @@ export class ZgStore {
     const running = this.inflight.get(key);
     if (running) return running;
 
+    const stored = this.readPersisted(key);
+    if (stored !== undefined) {
+      this.cache.set(key, stored);
+      return stored;
+    }
+
     const task = this.load(root)
       .then((doc) => {
         this.cache.set(key, doc);
@@ -189,6 +225,65 @@ export class ZgStore {
       .finally(() => this.inflight.delete(key));
     this.inflight.set(key, task);
     return task;
+  }
+
+  /**
+   * A previously stored document, re-verified, or `undefined` for "ask the
+   * network".
+   *
+   * The stored value is the response TEXT, byte for byte, because that is the
+   * only thing that can be checked: a re-serialised object would not reproduce
+   * the document's own formatting, so its root would differ and every entry
+   * would be discarded on the way out. Storing what was verified is also what
+   * makes verifying it again possible, which is the point.
+   */
+  private readPersisted(key: Hex): unknown {
+    if (!this.persist) return undefined;
+    let raw: string | null;
+    try {
+      raw = this.persist.getItem(PERSIST_PREFIX + key);
+    } catch {
+      // Private mode, a disabled store, a read that throws. A cache that cannot
+      // be read is not an error worth surfacing; it is a miss.
+      return undefined;
+    }
+    if (raw === null) return undefined;
+
+    const actual = zgMerkleRoot(new TextEncoder().encode(raw));
+    if (actual === null || actual.toLowerCase() !== key) {
+      // Never believed, and never left behind either: whatever wrote these
+      // bytes, they are not the document this root names.
+      try {
+        this.persist.removeItem(PERSIST_PREFIX + key);
+      } catch {
+        // Nothing to do if it will not even delete.
+      }
+      return undefined;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch {
+      // Verified bytes that are not JSON — the same answer `load` gives.
+      return null;
+    }
+  }
+
+  /**
+   * Only ever called with text that has just PASSED verification.
+   *
+   * An absent root is deliberately not remembered. Its response does not hash
+   * to anything, so there would be nothing to re-check on the way out — and an
+   * unverifiable "there is nothing here" written to the reader's own disk is
+   * exactly the entry someone could plant to make a real document disappear.
+   * Re-asking for it costs one request, on the rare path.
+   */
+  private writePersisted(key: Hex, text: string): void {
+    if (!this.persist) return;
+    try {
+      this.persist.setItem(PERSIST_PREFIX + key, text);
+    } catch {
+      // A full quota is not a reason to fail a read that already succeeded.
+    }
   }
 
   private async load(root: Hex): Promise<unknown> {
@@ -204,6 +299,8 @@ export class ZgStore {
       if (isAbsentEnvelope(text)) return null;
       throw new SpecRootMismatchError(root, actual);
     }
+    // Past the check, and only past it: what gets remembered is what was proved.
+    this.writePersisted(root.toLowerCase() as Hex, text);
     try {
       return JSON.parse(text);
     } catch {
