@@ -82,9 +82,10 @@ if (( BALANCE < MIN_WEI )); then
   die "deployer $DEPLOYER holds $(cast from-wei "$BALANCE") 0G; needs about $(cast from-wei "$MIN_WEI")"
 fi
 
+# Through `confirm`, like the role checks above: a bare `read -r` here ignored
+# ASSUME_YES, so the one gate meant to be skippable in CI was the one that hung.
 if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]]; then
-  echo "⚠  working tree is dirty — the manifest will not correspond to a commit."
-  echo "   (Ctrl-C to stop, Enter to continue)"; read -r
+  confirm "working tree is dirty — the manifest will not correspond to a commit."
 fi
 
 echo "▶ chain        $CHAIN_ID via $RPC"
@@ -94,12 +95,43 @@ echo "▶ curator      $CURATOR_SIGNER"
 echo "▶ commit       $(git -C "$ROOT" rev-parse --short HEAD)"
 
 # ── deploy ───────────────────────────────────────────────────────────────────
+# The manifest is written from the SCRIPT BODY, which forge runs during
+# simulation — before `--broadcast` sends anything. A send that fails therefore
+# leaves deployments/<chain>.json pointing at addresses that were only ever
+# simulated and hold no code. Observed on 2026-08-28: a gas-price rejection
+# clobbered a working manifest without a single transaction landing.
+MANIFEST="$ROOT/deployments/${EXPECTED_CHAIN_ID}.json"
+if [[ -f "$MANIFEST" ]]; then
+  BACKUP="$MANIFEST.bak-$(date +%Y%m%d-%H%M%S)"
+  cp "$MANIFEST" "$BACKUP"
+  echo "▶ manifest backed up to $(basename "$BACKUP")"
+fi
+
+# Galileo prices the two halves of an EIP-1559 fee very differently, and the node
+# must be asked for BOTH. The base fee is 7 wei — low enough to look like a chain
+# that wants nothing — while eth_maxPriorityFeePerGas is 4 gwei. Forge's default
+# tip is 1 wei, which the node rejects outright:
+#   "transaction gas price below minimum: gas tip cap 1"
+# So the tip is read from the node rather than assumed, and a chain that later
+# raises it does not need this script edited.
+TIP="$(cast rpc eth_maxPriorityFeePerGas --rpc-url "$RPC" | tr -d '"')"
+TIP=$((TIP))
+echo "▶ priority fee $TIP wei (from the node, not a guess)"
+
 cd "$ROOT/contracts"
-forge script script/Deploy.s.sol:Deploy \
+if ! forge script script/Deploy.s.sol:Deploy \
   --rpc-url "$RPC" \
   --broadcast \
   --slow \
+  --priority-gas-price "$TIP" \
   -vv
+then
+  if [[ -n "${BACKUP:-}" ]]; then
+    cp "$BACKUP" "$MANIFEST"
+    echo "✗ deploy failed — manifest restored from $(basename "$BACKUP")" >&2
+  fi
+  exit 1
+fi
 
 echo ""
 echo "▶ manifest:"
