@@ -268,3 +268,31 @@ describe("not buying past your own belief", () => {
     expect(after - before).toBeLessThanOrEqual((WAD * 70n) / 10_000n);
   });
 });
+
+/**
+ * `redeem` burns and pays for the tradable position AND the seed shares, and the
+ * two live in different contracts: tradable in OutcomeShares, seed in the Market.
+ * A client that reads only the first divides the whole proceeds by a fraction of
+ * the shares — the first live redemption through this SDK printed an "implied
+ * rate" of 21.01× for a market whose rate was 1.3689×.
+ */
+describe("what a claim says it burned", () => {
+  const settled = () =>
+    client({
+      status: 4,
+      winningOutcome: 1,
+      resolvedAt: 1790000500n,
+      balanceOfOutcome: 49_271_245_000_000_000_000n, // 49.27 tradable
+      seedSharesOf: [0n, 707_121_731_000_000_000_000n], // 707.12 seed, YES side
+    });
+
+  it("reads the seed shares the Market holds, which OutcomeShares does not", async () => {
+    expect(await settled().getSeedShares(MARKET, 1)).toBe(707_121_731_000_000_000_000n);
+    // `getPosition` stays tradable-only, which is what its name says.
+    expect(await settled().getPosition(MARKET, 1)).toBe(49_271_245_000_000_000_000n);
+  });
+
+  it("refuses to claim a market that has not resolved", async () => {
+    await expect(client().redeem(MARKET)).rejects.toThrow(/not been resolved/);
+  });
+});

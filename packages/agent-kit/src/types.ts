@@ -58,6 +58,28 @@ export interface Preview {
   payoutPerShareAfterWad: bigint;
 }
 
+/**
+ * What an exit actually returned.
+ *
+ * `tokensReceived` is measured, not quoted: the collateral balance before and
+ * after. `redeem` pays for the tradable position AND for any seed shares on the
+ * winning side, and a caller that assumed the first would understate what it
+ * got — the creator of a market is usually its largest winner.
+ */
+export interface Claim {
+  hash: `0x${string}`;
+  tokensReceived: bigint;
+  /**
+   * Shares the claim burned — TRADABLE PLUS SEED.
+   *
+   * The seed half is easy to miss: it is held by the Market rather than by
+   * OutcomeShares, so `getPosition` does not see it, while `redeem` pays for it
+   * regardless. Dividing proceeds by the tradable balance alone printed an
+   * "implied rate" of 21.01× for a market whose rate was 1.3689×.
+   */
+  sharesBefore: bigint;
+}
+
 export interface Fill {
   hash: `0x${string}`;
   /** Read back from the chain after the receipt, never assumed from the quote. */

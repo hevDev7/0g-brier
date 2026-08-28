@@ -13,7 +13,7 @@ import {privateKeyToAccount} from "viem/accounts";
 import {WAD, dpm, quote, toWad, networkFor, type ChainMode} from "@0g-delphi/protocol";
 import {ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "./abi";
 import {suggestFees} from "./fees";
-import type {Fill, MarketView, Outcome, Preview, Tier, MarketStatus} from "./types";
+import type {Claim, Fill, MarketView, Outcome, Preview, Tier, MarketStatus} from "./types";
 
 /** The order in `IMarket.Status`. */
 const STATUSES: readonly MarketStatus[] = [
@@ -178,7 +178,26 @@ export class DelphiZeroClient {
     });
   }
 
-  /** Shares held on one side of one market, wad. */
+  /**
+   * Seed shares held on one side, wad.
+   *
+   * A liquidity provider's stake, held by the Market itself rather than by
+   * OutcomeShares — so it is invisible to `getPosition`, and `redeem` pays for
+   * it all the same. A market's creator is usually its largest winner, and a
+   * client that ignored this would report a payout rate many times too high by
+   * dividing the whole proceeds by a fraction of the shares.
+   */
+  async getSeedShares(market: `0x${string}`, outcome: Outcome): Promise<bigint> {
+    const seed = await this.publicClient.readContract({
+      address: market,
+      abi: MARKET_ABI,
+      functionName: "seedSharesOf",
+      args: [this.address],
+    });
+    return seed[outcome];
+  }
+
+  /** TRADABLE shares held on one side of one market, wad. Excludes seed. */
   async getPosition(market: `0x${string}`, outcome: Outcome): Promise<bigint> {
     return this.publicClient.readContract({
       address: this.shares,
@@ -363,14 +382,54 @@ export class DelphiZeroClient {
     return this.fillFrom(hash, args.market, args.outcome, before);
   }
 
-  /** Claim a winning position. Works while the protocol is paused, by design. */
-  async redeem(market: `0x${string}`): Promise<`0x${string}`> {
-    return this.send(market, MARKET_ABI, "redeem", [this.address]);
+  /**
+   * Claim a winning position after settlement.
+   *
+   * Works while the protocol is paused, and that is a guarantee rather than an
+   * accident: pause never blocks an exit (spec §6), and the contracts have a
+   * test saying so.
+   */
+  async redeem(market: `0x${string}`): Promise<Claim> {
+    const view = await this.getMarket(market);
+    if (view.winningOutcome === null) {
+      throw new Error(`market ${market} has not been resolved — there is nothing to redeem`);
+    }
+    // Tradable AND seed, because the contract burns and pays for both.
+    const [tradable, seed] = await Promise.all([
+      this.getPosition(market, view.winningOutcome),
+      this.getSeedShares(market, view.winningOutcome),
+    ]);
+    return this.claim(market, view.collateral, tradable + seed);
   }
 
-  /** Exit at `pᵢ` after a failed or voided market. Also works while paused. */
-  async liquidate(market: `0x${string}`): Promise<`0x${string}`> {
-    return this.send(market, MARKET_ABI, "liquidate", [this.address]);
+  /**
+   * Exit at `pᵢ` after a failed or voided market, where BOTH sides are paid.
+   * Also works while paused.
+   */
+  async liquidate(market: `0x${string}`): Promise<Claim> {
+    const view = await this.getMarket(market);
+    const [no, yes, seedNo, seedYes] = await Promise.all([
+      this.getPosition(market, 0),
+      this.getPosition(market, 1),
+      this.getSeedShares(market, 0),
+      this.getSeedShares(market, 1),
+    ]);
+    return this.claim(market, view.collateral, no + yes + seedNo + seedYes, "liquidate");
+  }
+
+  private async claim(
+    market: `0x${string}`,
+    collateral: `0x${string}`,
+    sharesBefore: bigint,
+    verb: "redeem" | "liquidate" = "redeem",
+  ): Promise<Claim> {
+    const before = await this.getBalance(collateral);
+    const hash = await this.send(market, MARKET_ABI, verb, [this.address]);
+    const after = await this.getBalance(collateral);
+    // Measured, not quoted. `redeem` pays for the tradable position AND for seed
+    // shares on the winning side, so a figure derived from the tradable balance
+    // alone would understate what a market's creator actually receives.
+    return {hash, tokensReceived: after - before, sharesBefore};
   }
 
   // ── internals ────────────────────────────────────────────────────────────

@@ -61,6 +61,16 @@ export const MARKET_ABI = [
     inputs: [{type: "uint8"}, {type: "uint256"}, {type: "uint256"}, {type: "address"}],
     outputs: [{type: "uint256"}],
   },
+  // Seed shares are held by the MARKET, not by OutcomeShares, and `redeem` pays
+  // for them alongside the tradable position. A client that reads only
+  // `balanceOfOutcome` sees a fraction of what it is about to be paid for.
+  {
+    type: "function",
+    name: "seedSharesOf",
+    stateMutability: "view",
+    inputs: [{type: "address"}],
+    outputs: [{type: "uint256[2]"}],
+  },
   {
     type: "function",
     name: "redeem",
