@@ -1,4 +1,5 @@
 export * from './units';
+export * from './categories';
 export * from './modes';
 export * from './networks';
 export * from './deployments';

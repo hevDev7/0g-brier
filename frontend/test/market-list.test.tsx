@@ -45,6 +45,15 @@ beforeEach(() => {
   routing.params = new URLSearchParams();
 });
 
+/** The table row whose heading contains `needle`. */
+function rowFor(table: HTMLElement, needle: string): HTMLElement {
+  const row = within(table)
+    .getAllByRole("row")
+    .find((r) => r.textContent?.includes(needle));
+  if (!row) throw new Error(`no row for ${needle}`);
+  return row;
+}
+
 describe("MarketList", () => {
   it("renders one row per market, with P(YES) as p squared", async () => {
     renderList();
@@ -76,8 +85,11 @@ describe("MarketList", () => {
   it("shows the 24h change measured over the history that actually exists", async () => {
     renderList();
     const table = await screen.findByRole("table");
-    await waitFor(() => expect(within(table).getAllByText("+1.4 pt").length).toBe(2));
-    expect(within(table).getByText("+0.5 pt")).toBeInTheDocument();
+    // Asserted per ROW rather than by counting occurrences across the table. A count
+    // says how many markets happen to share a figure, which is a fact about the
+    // fixture set; naming the row says which market shows what, which is the claim.
+    await waitFor(() => expect(rowFor(table, "ETH/USD")).toHaveTextContent("+1.4 pt"));
+    expect(rowFor(table, "euro-area")).toHaveTextContent("+0.5 pt");
   });
 
   /**
@@ -110,24 +122,27 @@ describe("MarketList", () => {
     expect(within(table).queryByText("+1.4 pt")).not.toBeInTheDocument();
   });
 
+  /** Where a question sits in the rendered list, by a fragment of its text. */
+  const positionOf = (order: string[], needle: string) => order.findIndex((q) => q.includes(needle));
+
   it("sorts by volume, and an unknown volume sorts last rather than as zero", async () => {
-    // The middle market's tape is present; with all three known, volume order is
-    // 948.68, 781.02, 500.00.
+    // Relative order, not absolute positions: the claim is that volume decides the
+    // sequence, and it stays true however many other markets the fixtures hold.
+    // Volumes here are 948.68, 781.02 and 500.00.
     renderList(new MockSource(), "sort=volume");
     await waitFor(async () => {
       const order = await questionOrder();
-      expect(order[0]).toContain("euro-area");
-      expect(order[1]).toContain("ETH/USD");
-      expect(order[2]).toContain("mainnet v2");
+      expect(positionOf(order, "euro-area")).toBeLessThan(positionOf(order, "ETH/USD"));
+      expect(positionOf(order, "ETH/USD")).toBeLessThan(positionOf(order, "mainnet v2"));
     });
   });
 
   it("sorts by newest using createdAt from the market summary", async () => {
     renderList(new MockSource(), "sort=newest");
     const order = await questionOrder();
-    expect(order[0]).toContain("ETH/USD"); // created 72h before the fixture clock
-    expect(order[1]).toContain("euro-area"); // 96h
-    expect(order[2]).toContain("mainnet v2"); // 240h
+    // 72h, 96h and 240h before the fixture clock.
+    expect(positionOf(order, "ETH/USD")).toBeLessThan(positionOf(order, "euro-area"));
+    expect(positionOf(order, "euro-area")).toBeLessThan(positionOf(order, "mainnet v2"));
   });
 
   it("filters by status from the URL", async () => {

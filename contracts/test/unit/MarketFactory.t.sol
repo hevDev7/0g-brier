@@ -170,6 +170,32 @@ contract MarketFactoryTest is Fixtures {
         assertEq(address(m.shares()), address(shares));
     }
 
+    /// @dev A market nobody can categorise is one nobody can filter for, no agent
+    ///      policy can match, and no category-specific settlement template can reach.
+    ///      All three failures are silent, so the typo is refused at creation.
+    function test_aMarketCannotBeCreatedUnderAnUnknownCategory() public {
+        IMarket.Params memory p = _params();
+        p.category = "cyrpto";
+        bytes memory sig = _sign(p, 1);
+
+        vm.prank(creator);
+        vm.expectRevert(abi.encodeWithSelector(MarketFactory.UnknownCategory.selector, bytes32("cyrpto")));
+        factory.createMarket(p, SEED, DEPOSIT, 1, sig);
+    }
+
+    function test_everyCategoryTheRegistryKnowsCanCreateAMarket() public {
+        bytes32[6] memory names = [bytes32("crypto"), "politics", "sports", "economics", "science", "culture"];
+        for (uint256 i = 0; i < names.length; i++) {
+            IMarket.Params memory p = _params();
+            p.category = names[i];
+            bytes memory sig = _sign(p, i + 1);
+            vm.prank(creator);
+            address m = factory.createMarket(p, SEED, DEPOSIT, i + 1, sig);
+            assertEq(Market(m).category(), names[i], "the market did not keep its category");
+        }
+        assertEq(factory.marketCount(), 6, "not every category produced a market");
+    }
+
     function test_marketCanMintSharesOnlyAfterRegistration() public {
         IMarket.Params memory p = _params();
         bytes memory sig = _sign(p, 1);

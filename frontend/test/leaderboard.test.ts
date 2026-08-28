@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
 import {compareRows, leaderboard, type LeaderboardRow} from "@/lib/leaderboard";
-import {MockSource} from "@/lib/data/mock";
+import {FIXTURE_MARKETS, MockSource} from "@/lib/data/mock";
 import type {Capability, MarketSummary, Position, Trade} from "@/lib/data/types";
 
 async function board(omit: Capability[] = []) {
@@ -45,7 +45,9 @@ describe("leaderboard", () => {
     const {rows, tradesByMarket} = await board();
     const counted = rows.reduce((sum, r) => sum + (r.trades ?? 0), 0);
     expect(counted).toBe(tradesByMarket!.flat().length);
-    expect(counted).toBe(72); // three fixture markets, 24 trades each
+    // 24 synthetic trades per fixture market. Derived, so adding a market to the
+    // fixtures does not turn a true assertion into a false one.
+    expect(counted).toBe(FIXTURE_MARKETS.length * 24);
   });
 
   /** A sell is volume too: signed sums make a busy agent look idle. */

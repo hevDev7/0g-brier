@@ -168,7 +168,15 @@ SETTLEMENT_DEADLINE=$(( TRADING_END + WINDOW ))
 # rather than the default VERIFIED (n=5, k=3), which would revert NotEnoughResolvers.
 TIER="${TIER:-1}"
 AGENT_ID=1
-CATEGORY="$(cast format-bytes32-string crypto)"
+# One of the six the registry knows (spec §5.2), or `selftest` for a lifecycle demo.
+# The factory REFUSES an unknown category: a market nobody can file is one nobody can
+# filter for, no agent policy can match, and no settlement template can reach.
+CATEGORY_NAME="${CATEGORY_NAME:-selftest}"
+SPEC_DOC="$(python3 "$ROOT/scripts/market-spec.py" "$TRADING_END" "$SETTLEMENT_DEADLINE" "$TIER" "$AGENT_ID" "$CATEGORY_NAME")"
+# The document decides what goes on chain — `selftest` files itself under crypto —
+# so the bytes32 is read back OUT of it rather than set beside it, where the two
+# could drift.
+CATEGORY="$(cast format-bytes32-string "$(printf '%s' "$SPEC_DOC" | python3 -c "import json,sys;print(json.load(sys.stdin)['category'])")")"
 
 # The MarketSpec, and the root that commits to it.
 #
@@ -178,7 +186,6 @@ CATEGORY="$(cast format-bytes32-string crypto)"
 # that one addressed nothing. The document below is what the UI reads and what a
 # resolver is meant to judge against, so it is built FROM the same values the
 # market is created with rather than beside them.
-SPEC_DOC="$(python3 "$ROOT/scripts/market-spec.py" "$TRADING_END" "$SETTLEMENT_DEADLINE" "$TIER" "$AGENT_ID")"
 # Uploading writes to 0G Chain, so a local anvil run computes the root without
 # storing anything and says so, rather than pretending.
 if [[ "$CHAIN_ID" == "16602" || "${ZG_UPLOAD:-0}" == "1" ]]; then

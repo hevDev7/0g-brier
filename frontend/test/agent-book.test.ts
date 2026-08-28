@@ -138,7 +138,12 @@ describe("aggregate totals", () => {
    */
   it("sums exact amounts rather than the rounded row figures", async () => {
     const {markets, lists} = await book();
-    const rows = agentBook(markets, lists, "0xbb0c000000000000000000000000000000000000");
+    // Scoped to the FIRST THREE fixtures on purpose. This test is not counting rows,
+    // it is demonstrating one specific piece of arithmetic — three figures whose
+    // printed forms add to a different number than their exact ones do. Widening it
+    // to every fixture would change the numbers and lose the demonstration.
+    const three = markets.slice(0, 3);
+    const rows = agentBook(three, lists, "0xbb0c000000000000000000000000000000000000");
     expect(rows).toHaveLength(3);
 
     const exact = rows.reduce((sum, r) => sum + (r.pnlTokens ?? 0n), 0n);

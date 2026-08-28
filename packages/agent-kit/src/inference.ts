@@ -1,6 +1,6 @@
 import {ethers} from "ethers";
 import {createZGComputeNetworkBroker} from "@0gfoundation/0g-compute-ts-sdk";
-import {WAD, networkFor, type ChainMode} from "@0g-delphi/protocol";
+import {WAD, networkFor, isCategory, type Category, type ChainMode} from "@0g-delphi/protocol";
 
 /**
  * What an agent knows about where an answer came from.
@@ -30,6 +30,36 @@ export interface Belief extends Attestation {
   /** The model's reply verbatim, so a receipt can carry what was actually said. */
   raw: string;
 }
+
+/**
+ * What a resolver is told to watch out for, per category (spec §7.4 step 3).
+ *
+ * Every one of these is a way a resolver has been fooled by a question that looked
+ * settled and was not: a scheduled election read as a held one, a league leader read
+ * as a champion, a revision read as the release it revised. The template does not
+ * tell the model the answer — it tells it which near-miss to refuse.
+ */
+const CATEGORY_TEMPLATES: Record<Category, string> = {
+  crypto:
+    "Prices are per an exact venue and an exact instant. Do not substitute a nearby minute, " +
+    "a different exchange, or an index for a spot pair. If the named source has no observation " +
+    "covering the named instant, that is UNRESOLVABLE.",
+  politics:
+    "Distinguish what has HAPPENED from what is scheduled, announced, or expected. An " +
+    "announcement, a dissolution, a called vote and a poll are none of them the event itself.",
+  sports:
+    "Distinguish a final result from a standing. A leader is not a champion, a leg is not a tie, " +
+    "and a fixture that has not been played has no result — however certain it looks.",
+  economics:
+    "Statistical releases come in versions. Use the exact release the rules name — flash, " +
+    "preliminary or final — and ignore every other, including later revisions of the same period.",
+  science:
+    "Distinguish an event from its plan. A scheduled launch, a rollout, a scrubbed attempt and a " +
+    "successful one are four different things, and the rules will say which counts.",
+  culture:
+    "Distinguish a win from a nomination, and an award from its ceremony. Credits are often " +
+    "shared or disputed — read exactly whose name the rules ask about.",
+};
 
 /** NO, YES, or "this question cannot be answered". */
 export type SettlementOutcome = 0 | 1 | 2;
@@ -140,6 +170,7 @@ export class ZgInference {
   async settle(spec: {
     question: string;
     rules: string;
+    category?: string | null;
     settlementPrompt?: string | null;
     evidence?: readonly {url: string; note?: string}[];
   }): Promise<Judgement> {
@@ -152,6 +183,12 @@ export class ZgInference {
       `QUESTION: ${spec.question}`,
       "",
       `RESOLUTION RULES: ${spec.rules}`,
+      // The category template comes BEFORE the creator's own prompt, so a creator can
+      // narrow what the resolver must check but cannot quietly waive the near-miss the
+      // category is there to catch.
+      ...(spec.category && isCategory(spec.category)
+        ? ["", `FOR ${spec.category.toUpperCase()} QUESTIONS: ${CATEGORY_TEMPLATES[spec.category]}`]
+        : []),
       ...(spec.settlementPrompt ? ["", `SETTLEMENT INSTRUCTIONS: ${spec.settlementPrompt}`] : []),
       ...(evidence.length > 0 ? ["", "EVIDENCE:", ...evidence] : []),
       "",

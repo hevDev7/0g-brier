@@ -48,6 +48,24 @@ library DeployLib {
     ///
     ///      Pure, and takes the chain id as an argument, so the policy can be tested directly
     ///      rather than only observed by running the script against a chain.
+    /// @notice The categories a market may be created under (spec §5.2).
+    ///
+    /// @dev These six, and not a longer list, because the spec names six. Adding a
+    ///      seventh is one `addCategory` call by governance — a parameter change, not
+    ///      a code change — which is the reason the list lives in the registry at all.
+    ///
+    ///      Order is permanent once set: the index is the bit an agent's
+    ///      `allowedCategories` policy sets, so reordering would silently repoint every
+    ///      policy already granted.
+    function applyCategories(ConfigRegistry config) internal {
+        config.addCategory("crypto");
+        config.addCategory("politics");
+        config.addCategory("sports");
+        config.addCategory("economics");
+        config.addCategory("science");
+        config.addCategory("culture");
+    }
+
     /// @notice The resolution parameters, separated from `applyDefaults` so that a
     ///         registry deployed BEFORE the committee existed can be brought up to date
     ///         without redeploying it.
@@ -176,6 +194,7 @@ library DeployLib {
         config.setParam(ConfigKeys.SWEEP_UNCLAIMED_AFTER, 365 days);
 
         applyResolutionDefaults(config);
+        applyCategories(config);
 
         config.setCollateralAllowed(collateral, true);
     }

@@ -122,6 +122,68 @@ export const FIXTURE_MARKETS: MarketDetail[] = [
     winningOutcome: 1,
     resolvedAt: NOW - 1 * HOUR,
   }),
+  // Three more categories, so the filter has something to filter and the list shows
+  // the breadth the registry allows. Appended rather than inserted: several tests
+  // index FIXTURE_MARKETS[0] and expect the first three to be what they were.
+  market({
+    address: "0x4444444444444444444444444444444444444444",
+    question: "Will the United Kingdom hold a general election before 1 January 2028?",
+    rules:
+      "Resolves YES if polling day for a UK general election falls on or before 2027-12-31, " +
+      "per the UK Parliament. An announced or scheduled election that has not been held does not count.",
+    category: "politics",
+    tier: "VERIFIED",
+    status: "Open",
+    q: [900n * WAD, 1400n * WAD],
+    createdAt: NOW - 300 * HOUR,
+    tradingEnd: NOW + 30 * 24 * HOUR,
+    settlementDeadline: NOW + 31 * 24 * HOUR,
+    feeBps: 100,
+    creator: "0xAaAaAaAa00000000000000000000000000000004",
+    specRoot: "0xd4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3",
+    settlementPrompt:
+      "Find whether a UK general election has been HELD on or before 2027-12-31. An " +
+      "announcement, a dissolution, or a scheduled date is not a held election.",
+    sources: [{kind: "http", url: "https://www.parliament.uk/about/how/elections-and-voting/general/", selector: null}],
+  }),
+  market({
+    address: "0x5555555555555555555555555555555555555555",
+    question: "Will Manchester City win the 2026-27 English Premier League title?",
+    rules:
+      "Resolves YES if Manchester City are champions of the 2026-27 Premier League at the end " +
+      "of the season, per the official table. A league leader mid-season is not a champion.",
+    category: "sports",
+    tier: "FAST",
+    status: "Open",
+    q: [1600n * WAD, 800n * WAD],
+    createdAt: NOW - 60 * HOUR,
+    tradingEnd: NOW + 60 * 24 * HOUR,
+    settlementDeadline: NOW + 61 * 24 * HOUR,
+    feeBps: 100,
+    creator: "0xAaAaAaAa00000000000000000000000000000005",
+    specRoot: "0xe5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4",
+    settlementPrompt: "Read the final 2026-27 Premier League table. Answer YES only if Manchester City are first.",
+    sources: [{kind: "http", url: "https://www.premierleague.com/tables", selector: "final standings"}],
+  }),
+  market({
+    address: "0x6666666666666666666666666666666666666666",
+    question: "Will NASA's Artemis III crewed lunar landing launch before 1 July 2028?",
+    rules:
+      "Resolves YES if Artemis III lifts off on or before 2028-06-30 UTC, per NASA. A scrubbed " +
+      "attempt does not count; a launch that fails after liftoff does.",
+    category: "science",
+    tier: "DETERMINISTIC",
+    status: "Closed",
+    q: [1100n * WAD, 1300n * WAD],
+    createdAt: NOW - 500 * HOUR,
+    tradingEnd: NOW - 3 * HOUR,
+    settlementDeadline: NOW + 21 * HOUR,
+    feeBps: 100,
+    creator: "0xAaAaAaAa00000000000000000000000000000006",
+    specRoot: "0xf60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5",
+    settlementPrompt: "Determine whether Artemis III has LIFTED OFF on or before 2028-06-30.",
+    sources: [{kind: "http", url: "https://www.nasa.gov/mission/artemis-iii/", selector: null}],
+  }),
 ];
 
 /** An i-dependent pseudo-random side pattern: 1 trade in 3 on the NO side, the rest YES. */

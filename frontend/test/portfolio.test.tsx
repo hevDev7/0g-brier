@@ -5,7 +5,7 @@ import {AgentBook} from "@/components/portfolio/AgentBook";
 import {AgentPicker} from "@/components/portfolio/AgentPicker";
 import {AppProviders} from "@/hooks/provider";
 import {agentsSeen} from "@/lib/agent-book";
-import {MockSource} from "@/lib/data/mock";
+import {FIXTURE_MARKETS, MockSource} from "@/lib/data/mock";
 
 const nav = vi.hoisted(() => ({push: vi.fn()}));
 
@@ -48,7 +48,7 @@ describe("AgentBook", () => {
   it("lists one row per market the agent holds", async () => {
     renderBook();
     const table = await screen.findByRole("table");
-    expect(within(table).getAllByRole("rowheader")).toHaveLength(3);
+    expect(within(table).getAllByRole("rowheader")).toHaveLength(FIXTURE_MARKETS.length);
   });
 
   it("values holdings at the marginal price, never labelling one as a percentage", async () => {

@@ -75,6 +75,11 @@ contract MarketFactory is
     ///      rejected it instead — which is exactly the ordering `test_collateralCheckedBefore\
     ///      TouchingToken` exists to pin down.
     error CollateralNotAllowlisted();
+    /// @dev A market whose category nobody recognises cannot be filtered for, cannot
+    ///      be matched by an agent's `allowedCategories` bitmask, and cannot be given a
+    ///      category-specific settlement template. A typo would produce all three
+    ///      silently, so it is refused at creation instead.
+    error UnknownCategory(bytes32 category);
     /// @dev An address with no code. Not mere tidiness: `Clones.clone` over a codeless address
     ///      produces a minimal proxy that is LIVE, and its `delegatecall` returns success with
     ///      empty returndata. `Market(market).initialize(...)` has no return value, so
@@ -179,6 +184,7 @@ contract MarketFactory is
         // `isMarket`, and `_markets` have already been written. The cost is one SLOAD; the
         // return is zero arbitrary calls.
         if (!config.allowedCollateral(p.collateral)) revert CollateralNotAllowlisted();
+        if (config.categoryIndex(p.category) == 0) revert UnknownCategory(p.category);
 
         bytes32 digest = _approvalDigest(p, seedTokens, depositTokens, nonce);
         if (usedApprovals[digest]) revert ApprovalAlreadyUsed();

@@ -26,17 +26,33 @@ contract ConfigRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeab
     address public guardian;
     bool public paused;
 
+    /// @notice A market's category, and its position in a policy bitmask.
+    ///
+    /// @dev 1-based, so 0 means "not a category" and an unset entry is the same as an
+    ///      unknown one. `AgentAccount.Policy.allowedCategories` (spec §8.4) is a
+    ///      bytes32 bitmask over these indices — which only means anything if the set
+    ///      is bounded and ordered, so it lives here rather than as free text.
+    ///
+    ///      Here rather than hardcoded in a library because adding a category should
+    ///      be a governance PARAMETER change, not a contract upgrade. "sports" and
+    ///      "politics" are not architecture.
+    mapping(bytes32 => uint8) public categoryIndex;
+    bytes32[] public categories;
+
     error UnboundedParam(bytes32 key);
     error BoundsLocked(bytes32 key);
     error BadBounds(uint128 lo, uint128 hi);
     error ParamOutOfBounds(bytes32 key, uint256 value, uint256 lo, uint256 hi);
     error NotGuardian();
+    error CategoryExists(bytes32 name);
+    error TooManyCategories();
 
     event ParamSet(bytes32 indexed key, uint256 value);
     event BoundsSet(bytes32 indexed key, uint256 lo, uint256 hi);
     event AddressSet(bytes32 indexed key, address value);
     event CollateralAllowed(address indexed token, bool allowed);
     event GuardianSet(address indexed guardian);
+    event CategoryAdded(bytes32 indexed name, uint8 index);
     event PausedSet(bool paused);
 
     constructor() {
@@ -74,6 +90,35 @@ contract ConfigRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeab
     function setCollateralAllowed(address token, bool allowed) external onlyOwner {
         allowedCollateral[token] = allowed;
         emit CollateralAllowed(token, allowed);
+    }
+
+    /// @notice Register a category. There is deliberately no way to remove one.
+    ///
+    /// @dev Removing a category would renumber nothing — indices are permanent — but
+    ///      it would strand every market already created under it, and invalidate the
+    ///      bit that every existing Policy set for it. A category that should no
+    ///      longer be used is a UI decision, not a storage one.
+    function addCategory(bytes32 name) external onlyOwner returns (uint8 index) {
+        if (categoryIndex[name] != 0) revert CategoryExists(name);
+        if (categories.length >= 255) revert TooManyCategories();
+        categories.push(name);
+        index = uint8(categories.length); // 1-based
+        categoryIndex[name] = index;
+        emit CategoryAdded(name, index);
+    }
+
+    function categoryCount() external view returns (uint256) {
+        return categories.length;
+    }
+
+    function isCategory(bytes32 name) external view returns (bool) {
+        return categoryIndex[name] != 0;
+    }
+
+    /// @notice The bit a Policy sets to allow this category.
+    function categoryBit(bytes32 name) external view returns (bytes32) {
+        uint8 i = categoryIndex[name];
+        return i == 0 ? bytes32(0) : bytes32(uint256(1) << (i - 1));
     }
 
     function setGuardian(address guardian_) external onlyOwner {

@@ -172,6 +172,7 @@ const specRoot = await pub.readContract({address: MARKET, abi: MARKET_ABI, funct
 const spec = (await new ZgStore(ZG_INDEXER).get(specRoot)) as {
   question?: string;
   rules?: string;
+  category?: string;
   settlementPrompt?: string;
   sources?: {url: string; selector?: string}[];
 } | null;
@@ -201,6 +202,7 @@ for (const agentId of members) {
   const j = await inference.settle({
     question: spec.question,
     rules: spec.rules,
+    category: spec.category ?? null,
     settlementPrompt: spec.settlementPrompt ?? null,
     evidence: (spec.sources ?? []).map((s) => ({url: s.url})),
   });
