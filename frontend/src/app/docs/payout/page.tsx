@@ -95,11 +95,11 @@ export default function PayoutPage() {
         </P>
 
         <div className="overflow-x-auto rounded border border-border">
-          <table className="w-full border-collapse text-[13px]">
+          <table className="w-full border-collapse text-[14px]">
             <thead>
               <tr className="border-b border-border bg-bg-sunken text-left">
                 {["Stake", "Shares", "Payout rate", "You receive", "Profit", "Per unit staked"].map((h) => (
-                  <th key={h} className="px-4 py-2.5 font-mono text-[11px] tracking-wider text-text-faint uppercase">
+                  <th key={h} className="px-4 py-2.5 font-mono text-[12px] tracking-wider text-text-faint uppercase">
                     {h}
                   </th>
                 ))}

@@ -31,10 +31,10 @@ export function AgentPicker() {
         <Fingerprint size={22} aria-hidden />
       </span>
       <p className="eyebrow mb-2 text-accent">Address observation</p>
-      <h2 className="text-[24px] font-extrabold tracking-[-0.03em] text-text">
+      <h2 className="text-[26px] font-extrabold tracking-[-0.03em] text-text">
         Inspect an agent&rsquo;s book
       </h2>
-      <p className="mt-2 max-w-md text-[13px] leading-relaxed text-text-muted">
+      <p className="mt-2 max-w-md text-[14px] leading-relaxed text-text-muted">
         Enter a public agent address to see the positions it holds across the indexed markets. No
         credentials, no wallet connection — this page only reads.
       </p>
@@ -69,20 +69,20 @@ export function AgentPicker() {
             placeholder="0x…"
             aria-invalid={error !== null}
             aria-describedby={error ? "agent-address-error" : undefined}
-            className="h-10 w-full rounded-md border border-border bg-bg-raised pr-3 pl-9 font-mono text-[12px] text-text placeholder:text-text-faint"
+            className="h-10 w-full rounded-md border border-border bg-bg-raised pr-3 pl-9 font-mono text-[13px] text-text placeholder:text-text-faint"
           />
         </label>
         <button
           type="submit"
           data-testid="inspect-agent"
-          className="inline-flex h-10 items-center gap-1.5 rounded-md bg-accent px-4 text-[12px] font-bold text-accent-fg hover:opacity-90"
+          className="inline-flex h-10 items-center gap-1.5 rounded-md bg-accent px-4 text-[13px] font-bold text-accent-fg hover:opacity-90"
         >
           Inspect book
           <ArrowRight size={14} aria-hidden />
         </button>
       </form>
       {error && (
-        <p id="agent-address-error" role="alert" className="mt-2 text-[12px] text-neg">
+        <p id="agent-address-error" role="alert" className="mt-2 text-[13px] text-neg">
           {error}
         </p>
       )}
@@ -91,7 +91,7 @@ export function AgentPicker() {
 
       <Panel as="div" className="mt-6 flex gap-3 p-4">
         <LockKeyhole size={16} className="mt-0.5 shrink-0 text-text-faint" aria-hidden />
-        <p className="text-[12px] leading-relaxed text-text-muted">
+        <p className="text-[13px] leading-relaxed text-text-muted">
           Observation only. Redeeming and liquidating are execution, and execution runs through
           <span className="font-mono"> @brier/agent-kit</span> — never from a browser.
         </p>
@@ -123,7 +123,7 @@ function KnownAgents() {
           <li key={agent}>
             <Link
               href={`/portfolio/${agent}`}
-              className="inline-block rounded-md border border-border bg-bg-raised px-2 py-1 font-mono text-[11px] text-text-muted hover:border-accent hover:text-accent"
+              className="inline-block rounded-md border border-border bg-bg-raised px-2 py-1 font-mono text-[12px] text-text-muted hover:border-accent hover:text-accent"
             >
               {shortAddress(agent)}
             </Link>

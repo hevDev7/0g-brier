@@ -8,7 +8,7 @@ import {Skeleton} from "./Skeleton";
  */
 export function ErrorNote({error, what}: {error: Error; what: string}) {
   return (
-    <p role="alert" className="text-[13px] text-neg">
+    <p role="alert" className="text-[14px] text-neg">
       Could not load {what}: {error.message}
     </p>
   );

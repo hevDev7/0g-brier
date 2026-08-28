@@ -15,16 +15,16 @@ export function TradeTape({trades, collateral}: {trades: Trade[]; collateral: Co
     <Panel testId="trade-tape" className="overflow-hidden">
       <PanelHeader eyebrow="Recent activity" title="Trade tape" icon={Activity} />
       {trades.length === 0 ? (
-        <p className="px-4 py-8 text-center text-[13px] text-text-muted md:px-5">
+        <p className="px-4 py-8 text-center text-[14px] text-text-muted md:px-5">
           <span>No trades recorded in this market yet.</span>
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left text-[13px]">
+          <table className="w-full min-w-[560px] text-left text-[14px]">
             <caption className="sr-only">
               The most recent trades, newest first, with the probability each one left behind.
             </caption>
-            <thead className="bg-bg-sunken/60 text-[10px] tracking-[0.12em] text-text-faint uppercase">
+            <thead className="bg-bg-sunken/60 text-[11px] tracking-[0.12em] text-text-faint uppercase">
               <tr>
                 <th scope="col" className="px-4 py-2.5 font-medium">
                   Time
@@ -49,14 +49,14 @@ export function TradeTape({trades, collateral}: {trades: Trade[]; collateral: Co
             <tbody>
               {trades.map((trade) => (
                 <tr key={trade.id} className="border-t border-border">
-                  <td className="px-4 py-2.5 font-mono text-[11px] text-text-muted">
+                  <td className="px-4 py-2.5 font-mono text-[12px] text-text-muted">
                     {new Date(trade.timestamp * 1000).toISOString().slice(11, 16)}
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-[11px] text-text-muted">
+                  <td className="px-3 py-2.5 font-mono text-[12px] text-text-muted">
                     {shortAddress(trade.trader)}
                   </td>
                   <td
-                    className={`px-3 py-2.5 font-mono text-[11px] font-medium ${
+                    className={`px-3 py-2.5 font-mono text-[12px] font-medium ${
                       trade.outcome === 1 ? "text-pos" : "text-neg"
                     }`}
                   >
@@ -77,7 +77,7 @@ export function TradeTape({trades, collateral}: {trades: Trade[]; collateral: Co
           </table>
         </div>
       )}
-      <p className="border-t border-border bg-bg-sunken/40 px-4 py-2 text-[10px] text-text-muted md:px-5">
+      <p className="border-t border-border bg-bg-sunken/40 px-4 py-2 text-[11px] text-text-muted md:px-5">
         Times are UTC. Every trade here was executed by an agent through the SDK.
       </p>
     </Panel>

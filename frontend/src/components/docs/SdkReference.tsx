@@ -21,14 +21,14 @@ export function MethodGroup({
   return (
     <div>
       <p className="eyebrow mb-2 text-text-faint">{title}</p>
-      {note && <p className="mb-3 text-[13px] leading-relaxed text-text-muted">{note}</p>}
+      {note && <p className="mb-3 text-[14px] leading-relaxed text-text-muted">{note}</p>}
       <div className="overflow-x-auto rounded border border-border">
-        <table className="w-full border-collapse text-[13px]">
+        <table className="w-full border-collapse text-[14px]">
           <tbody className="divide-y divide-border">
             {methods.map(({sig, does}) => (
               <tr key={sig}>
                 <td className="w-[46%] px-4 py-3 align-top">
-                  <code className="font-mono text-[12.5px] leading-relaxed break-words text-text">{sig}</code>
+                  <code className="font-mono text-[13.5px] leading-relaxed break-words text-text">{sig}</code>
                 </td>
                 <td className="px-4 py-3 align-top leading-relaxed text-text-muted">{does}</td>
               </tr>
@@ -43,11 +43,11 @@ export function MethodGroup({
 export function ErrorTable({rows}: {rows: {name: string; when: string; fix: string}[]}) {
   return (
     <div className="overflow-x-auto rounded border border-border">
-      <table className="w-full border-collapse text-[13px]">
+      <table className="w-full border-collapse text-[14px]">
         <thead>
           <tr className="border-b border-border bg-bg-sunken text-left">
             {["Reverts with", "What happened", "What to do"].map((h) => (
-              <th key={h} className="px-4 py-2.5 font-mono text-[11px] tracking-wider text-text-faint uppercase">
+              <th key={h} className="px-4 py-2.5 font-mono text-[12px] tracking-wider text-text-faint uppercase">
                 {h}
               </th>
             ))}
@@ -57,7 +57,7 @@ export function ErrorTable({rows}: {rows: {name: string; when: string; fix: stri
           {rows.map(({name, when, fix}) => (
             <tr key={name}>
               <td className="px-4 py-3 align-top">
-                <code className="font-mono text-[12.5px] whitespace-nowrap text-neg">{name}</code>
+                <code className="font-mono text-[13.5px] whitespace-nowrap text-neg">{name}</code>
               </td>
               <td className="px-4 py-3 align-top leading-relaxed text-text-muted">{when}</td>
               <td className="px-4 py-3 align-top leading-relaxed text-text">{fix}</td>
@@ -77,11 +77,11 @@ export function PortingTable({
 }) {
   return (
     <div className="overflow-x-auto rounded border border-border">
-      <table className="w-full border-collapse text-[13px]">
+      <table className="w-full border-collapse text-[14px]">
         <thead>
           <tr className="border-b border-border bg-bg-sunken text-left">
             {["Gensyn Delphi SDK", "Brier", "What changes"].map((h) => (
-              <th key={h} className="px-4 py-2.5 font-mono text-[11px] tracking-wider text-text-faint uppercase">
+              <th key={h} className="px-4 py-2.5 font-mono text-[12px] tracking-wider text-text-faint uppercase">
                 {h}
               </th>
             ))}
@@ -91,10 +91,10 @@ export function PortingTable({
           {rows.map(({from, to, trap}) => (
             <tr key={from}>
               <td className="px-4 py-3 align-top">
-                <code className="font-mono text-[12.5px] whitespace-nowrap text-text-muted">{from}</code>
+                <code className="font-mono text-[13.5px] whitespace-nowrap text-text-muted">{from}</code>
               </td>
               <td className="px-4 py-3 align-top">
-                <code className="font-mono text-[12.5px] whitespace-nowrap text-text">{to}</code>
+                <code className="font-mono text-[13.5px] whitespace-nowrap text-text">{to}</code>
               </td>
               <td className="px-4 py-3 align-top leading-relaxed text-text-muted">{trap ?? "—"}</td>
             </tr>

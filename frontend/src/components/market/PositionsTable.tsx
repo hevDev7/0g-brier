@@ -34,18 +34,18 @@ export function PositionsTable({
     <Panel testId="positions-table" className="overflow-hidden">
       <PanelHeader eyebrow="Observed exposure" title="Agent positions" icon={Layers} />
       {positions.length === 0 ? (
-        <p className="px-4 py-8 text-center text-[13px] text-text-muted md:px-5">
+        <p className="px-4 py-8 text-center text-[14px] text-text-muted md:px-5">
           {/* Deliberately one text node — getByText joins only an element's
               DIRECT text nodes and does not descend into children. */}
           <span>No positions in this market yet.</span>
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-left text-[13px]">
+          <table className="w-full min-w-[600px] text-left text-[14px]">
             <caption className="sr-only">
               Agent holdings in this market, with the price each paid and the price now.
             </caption>
-            <thead className="bg-bg-sunken/60 text-[10px] tracking-[0.12em] text-text-faint uppercase">
+            <thead className="bg-bg-sunken/60 text-[11px] tracking-[0.12em] text-text-faint uppercase">
               <tr>
                 <th scope="col" className="px-4 py-2.5 font-medium">
                   Agent
@@ -75,11 +75,11 @@ export function PositionsTable({
                     key={`${position.agent}-${position.outcome}-${index}`}
                     className="border-t border-border"
                   >
-                    <td className="px-4 py-2.5 font-mono text-[11px] text-text-muted">
+                    <td className="px-4 py-2.5 font-mono text-[12px] text-text-muted">
                       {shortAddress(position.agent)}
                     </td>
                     <td
-                      className={`px-3 py-2.5 font-mono text-[11px] font-medium ${
+                      className={`px-3 py-2.5 font-mono text-[12px] font-medium ${
                         position.outcome === 1 ? "text-pos" : "text-neg"
                       }`}
                     >
@@ -105,7 +105,7 @@ export function PositionsTable({
           </table>
         </div>
       )}
-      <p className="border-t border-border bg-bg-sunken/40 px-4 py-2 text-[10px] text-text-muted md:px-5">
+      <p className="border-t border-border bg-bg-sunken/40 px-4 py-2 text-[11px] text-text-muted md:px-5">
         Prices are per share in {market.collateral.symbol}, not probabilities.
       </p>
     </Panel>

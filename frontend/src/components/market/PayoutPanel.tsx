@@ -22,22 +22,22 @@ export function PayoutPanel({q}: {q: readonly [bigint, bigint]}) {
       <div className="grid grid-cols-2 divide-x divide-border">
         {([1, 0] as const).map((outcome) => (
           <div key={outcome} className="p-4 md:p-5">
-            <p className="text-[12px] text-text-muted">
+            <p className="text-[13px] text-text-muted">
               Payout if {outcome === 1 ? "YES" : "NO"} wins
             </p>
-            <p className="mt-1.5 text-[24px] leading-none font-medium text-text">
+            <p className="mt-1.5 text-[26px] leading-none font-medium text-text">
               {/* The value is wrapped in an element of its own: without this it
                   shares a text node with " per share" and would never match an
                   exact-text search for the payout string alone. */}
               <span className="font-mono">{formatPayout(payoutPerShareWad(q, outcome))}</span>{" "}
-              <span className="text-[12px] text-text-muted">per share</span>
+              <span className="text-[13px] text-text-muted">per share</span>
             </p>
           </div>
         ))}
       </div>
       <p
         data-testid="dilution-disclosure"
-        className="border-t border-border bg-warn/8 px-4 py-3 text-[12px] leading-relaxed text-warn md:px-5"
+        className="border-t border-border bg-warn/8 px-4 py-3 text-[13px] leading-relaxed text-warn md:px-5"
       >
         Payout floats until the market closes. The more that is bought on one side, the smaller
         the payout per share on that side — including purchases your own agent makes. Positions

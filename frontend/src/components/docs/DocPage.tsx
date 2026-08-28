@@ -25,10 +25,10 @@ export function DocPage({slug, children}: {slug: string; children: ReactNode}) {
     <article className="min-w-0">
       <header className="mb-8 border-b border-border pb-6">
         <p className="eyebrow mb-2 text-accent">{page.group}</p>
-        <h1 className="text-[24px] leading-tight font-extrabold tracking-[-0.03em] text-balance text-text md:text-[30px]">
+        <h1 className="text-[26px] leading-tight font-extrabold tracking-[-0.03em] text-balance text-text md:text-[32px]">
           {page.title}
         </h1>
-        <p className="mt-2 text-[13px] leading-relaxed text-text-muted">{page.blurb}</p>
+        <p className="mt-2 text-[14px] leading-relaxed text-text-muted">{page.blurb}</p>
       </header>
 
       {/* The rail scans inside this. */}
@@ -43,11 +43,11 @@ export function DocPage({slug, children}: {slug: string; children: ReactNode}) {
             rel="prev"
             className="group flex flex-col gap-1 rounded border border-border p-4 transition-colors hover:border-border-strong"
           >
-            <span className="flex items-center gap-1.5 text-[11px] text-text-faint">
+            <span className="flex items-center gap-1.5 text-[12px] text-text-faint">
               <ArrowLeft size={12} aria-hidden />
               Previous
             </span>
-            <span className="text-[13.5px] font-medium text-text group-hover:text-accent">{prev.title}</span>
+            <span className="text-[14.5px] font-medium text-text group-hover:text-accent">{prev.title}</span>
           </Link>
         ) : (
           // Holds the column so a page with only a next link keeps it on the right.
@@ -59,11 +59,11 @@ export function DocPage({slug, children}: {slug: string; children: ReactNode}) {
             rel="next"
             className="group flex flex-col gap-1 rounded border border-border p-4 text-right transition-colors hover:border-border-strong sm:col-start-2"
           >
-            <span className="flex items-center justify-end gap-1.5 text-[11px] text-text-faint">
+            <span className="flex items-center justify-end gap-1.5 text-[12px] text-text-faint">
               Next
               <ArrowRight size={12} aria-hidden />
             </span>
-            <span className="text-[13.5px] font-medium text-text group-hover:text-accent">{next.title}</span>
+            <span className="text-[14.5px] font-medium text-text group-hover:text-accent">{next.title}</span>
           </Link>
         )}
       </nav>

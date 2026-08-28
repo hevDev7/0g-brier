@@ -107,7 +107,7 @@ export function Unavailable({
         // next grid column — "Trade history not available" printed straight across
         // the depth figure beside it. A badge may wrap; overlapping a neighbouring
         // value is how two unrelated numbers get read as one.
-        className="inline-flex max-w-full items-center rounded border border-dashed border-border-strong px-1.5 py-0.5 text-left text-[11px] text-text-muted"
+        className="inline-flex max-w-full items-center rounded border border-dashed border-border-strong px-1.5 py-0.5 text-left text-[12px] text-text-muted"
       >
         {CAPABILITY_LABELS[capability]} not available
       </span>
@@ -120,7 +120,7 @@ export function Unavailable({
     // it, the "not available" explanation is only ever seen, never heard.
     <div
       role="status"
-      className="rounded-md border border-dashed border-border-strong bg-bg-sunken/50 px-3 py-2 text-[12px] leading-relaxed text-text-muted"
+      className="rounded-md border border-dashed border-border-strong bg-bg-sunken/50 px-3 py-2 text-[13px] leading-relaxed text-text-muted"
     >
       {/* The label and "not available" are deliberately one text node: getByText
           joins only an element's DIRECT text nodes (see get-node-text.js) and does

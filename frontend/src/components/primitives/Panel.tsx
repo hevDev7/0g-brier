@@ -46,7 +46,7 @@ export function PanelHeader({
     <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3.5 md:px-5">
       <div>
         <p className="eyebrow text-text-faint">{eyebrow}</p>
-        <h2 className="mt-1 text-[13px] font-bold text-text">{title}</h2>
+        <h2 className="mt-1 text-[14px] font-bold text-text">{title}</h2>
       </div>
       {action ?? (Icon ? <Icon size={16} className="mt-0.5 shrink-0 text-text-faint" /> : null)}
     </div>
@@ -66,7 +66,7 @@ export function Row({
   return (
     <div
       data-testid={testId}
-      className="flex items-baseline justify-between gap-4 text-[13px]"
+      className="flex items-baseline justify-between gap-4 text-[14px]"
     >
       <span className="text-text-muted">{label}</span>
       <span className="text-right text-text">{children}</span>

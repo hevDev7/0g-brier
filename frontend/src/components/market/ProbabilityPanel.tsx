@@ -29,7 +29,7 @@ export function ProbabilityPanel({q}: {q: readonly [bigint, bigint]}) {
           ).map(({label, value, tone}) => (
             <div key={label}>
               <p className={`eyebrow ${tone}`}>{label}</p>
-              <p className="mt-1.5 font-mono text-[34px] leading-none font-medium tracking-[-0.04em] text-text">
+              <p className="mt-1.5 font-mono text-[37px] leading-none font-medium tracking-[-0.04em] text-text">
                 {formatProbability(value)}
               </p>
             </div>
@@ -48,7 +48,7 @@ export function ProbabilityPanel({q}: {q: readonly [bigint, bigint]}) {
         {/* End labels, so the bar reads as a fixed 0-100 scale rather than as a
             proportion of something unstated. The split itself is not labelled —
             both sides are already printed in full above it. */}
-        <div className="mt-1.5 flex justify-between font-mono text-[10px] text-text-faint">
+        <div className="mt-1.5 flex justify-between font-mono text-[11px] text-text-faint">
           <span>0%</span>
           <span>100%</span>
         </div>
@@ -58,7 +58,7 @@ export function ProbabilityPanel({q}: {q: readonly [bigint, bigint]}) {
           divisions. Both are shown as they are; forcing the total would mean
           printing a number the contract does not hold.
         */}
-        <p className="mt-2 text-[11px] text-text-faint">
+        <p className="mt-2 text-[12px] text-text-faint">
           Implied probability is the square of the marginal price, so the two sides sum to 100%.
         </p>
       </div>

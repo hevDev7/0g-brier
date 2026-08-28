@@ -106,7 +106,7 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
             <span className="eyebrow text-text-faint">Market registry</span>
             <span
               data-testid="market-count"
-              className="rounded-full bg-bg-sunken px-2 py-0.5 font-mono text-[10px] text-text-muted"
+              className="rounded-full bg-bg-sunken px-2 py-0.5 font-mono text-[11px] text-text-muted"
             >
               {rows.length} / {markets.length}
             </span>
@@ -125,7 +125,7 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Find a market"
-                className="h-8 w-full rounded-md border border-border bg-bg pr-3 pl-8 text-[12px] placeholder:text-text-faint sm:w-[180px]"
+                className="h-8 w-full rounded-md border border-border bg-bg pr-3 pl-8 text-[13px] placeholder:text-text-faint sm:w-[180px]"
               />
             </label>
             <Select
@@ -162,7 +162,7 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
                 onClick={() => params.set("sort", key)}
                 aria-pressed={params.sort === key}
                 data-testid={`sort-${key}`}
-                className={`rounded px-2 py-1 font-mono text-[10px] tracking-wide uppercase transition-colors ${
+                className={`rounded px-2 py-1 font-mono text-[11px] tracking-wide uppercase transition-colors ${
                   params.sort === key
                     ? "bg-accent text-accent-fg"
                     : "text-text-muted hover:bg-bg-sunken hover:text-text"
@@ -175,7 +175,7 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
         </div>
 
         {rows.length === 0 ? (
-          <p className="px-4 py-12 text-center text-[13px] text-text-muted">
+          <p className="px-4 py-12 text-center text-[14px] text-text-muted">
             No market matches these filters.
           </p>
         ) : (
@@ -187,12 +187,12 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
             row at a time defeats the point of the page.
           */
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-left text-[13px]">
+            <table className="w-full min-w-[920px] text-left text-[14px]">
               <caption className="sr-only">
                 Binary prediction markets, with implied probability, 24-hour change, traded
                 volume, and pool depth.
               </caption>
-              <thead className="bg-bg-sunken/60 text-[10px] tracking-[0.12em] text-text-faint uppercase">
+              <thead className="bg-bg-sunken/60 text-[11px] tracking-[0.12em] text-text-faint uppercase">
                 <tr>
                   <th scope="col" className="px-4 py-3 font-medium">
                     Market
@@ -237,7 +237,7 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
           </div>
         )}
 
-        <p className="flex items-start gap-2 border-t border-border bg-bg-sunken/40 px-4 py-2.5 text-[10px] leading-relaxed text-text-muted">
+        <p className="flex items-start gap-2 border-t border-border bg-bg-sunken/40 px-4 py-2.5 text-[11px] leading-relaxed text-text-muted">
           <ArrowDownUp size={12} aria-hidden className="mt-0.5 shrink-0" />
           <span>
             Depth is the pool that backs every payout in a market. Two markets can show the same
@@ -277,12 +277,12 @@ function MarketRow({
         <Link href={`/market/${market.address}`} className="block">
           <span
             className={`leading-snug font-semibold text-text group-hover:text-accent ${
-              market.question === null ? "font-mono text-[12px]" : "text-[13px]"
+              market.question === null ? "font-mono text-[13px]" : "text-[14px]"
             }`}
           >
             {market.question ?? shortAddress(market.address)}
           </span>
-          <span className="mt-1 block font-mono text-[10px] text-text-faint">
+          <span className="mt-1 block font-mono text-[11px] text-text-faint">
             {market.category}
           </span>
         </Link>
@@ -311,7 +311,7 @@ function MarketRow({
         <Badge tone={statusTone(market.status)} label={market.status} dot />
       </td>
       <td
-        className="px-3 py-4 text-right font-mono text-[12px] text-text-muted"
+        className="px-3 py-4 text-right font-mono text-[13px] text-text-muted"
         title={formatTimestamp(market.tradingEnd)}
       >
         {/* A countdown is only meaningful while trading is still open; on a
@@ -341,7 +341,7 @@ function DeltaCell({candles}: {candles: Query<Candle[]> | undefined}): React.JSX
       const delta = delta24h(candles.data);
       if (delta === null) {
         return (
-          <span className="text-[11px] whitespace-nowrap text-text-faint">not enough history</span>
+          <span className="text-[12px] whitespace-nowrap text-text-faint">not enough history</span>
         );
       }
       const tone =
@@ -362,7 +362,7 @@ function DeltaCell({candles}: {candles: Query<Candle[]> | undefined}): React.JSX
     case "unavailable":
       return <Unavailable capability={candles.capability} mode={candles.mode} compact />;
     case "error":
-      return <span className="text-[11px] text-neg">failed</span>;
+      return <span className="text-[12px] text-neg">failed</span>;
     case "loading":
       return <Skeleton className="h-3 w-12" />;
   }
@@ -382,7 +382,7 @@ function VolumeCell({
     case "unavailable":
       return <Unavailable capability={trades.capability} mode={trades.mode} compact />;
     case "error":
-      return <span className="text-[11px] text-neg">failed</span>;
+      return <span className="text-[12px] text-neg">failed</span>;
     case "loading":
       return <Skeleton className="h-3 w-16" />;
   }
@@ -409,7 +409,7 @@ function SummaryTiles({markets, trades}: {markets: MarketSummary[]; trades: Quer
         label={single ? `Total depth · ${single.symbol}` : "Total depth"}
         value={
           depth === null || single === undefined ? (
-            <span className="text-[13px] text-text-muted">mixed collateral</span>
+            <span className="text-[14px] text-text-muted">mixed collateral</span>
           ) : (
             formatCollateral(depth, single.decimals)
           )
@@ -436,14 +436,14 @@ function TotalVolume({
   collateral: CollateralInfo | undefined;
 }): React.JSX.Element {
   if (collateral === undefined) {
-    return <span className="text-[13px] text-text-muted">mixed collateral</span>;
+    return <span className="text-[14px] text-text-muted">mixed collateral</span>;
   }
   const missing = trades.find((t) => t.status === "unavailable");
   if (missing?.status === "unavailable") {
     return <Unavailable capability={missing.capability} mode={missing.mode} compact />;
   }
   if (trades.some((t) => t.status === "error")) {
-    return <span className="text-[13px] text-neg">failed</span>;
+    return <span className="text-[14px] text-neg">failed</span>;
   }
   if (trades.length === 0 || trades.some((t) => t.status !== "ready")) {
     return <Skeleton className="h-5 w-24" />;
@@ -458,10 +458,10 @@ function TotalVolume({
 function Tile({label, value}: {label: string; value: React.ReactNode}) {
   return (
     <Panel as="div" className="p-4">
-      <p className="font-mono text-[20px] leading-none font-medium tracking-tight text-text">
+      <p className="font-mono text-[22px] leading-none font-medium tracking-tight text-text">
         {value}
       </p>
-      <p className="mt-2 text-[10px] tracking-[0.1em] text-text-faint uppercase">{label}</p>
+      <p className="mt-2 text-[11px] tracking-[0.1em] text-text-faint uppercase">{label}</p>
     </Panel>
   );
 }
@@ -486,7 +486,7 @@ function Select({
         data-testid={`filter-${label.toLowerCase()}`}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-8 rounded-md border border-border bg-bg px-2 text-[12px] text-text"
+        className="h-8 rounded-md border border-border bg-bg px-2 text-[13px] text-text"
       >
         <option value="">{allLabel}</option>
         {options.map((option) => (

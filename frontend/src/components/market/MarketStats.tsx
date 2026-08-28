@@ -76,8 +76,8 @@ function Cell({
 }) {
   return (
     <div className="flex min-h-[74px] flex-col justify-between gap-2 p-3.5">
-      <dt className="text-[10px] tracking-[0.08em] text-text-faint uppercase">{label}</dt>
-      <dd data-testid={testId} title={title} className="font-mono text-[12px] text-text">
+      <dt className="text-[11px] tracking-[0.08em] text-text-faint uppercase">{label}</dt>
+      <dd data-testid={testId} title={title} className="font-mono text-[13px] text-text">
         {children}
       </dd>
     </div>

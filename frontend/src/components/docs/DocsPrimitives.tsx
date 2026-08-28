@@ -23,17 +23,17 @@ import {AlertTriangle, Info, Lightbulb, Terminal} from "lucide-react";
  */
 
 export function P({children}: {children: ReactNode}) {
-  return <p className="text-[14px] leading-relaxed text-text-muted">{children}</p>;
+  return <p className="text-[15px] leading-relaxed text-text-muted">{children}</p>;
 }
 
 export function H3({children}: {children: ReactNode}) {
-  return <h3 className="mt-2 text-[15px] font-bold tracking-tight text-text">{children}</h3>;
+  return <h3 className="mt-2 text-[16px] font-bold tracking-tight text-text">{children}</h3>;
 }
 
 /** Inline code, for a number or an identifier inside a sentence. */
 export function C({children}: {children: ReactNode}) {
   return (
-    <code className="rounded bg-bg-sunken px-1.5 py-0.5 font-mono text-[12.5px] text-text">{children}</code>
+    <code className="rounded bg-bg-sunken px-1.5 py-0.5 font-mono text-[13.5px] text-text">{children}</code>
   );
 }
 
@@ -55,11 +55,11 @@ export function Note({
   const {icon: Icon, border, text} = NOTE_KINDS[kind];
   return (
     <aside className={`rounded-r border-l-2 bg-bg-sunken px-4 py-3 ${border}`}>
-      <p className={`mb-1 flex items-center gap-2 text-[13px] font-bold ${text}`}>
+      <p className={`mb-1 flex items-center gap-2 text-[14px] font-bold ${text}`}>
         <Icon size={14} aria-hidden />
         {title}
       </p>
-      <div className="text-[13px] leading-relaxed text-text-muted">{children}</div>
+      <div className="text-[14px] leading-relaxed text-text-muted">{children}</div>
     </aside>
   );
 }
@@ -86,14 +86,14 @@ export function Correction({
       <div className="grid grid-cols-1 sm:grid-cols-2">
         <div className="border-b border-border p-4 sm:border-r sm:border-b-0">
           <p className="eyebrow mb-2 text-text-faint">You might expect</p>
-          <div className="text-[13px] leading-relaxed text-text-muted line-through decoration-neg/60">{expect}</div>
+          <div className="text-[14px] leading-relaxed text-text-muted line-through decoration-neg/60">{expect}</div>
         </div>
         <div className="p-4">
           <p className="eyebrow mb-2 text-pos">Here it is</p>
-          <div className="text-[13px] leading-relaxed text-text">{actual}</div>
+          <div className="text-[14px] leading-relaxed text-text">{actual}</div>
         </div>
       </div>
-      <div className="border-t border-border bg-bg-sunken px-4 py-3 text-[12.5px] leading-relaxed text-text-muted">
+      <div className="border-t border-border bg-bg-sunken px-4 py-3 text-[13.5px] leading-relaxed text-text-muted">
         {why}
       </div>
     </div>
@@ -104,17 +104,17 @@ export function Correction({
 export function Worked({title, rows, note}: {title: string; rows: [string, string][]; note?: ReactNode}) {
   return (
     <div className="rounded border border-border">
-      <p className="border-b border-border px-4 py-2.5 text-[13px] font-bold text-text">{title}</p>
+      <p className="border-b border-border px-4 py-2.5 text-[14px] font-bold text-text">{title}</p>
       <dl className="divide-y divide-border">
         {rows.map(([k, v]) => (
           <div key={k} className="flex items-baseline justify-between gap-4 px-4 py-2.5">
-            <dt className="text-[13px] text-text-muted">{k}</dt>
-            <dd className="font-mono text-[13px] font-medium tabular-nums text-text">{v}</dd>
+            <dt className="text-[14px] text-text-muted">{k}</dt>
+            <dd className="font-mono text-[14px] font-medium tabular-nums text-text">{v}</dd>
           </div>
         ))}
       </dl>
       {note && (
-        <p className="border-t border-border bg-bg-sunken px-4 py-3 text-[12.5px] leading-relaxed text-text-muted">
+        <p className="border-t border-border bg-bg-sunken px-4 py-3 text-[13.5px] leading-relaxed text-text-muted">
           {note}
         </p>
       )}
@@ -136,13 +136,13 @@ export function Step({
     <div className="flex gap-4">
       <span
         aria-hidden
-        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border-strong font-mono text-[12px] font-bold text-text"
+        className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border-strong font-mono text-[13px] font-bold text-text"
       >
         {n}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[14px] font-bold text-text">{title}</p>
-        <div className="mt-1.5 flex flex-col gap-2 text-[13px] leading-relaxed text-text-muted">{children}</div>
+        <p className="text-[15px] font-bold text-text">{title}</p>
+        <div className="mt-1.5 flex flex-col gap-2 text-[14px] leading-relaxed text-text-muted">{children}</div>
       </div>
     </div>
   );
@@ -160,11 +160,11 @@ export function Step({
 export function Run({cwd, children}: {cwd: string; children: string}) {
   return (
     <div className="overflow-hidden rounded border border-border">
-      <p className="flex items-center gap-2 border-b border-border bg-bg-sunken px-3 py-1.5 font-mono text-[11px] text-text-muted">
+      <p className="flex items-center gap-2 border-b border-border bg-bg-sunken px-3 py-1.5 font-mono text-[12px] text-text-muted">
         <Terminal size={12} aria-hidden className="shrink-0" />
         <span className="truncate">{cwd}</span>
       </p>
-      <pre className="overflow-x-auto p-3 font-mono text-[12.5px] leading-relaxed text-text">
+      <pre className="overflow-x-auto p-3 font-mono text-[13.5px] leading-relaxed text-text">
         <code>{children}</code>
       </pre>
     </div>
@@ -174,7 +174,7 @@ export function Run({cwd, children}: {cwd: string; children: string}) {
 /** A shell command, or a small block of one. */
 export function Cmd({children}: {children: string}) {
   return (
-    <pre className="overflow-x-auto rounded border border-border bg-bg-sunken p-3 font-mono text-[12.5px] leading-relaxed text-text">
+    <pre className="overflow-x-auto rounded border border-border bg-bg-sunken p-3 font-mono text-[13.5px] leading-relaxed text-text">
       <code>{children}</code>
     </pre>
   );
@@ -202,11 +202,11 @@ export function StateRow({
         <Icon size={14} className="text-text-faint" aria-hidden />
       </span>
       <div className="min-w-0">
-        <p className="font-mono text-[13px] font-bold text-text">{state}</p>
-        <p className="mt-1 text-[13px] leading-relaxed text-text-muted">
+        <p className="font-mono text-[14px] font-bold text-text">{state}</p>
+        <p className="mt-1 text-[14px] leading-relaxed text-text-muted">
           <span className="text-pos">Can:</span> {can}
         </p>
-        <p className="mt-0.5 text-[13px] leading-relaxed text-text-muted">
+        <p className="mt-0.5 text-[14px] leading-relaxed text-text-muted">
           <span className="text-neg">Cannot:</span> {cannot}
         </p>
       </div>

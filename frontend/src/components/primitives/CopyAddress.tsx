@@ -35,7 +35,7 @@ export function CopyAddress({address}: {address: string}) {
           })
           .catch(() => setCopied(false));
       }}
-      className="font-mono text-[13px] text-text-muted hover:text-text"
+      className="font-mono text-[14px] text-text-muted hover:text-text"
     >
       {copied ? "copied" : shortAddress(address)}
     </button>

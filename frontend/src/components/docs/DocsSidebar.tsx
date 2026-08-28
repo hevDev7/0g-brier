@@ -25,7 +25,7 @@ export function DocsSidebar() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls="docs-nav"
-        className="mb-4 flex w-full items-center justify-between rounded border border-border px-3 py-2 text-[13px] font-medium text-text lg:hidden"
+        className="mb-4 flex w-full items-center justify-between rounded border border-border px-3 py-2 text-[14px] font-medium text-text lg:hidden"
       >
         <span className="flex items-center gap-2">
           <List size={14} aria-hidden />
@@ -56,7 +56,7 @@ export function DocsSidebar() {
                       // The active marker is a border on the item rather than a
                       // background: the sidebar sits on the page background, and
                       // a filled row would read as a panel floating in a list.
-                      className={`-ml-px block border-l-2 py-1.5 pl-3 text-[13px] leading-snug transition-colors ${
+                      className={`-ml-px block border-l-2 py-1.5 pl-3 text-[14px] leading-snug transition-colors ${
                         active
                           ? "border-accent font-medium text-accent"
                           : "border-transparent text-text-muted hover:border-border-strong hover:text-text"

@@ -27,7 +27,7 @@ export function ModeIndicator() {
     <span
       data-testid="mode-indicator"
       title={DESCRIPTION[mode]}
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[10px] tracking-[0.08em] whitespace-nowrap uppercase ${
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] tracking-[0.08em] whitespace-nowrap uppercase ${
         isFixture ? "border-warn/40 bg-warn/10 text-warn" : "border-border text-text-muted"
       }`}
     >

@@ -65,11 +65,11 @@ export function Lifecycle({market, mode}: {market: MarketDetail; mode: DataMode}
               />
             )}
             <span>
-              <span className="block text-[12px] font-semibold text-text">
+              <span className="block text-[13px] font-semibold text-text">
                 {step.label}
                 <span className="sr-only">{step.done ? " — reached" : " — not yet reached"}</span>
               </span>
-              <span className="mt-0.5 block font-mono text-[11px] text-text-muted">
+              <span className="mt-0.5 block font-mono text-[12px] text-text-muted">
                 {/* `createdAt` is not in Market's storage — it exists only in the
                     MarketCreated event, so a mode without an indexer genuinely does
                     not have it. The step still renders, because the market WAS
@@ -84,7 +84,7 @@ export function Lifecycle({market, mode}: {market: MarketDetail; mode: DataMode}
           </li>
         ))}
       </ol>
-      <p className="border-t border-border px-4 py-2.5 text-[11px] leading-relaxed text-text-muted md:px-5">
+      <p className="border-t border-border px-4 py-2.5 text-[12px] leading-relaxed text-text-muted md:px-5">
         Dispute window <span className="font-mono text-text">{formatCountdown(disputeWindow)}</span>{" "}
         — the time between trading closing and the settlement deadline, during which funds stay
         locked.

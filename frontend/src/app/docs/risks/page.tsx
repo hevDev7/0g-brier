@@ -36,8 +36,8 @@ export default function RisksPage() {
             ],
           ].map(([title, body]) => (
             <div key={title} className="rounded border border-border p-4">
-              <p className="text-[13.5px] font-bold text-text">{title}</p>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-text-muted">{body}</p>
+              <p className="text-[14.5px] font-bold text-text">{title}</p>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-text-muted">{body}</p>
             </div>
           ))}
         </div>

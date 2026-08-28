@@ -34,7 +34,7 @@ export function SourceNotes() {
         aria-expanded={open}
         aria-controls="source-notes"
         data-testid="source-notes-toggle"
-        className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-bg-raised px-3 text-[12px] font-semibold text-text-muted hover:bg-bg-sunken hover:text-text"
+        className="inline-flex h-8 items-center gap-2 rounded-md border border-border bg-bg-raised px-3 text-[13px] font-semibold text-text-muted hover:bg-bg-sunken hover:text-text"
       >
         <Info size={14} aria-hidden />
         Source notes
@@ -46,7 +46,7 @@ export function SourceNotes() {
           data-testid="source-notes"
           className="mt-3 rounded-md border border-border bg-bg-raised p-4"
         >
-          <p className="text-[12px] leading-relaxed text-text-muted">
+          <p className="text-[13px] leading-relaxed text-text-muted">
             <span className="font-mono text-text">{source.mode}</span> source —{" "}
             {MODE_NOTE[source.mode]}
           </p>
@@ -54,7 +54,7 @@ export function SourceNotes() {
             {capabilities.map((capability) => {
               const has = source.capabilities.has(capability);
               return (
-                <li key={capability} className="flex items-center gap-2 text-[12px]">
+                <li key={capability} className="flex items-center gap-2 text-[13px]">
                   {has ? (
                     <Check size={13} className="shrink-0 text-pos" aria-hidden />
                   ) : (

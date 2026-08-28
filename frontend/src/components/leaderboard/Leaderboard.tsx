@@ -130,7 +130,7 @@ function Body({markets}: {markets: MarketSummary[]}): React.JSX.Element {
                 onClick={() => params.set(key)}
                 aria-pressed={params.sort === key}
                 data-testid={`sort-${key}`}
-                className={`rounded px-2 py-1 font-mono text-[10px] tracking-wide whitespace-nowrap uppercase transition-colors ${
+                className={`rounded px-2 py-1 font-mono text-[11px] tracking-wide whitespace-nowrap uppercase transition-colors ${
                   params.sort === key
                     ? "bg-accent text-accent-fg"
                     : "text-text-muted hover:bg-bg-sunken hover:text-text"
@@ -144,18 +144,18 @@ function Body({markets}: {markets: MarketSummary[]}): React.JSX.Element {
       />
 
       {rows.length === 0 ? (
-        <p className="px-4 py-10 text-center text-[13px] text-text-muted md:px-5">
+        <p className="px-4 py-10 text-center text-[14px] text-text-muted md:px-5">
           <span>No agent has traded in the indexed markets yet.</span>
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-[13px]">
+          <table className="w-full min-w-[900px] text-left text-[14px]">
             <caption className="sr-only">
               Agents ranked by {SORTS.find((s) => s.key === params.sort)?.label}, with trade
               count, traded volume, deployed value, free collateral, account value and unrealised
               profit.
             </caption>
-            <thead className="bg-bg-sunken/60 text-[10px] tracking-[0.12em] text-text-faint uppercase">
+            <thead className="bg-bg-sunken/60 text-[11px] tracking-[0.12em] text-text-faint uppercase">
               <tr>
                 <th scope="col" className="px-4 py-2.5 text-right font-medium">
                   #
@@ -197,7 +197,7 @@ function Body({markets}: {markets: MarketSummary[]}): React.JSX.Element {
         wrongly: what "unrealised" leaves out, what "account value" is made of,
         and that the ranking cannot include agents whose figure is unknown.
       */}
-      <div className="flex flex-col gap-1 border-t border-border bg-bg-sunken/40 px-4 py-2.5 text-[10px] leading-relaxed text-text-muted md:px-5">
+      <div className="flex flex-col gap-1 border-t border-border bg-bg-sunken/40 px-4 py-2.5 text-[11px] leading-relaxed text-text-muted md:px-5">
         <p>
           <span className="text-text">Account value</span> is free collateral plus the value of
           open positions at the current marginal price. It is not a wallet total — only the
@@ -233,7 +233,7 @@ function Row({
   const decimals = collateral?.decimals ?? 6;
   return (
     <tr className="group border-t border-border hover:bg-bg-sunken/50">
-      <td className="px-4 py-3 text-right font-mono text-[11px] text-text-faint">
+      <td className="px-4 py-3 text-right font-mono text-[12px] text-text-faint">
         {String(rank).padStart(2, "0")}
       </td>
       <th scope="row" className="px-3 py-3 text-left font-normal">
@@ -246,13 +246,13 @@ function Row({
         */}
         <Link href={`/portfolio/${row.agent}`} className="block group-hover:text-accent">
           {row.name === null ? (
-            <span className="font-mono text-[12px] text-text">{shortAddress(row.agent)}</span>
+            <span className="font-mono text-[13px] text-text">{shortAddress(row.agent)}</span>
           ) : (
             <>
-              <span data-testid="lb-name" className="block text-[13px] font-semibold text-text">
+              <span data-testid="lb-name" className="block text-[14px] font-semibold text-text">
                 {row.name}
               </span>
-              <span className="block font-mono text-[10px] text-text-faint">
+              <span className="block font-mono text-[11px] text-text-faint">
                 {shortAddress(row.agent)}
               </span>
             </>

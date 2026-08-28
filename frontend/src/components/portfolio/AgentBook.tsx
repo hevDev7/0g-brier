@@ -72,17 +72,17 @@ function Book({agent, markets}: {agent: string; markets: MarketSummary[]}): Reac
       <Panel testId="agent-book" className="overflow-hidden">
         <PanelHeader eyebrow="Exposure map" title="Positions across markets" icon={BookOpen} />
         {rows.length === 0 ? (
-          <p className="px-4 py-10 text-center text-[13px] text-text-muted md:px-5">
+          <p className="px-4 py-10 text-center text-[14px] text-text-muted md:px-5">
             <span>No positions found for this address in the indexed markets.</span>
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-left text-[13px]">
+            <table className="w-full min-w-[860px] text-left text-[14px]">
               <caption className="sr-only">
                 Every market in which this agent holds shares, with entry price, current price,
                 value, and unrealised profit or loss.
               </caption>
-              <thead className="bg-bg-sunken/60 text-[10px] tracking-[0.12em] text-text-faint uppercase">
+              <thead className="bg-bg-sunken/60 text-[11px] tracking-[0.12em] text-text-faint uppercase">
                 <tr>
                   <th scope="col" className="px-4 py-2.5 font-medium">
                     Market
@@ -124,7 +124,7 @@ function Book({agent, markets}: {agent: string; markets: MarketSummary[]}): Reac
           Status column tells an observer that something needs doing without
           pretending this page can do it.
         */}
-        <p className="border-t border-border bg-bg-sunken/40 px-4 py-2 text-[10px] leading-relaxed text-text-muted md:px-5">
+        <p className="border-t border-border bg-bg-sunken/40 px-4 py-2 text-[11px] leading-relaxed text-text-muted md:px-5">
           Read-only. Redeeming and liquidating are done by the agent through the SDK, never from
           this page. Rows are rounded to two decimals while the totals above are summed from exact
           amounts, so adding a column by hand can differ in the last digit.
@@ -146,7 +146,7 @@ function BookRowCells({row}: {row: BookRow}) {
         <Link
           href={`/market/${market.address}`}
           className={`leading-snug font-semibold text-text group-hover:text-accent ${
-            market.question === null ? "font-mono text-[11px]" : "text-[12px]"
+            market.question === null ? "font-mono text-[12px]" : "text-[13px]"
           }`}
         >
           {/* See MarketList: a null question means this mode cannot read the
@@ -155,7 +155,7 @@ function BookRowCells({row}: {row: BookRow}) {
         </Link>
       </th>
       <td
-        className={`px-3 py-3 font-mono text-[11px] font-medium ${
+        className={`px-3 py-3 font-mono text-[12px] font-medium ${
           row.outcome === 1 ? "text-pos" : "text-neg"
         }`}
       >
@@ -213,7 +213,7 @@ function Totals({rows}: {rows: BookRow[]}) {
           value !== null && single ? (
             formatCollateral(value, single.decimals)
           ) : (
-            <span className="text-[13px] text-text-muted">mixed collateral</span>
+            <span className="text-[14px] text-text-muted">mixed collateral</span>
           )
         }
       />
@@ -226,7 +226,7 @@ function Totals({rows}: {rows: BookRow[]}) {
               {formatCollateral(pnl, single.decimals)}
             </span>
           ) : rows.length === 0 ? (
-            <span className="text-[13px] text-text-muted">no positions</span>
+            <span className="text-[14px] text-text-muted">no positions</span>
           ) : (
             <Unavailable capability="COST_BASIS" mode={mode} compact />
           )
@@ -239,10 +239,10 @@ function Totals({rows}: {rows: BookRow[]}) {
 function Tile({label, value}: {label: string; value: React.ReactNode}) {
   return (
     <Panel as="div" className="p-4">
-      <p className="font-mono text-[20px] leading-none font-medium tracking-tight text-text">
+      <p className="font-mono text-[22px] leading-none font-medium tracking-tight text-text">
         {value}
       </p>
-      <p className="mt-2 text-[10px] tracking-[0.1em] text-text-faint uppercase">{label}</p>
+      <p className="mt-2 text-[11px] tracking-[0.1em] text-text-faint uppercase">{label}</p>
     </Panel>
   );
 }

@@ -29,7 +29,7 @@ export function Shell({children}: {children: React.ReactNode}) {
     <div className="flex min-h-dvh flex-col bg-bg">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-accent focus:px-3 focus:py-2 focus:text-[13px] focus:text-accent-fg"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-accent focus:px-3 focus:py-2 focus:text-[14px] focus:text-accent-fg"
       >
         Skip to content
       </a>
@@ -49,7 +49,7 @@ export function Shell({children}: {children: React.ReactNode}) {
               <Radio size={16} strokeWidth={2.5} aria-hidden />
             </span>
             <span>
-              <span className="block text-[14px] leading-tight font-extrabold tracking-tight text-text">
+              <span className="block text-[15px] leading-tight font-extrabold tracking-tight text-text">
                 BRIER
               </span>
               <span className="eyebrow text-text-faint">on 0G Chain</span>
@@ -78,7 +78,7 @@ export function Shell({children}: {children: React.ReactNode}) {
                   onClick={() => setNavOpen(false)}
                   aria-current={active ? "page" : undefined}
                   data-testid={`nav-${label.toLowerCase()}`}
-                  className={`flex items-center gap-2 rounded-md px-3 py-2 text-[13px] font-semibold transition-colors ${
+                  className={`flex items-center gap-2 rounded-md px-3 py-2 text-[14px] font-semibold transition-colors ${
                     active
                       ? "bg-accent/10 text-accent"
                       : "text-text-muted hover:bg-bg-sunken hover:text-text"
@@ -137,7 +137,7 @@ export function Shell({children}: {children: React.ReactNode}) {
             <Radio size={12} aria-hidden />
             Read-only node
           </span>
-          <span className="text-[12px] leading-relaxed text-text-muted">
+          <span className="text-[13px] leading-relaxed text-text-muted">
             Humans observe here. Every trade is executed by an agent through the SDK, never from
             this page.
           </span>

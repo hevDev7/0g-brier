@@ -53,7 +53,7 @@ function Field({
  * needs to know whether the creator left it out or whether we cannot see it.
  */
 function NotInDocument({what}: {what: string}) {
-  return <p className="text-[13px] text-text-muted">The MarketSpec {what}.</p>;
+  return <p className="text-[14px] text-text-muted">The MarketSpec {what}.</p>;
 }
 
 function OutcomeLine({market}: {market: MarketDetail}) {
@@ -62,7 +62,7 @@ function OutcomeLine({market}: {market: MarketDetail}) {
   // receipt: the chain that pays out always knows who won.
   if (outcome === null) {
     return (
-      <p className="text-[13px] text-text-muted">
+      <p className="text-[14px] text-text-muted">
         Not resolved — no outcome has been recorded on chain.
       </p>
     );
@@ -72,13 +72,13 @@ function OutcomeLine({market}: {market: MarketDetail}) {
     <div className="flex items-baseline justify-between gap-4">
       <span
         data-testid="report-winner"
-        className={`font-mono text-[22px] leading-none font-medium ${
+        className={`font-mono text-[24px] leading-none font-medium ${
           outcome === 1 ? "text-pos" : "text-neg"
         }`}
       >
         {label}
       </span>
-      <span className="text-[12px] text-text-muted">
+      <span className="text-[13px] text-text-muted">
         {/* 1/pᵢ, never 1/Pᵢ — see dpm-view.ts. */}
         {formatPayout(payoutPerShareWad(market.q, outcome as Outcome))} per winning share
       </span>
@@ -97,7 +97,7 @@ function ResolverRecord({receipt}: {receipt: Query<SettlementReceipt | null>}): 
       return receipt.data === null ? (
         <p
           data-testid="no-receipt-anchored"
-          className="px-4 py-3.5 text-[13px] leading-relaxed text-text-muted md:px-5"
+          className="px-4 py-3.5 text-[14px] leading-relaxed text-text-muted md:px-5"
         >
           This settlement anchored no receipt. The market was resolved directly, without a
           resolution module to record which models judged it or on what evidence — so there is
@@ -120,7 +120,7 @@ function ResolverRecord({receipt}: {receipt: Query<SettlementReceipt | null>}): 
       );
     case "loading":
       return (
-        <p className="px-4 py-3.5 text-[13px] text-text-muted md:px-5">
+        <p className="px-4 py-3.5 text-[14px] text-text-muted md:px-5">
           Loading the settlement record…
         </p>
       );
@@ -155,7 +155,7 @@ export function SettlementReport({
         type="button"
         data-testid="open-settlement-report"
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-md border border-border-strong bg-bg-sunken/50 px-4 py-2.5 text-[13px] font-medium text-text transition-colors hover:border-accent hover:text-accent"
+        className="flex w-full items-center justify-center gap-2 rounded-md border border-border-strong bg-bg-sunken/50 px-4 py-2.5 text-[14px] font-medium text-text transition-colors hover:border-accent hover:text-accent"
       >
         <FileText size={14} />
         View settlement report
@@ -173,7 +173,7 @@ export function SettlementReport({
         <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3.5 md:px-5">
           <div className="min-w-0">
             <p className="eyebrow text-text-faint">Settlement report</p>
-            <h2 id="settlement-report-title" className="text-[15px] leading-snug font-semibold">
+            <h2 id="settlement-report-title" className="text-[16px] leading-snug font-semibold">
               {market.question ?? market.address}
             </h2>
           </div>
@@ -202,7 +202,7 @@ export function SettlementReport({
               {market.rules === null ? (
                 <Unavailable capability="MARKET_SPEC_BLOB" mode={mode} compact />
               ) : (
-                <p className="text-[13px] leading-relaxed text-text">{market.rules}</p>
+                <p className="text-[14px] leading-relaxed text-text">{market.rules}</p>
               )}
             </Field>
 
@@ -210,7 +210,7 @@ export function SettlementReport({
               {market.settlementPrompt === null ? (
                 <NotInDocument what="carries no settlement prompt" />
               ) : (
-                <p className="text-[13px] leading-relaxed whitespace-pre-wrap text-text">
+                <p className="text-[14px] leading-relaxed whitespace-pre-wrap text-text">
                   {market.settlementPrompt}
                 </p>
               )}
@@ -224,7 +224,7 @@ export function SettlementReport({
               ) : (
                 <ul className="flex flex-col gap-1.5">
                   {market.sources.map((s) => (
-                    <li key={s.url} className="text-[13px]">
+                    <li key={s.url} className="text-[14px]">
                       <a
                         href={s.url}
                         target="_blank"
@@ -234,7 +234,7 @@ export function SettlementReport({
                         {s.url}
                       </a>
                       {s.selector !== null && (
-                        <span className="ml-2 font-mono text-[11px] text-text-faint">
+                        <span className="ml-2 font-mono text-[12px] text-text-faint">
                           {s.selector}
                         </span>
                       )}
@@ -245,7 +245,7 @@ export function SettlementReport({
             </Field>
 
             <Field label="Committed as" testId="report-spec-root">
-              <p className="font-mono text-[11px] break-all text-text-muted">{market.specRoot}</p>
+              <p className="font-mono text-[12px] break-all text-text-muted">{market.specRoot}</p>
             </Field>
           </section>
 
@@ -265,7 +265,7 @@ export function SettlementReport({
                 report exists so a reader can hold the resolver's account against
                 what the market actually promised, and a single merged list would
                 let the account quietly replace the promise. */}
-            <p className="border-t border-border px-4 pt-3.5 text-[12px] text-text-muted md:px-5">
+            <p className="border-t border-border px-4 pt-3.5 text-[13px] text-text-muted md:px-5">
               The resolver&rsquo;s own account below — read it against what was promised above.
             </p>
             <ResolverRecord receipt={receipt} />

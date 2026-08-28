@@ -30,7 +30,7 @@ const DOTS: Record<Tone, string> = {
 export function Badge({tone, label, dot = false}: {tone: Tone; label: string; dot?: boolean}) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-[0.08em] whitespace-nowrap uppercase ${TONES[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 font-mono text-[11px] font-medium tracking-[0.08em] whitespace-nowrap uppercase ${TONES[tone]}`}
     >
       {dot && <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${DOTS[tone]}`} />}
       {label}

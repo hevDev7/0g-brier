@@ -94,7 +94,7 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
     <>
       <Link
         href="/"
-        className="mb-5 inline-flex items-center gap-2 text-[12px] font-semibold text-text-muted hover:text-accent"
+        className="mb-5 inline-flex items-center gap-2 text-[13px] font-semibold text-text-muted hover:text-accent"
       >
         <ArrowLeft size={14} aria-hidden />
         Back to markets
@@ -115,7 +115,7 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
                 closed market formatCountdown returns "closed" and the line would
                 read "closes in closed". The status badge above already says it. */}
             {market.status === "Open" && (
-              <span className="text-[12px] text-text-muted">
+              <span className="text-[13px] text-text-muted">
                 closes in <Countdown until={market.tradingEnd} />
               </span>
             )}
@@ -167,7 +167,7 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
                 <Unavailable capability="MARKET_SPEC_BLOB" mode={source.mode} />
               </div>
             ) : (
-              <p className="p-4 text-[13px] leading-relaxed text-text-muted md:p-5">
+              <p className="p-4 text-[14px] leading-relaxed text-text-muted md:p-5">
                 {market.rules}
               </p>
             )}

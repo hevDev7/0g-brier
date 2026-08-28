@@ -29,19 +29,19 @@ function VoteRow({vote, finalOutcome}: {vote: ResolverVote; finalOutcome: Outcom
   return (
     <li
       data-testid={`vote-${vote.model}`}
-      className="flex items-center justify-between gap-3 py-2 text-[13px]"
+      className="flex items-center justify-between gap-3 py-2 text-[14px]"
     >
       <span className="flex items-center gap-2">
         {/* The model name is deliberately ONE element with no other text inside —
             getByText joins only an element's DIRECT text nodes, so a phrase that
             must match the model name exactly may not share an element with other
             text (see the same note in Unavailable.tsx). */}
-        <span className="font-mono text-[12px] text-text">{vote.model}</span>
+        <span className="font-mono text-[13px] text-text">{vote.model}</span>
         {vote.teeVerified && <Badge tone="verified" label="TEE" />}
       </span>
       <span className="flex items-center gap-2">
         <span
-          className={`font-mono text-[12px] ${
+          className={`font-mono text-[13px] ${
             vote.outcome === 1 ? "text-pos" : vote.outcome === 0 ? "text-neg" : "text-text-faint"
           }`}
         >
@@ -74,7 +74,7 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
         <div
           data-testid="simulated-badge"
           role="status"
-          className="border-b border-warn/40 bg-warn/10 px-4 py-2.5 text-[11px] font-semibold tracking-wide text-warn uppercase md:px-5"
+          className="border-b border-warn/40 bg-warn/10 px-4 py-2.5 text-[12px] font-semibold tracking-wide text-warn uppercase md:px-5"
         >
           Simulated result — not a real resolution by the AI committee
         </div>
@@ -86,7 +86,7 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
           // no models named, none were consulted and none ever will be for this
           // settlement — promising a list that cannot arrive is the same defect as
           // rendering a zero for something unknown.
-          <p className="text-[13px] text-text-muted">
+          <p className="text-[14px] text-text-muted">
             {receipt.outcome === null
               ? "No resolver votes yet."
               : "No models were consulted for this settlement."}
@@ -112,7 +112,7 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
             MarketStats.tsx already enforces the same pattern (availability judged
             PER ROW, not per panel) for an identical reason. */}
         {receipt.outcome === null ? (
-          <p className="text-[13px] text-text-muted">
+          <p className="text-[14px] text-text-muted">
             No criteria yet — this market is not resolved.
           </p>
         ) : receipt.criteria === null ? (
@@ -120,11 +120,11 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
           // in from the MarketSpec would be the report answering its own question:
           // whether the resolver judged against what was promised is the thing the
           // reader came to check, and it cannot be checked against a copy.
-          <p className="text-[13px] text-text-muted">
+          <p className="text-[14px] text-text-muted">
             The resolver recorded no criteria of its own — compare what the market promised.
           </p>
         ) : (
-          <p data-testid="criteria" className="text-[13px] leading-relaxed text-text">
+          <p data-testid="criteria" className="text-[14px] leading-relaxed text-text">
             {receipt.criteria}
           </p>
         )}
@@ -135,7 +135,7 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
           // The "in full, verbatim" <details> is NEVER rendered empty: a disclosure
           // that promises the complete reasoning and then opens onto nothing is
           // exactly the lie rule #1 above forbids.
-          <p className="text-[13px] text-text-muted">
+          <p className="text-[14px] text-text-muted">
             No resolver reasoning yet — this market is not resolved.
           </p>
         ) : (
@@ -151,11 +151,11 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
               // usually also one of the voters, and giving its name a dedicated
               // element makes `getByText("<model>")` match twice — once in the
               // vote list, once here — which is ambiguous rather than wrong.
-              <p className="mb-2 font-mono text-[11px] text-text-faint">
+              <p className="mb-2 font-mono text-[12px] text-text-faint">
                 Reasoning below composed by the judge: {receipt.judgeModel}
               </p>
             )}
-            <details data-testid="reasoning" className="text-[13px] leading-relaxed text-text">
+            <details data-testid="reasoning" className="text-[14px] leading-relaxed text-text">
               <summary className="cursor-pointer text-text-muted select-none">
                 Resolver reasoning — in full, verbatim
               </summary>
@@ -167,7 +167,7 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
 
       <Section title="Sources">
         {receipt.sources.length === 0 ? (
-          <p className="text-[13px] text-text-muted">
+          <p className="text-[14px] text-text-muted">
             {receipt.outcome === null
               ? "No sources recorded yet."
               : "The resolver cited no sources."}
@@ -180,7 +180,7 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
                   href={s}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-[13px] break-all text-accent underline underline-offset-2"
+                  className="text-[14px] break-all text-accent underline underline-offset-2"
                 >
                   {s}
                 </a>

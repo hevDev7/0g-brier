@@ -111,6 +111,28 @@ body {
   border-radius: var(--radius-sm);
 }
 
+/* ── Type scale ───────────────────────────────────────────────────────────────
+   Sizes are arbitrary px rather than Tailwind's named steps, because this is a
+   dense instrument panel and the default scale jumps too coarsely for it. They
+   are still a scale, and staying on it is what keeps thirty-four files looking
+   like one product:
+
+     11  eyebrows, table column heads, the smallest metadata
+     12  secondary labels, footnotes under a figure
+     13  dense table cells, captions
+     13.5 code and monospaced values inline
+     14  BODY — prose, table rows, anything read rather than scanned
+     15  emphasised body, step titles
+     16  panel titles
+     22 · 24 · 26  section and page headings
+     30 · 32 · 37  page titles and display figures
+
+   Raised one step throughout on 2026-08-28: body had been 13px, which is below
+   what a browser defaults to and read as small to the people using it. Line
+   heights are relative (`leading-relaxed`, `leading-tight`), so they followed on
+   their own. If you need a size that is not here, the answer is almost always
+   the nearest one that is. */
+
 @layer utilities {
   /* The panel is the single container shape in this UI: a raised surface, a
      hairline border, one radius. Shadows are not used — depth comes from the
@@ -121,10 +143,13 @@ body {
     border-radius: var(--radius);
   }
 
-  /* The small mono label that names a panel's kind above its title. */
+  /* The small mono label that names a panel's kind above its title.
+     11px rather than 10: it is uppercase and letter-spaced, which costs
+     legibility, and it is the floor of the scale below — nothing in this
+     interface is allowed to be smaller. */
   .eyebrow {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1.4;
     letter-spacing: 0.14em;
     text-transform: uppercase;

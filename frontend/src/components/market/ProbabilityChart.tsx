@@ -44,7 +44,7 @@ function IntervalPicker({
           data-testid={`interval-${option.value}`}
           aria-pressed={option.value === interval}
           onClick={() => onChange(option.value)}
-          className={`rounded px-2 py-1 font-mono text-[11px] transition-colors ${
+          className={`rounded px-2 py-1 font-mono text-[12px] transition-colors ${
             option.value === interval
               ? "bg-accent/15 text-accent"
               : "text-text-faint hover:bg-bg-sunken hover:text-text"
@@ -80,7 +80,7 @@ export function ProbabilityChart({
             bucket too WIDE or too narrow for the history that exists, and a reader
             who cannot change it has to guess whether the market is quiet or the
             question was wrong. */}
-        <p className="px-4 py-10 text-center text-[13px] text-text-muted">
+        <p className="px-4 py-10 text-center text-[14px] text-text-muted">
           No history in {interval} buckets yet for this market.
         </p>
       </Panel>
@@ -109,8 +109,8 @@ export function ProbabilityChart({
           action={picker}
         />
         <div className="px-4 py-8 text-center md:px-5">
-          <p className="font-mono text-[24px] leading-none text-text">{formatProbability(only.close)}</p>
-          <p className="mt-2 text-[13px] leading-relaxed text-text-muted">
+          <p className="font-mono text-[26px] leading-none text-text">{formatProbability(only.close)}</p>
+          <p className="mt-2 text-[14px] leading-relaxed text-text-muted">
             One observation bucket so far — every trade in this market landed inside the same
             {" "}{interval} interval, so there is no movement to plot yet. A narrower bucket may
             show the movement inside it.
@@ -183,7 +183,7 @@ export function ProbabilityChart({
                   <text
                     x={BOX.width - BOX.padRight + 6}
                     y={t.y + 4}
-                    className="fill-text-faint text-[10px]"
+                    className="fill-text-faint text-[11px]"
                   >
                     {t.label}
                   </text>
@@ -196,7 +196,7 @@ export function ProbabilityChart({
                 x={t.x}
                 y={BOX.height - 6}
                 textAnchor="middle"
-                className="fill-text-faint text-[10px]"
+                className="fill-text-faint text-[11px]"
               >
                 {t.label}
               </text>
@@ -223,7 +223,7 @@ export function ProbabilityChart({
                   data-endlabel={e.key}
                   x={BOX.width - BOX.padRight + 6}
                   y={e.y + 3.5}
-                  className={`text-[10px] font-medium ${e.key === "yes" ? "fill-pos" : "fill-neg"}`}
+                  className={`text-[11px] font-medium ${e.key === "yes" ? "fill-pos" : "fill-neg"}`}
                 >
                   {formatProbability(e.value)}
                 </text>
@@ -231,7 +231,7 @@ export function ProbabilityChart({
             ))}
           </svg>
         </div>
-        <div className="mt-1 flex gap-4 text-[11px]">
+        <div className="mt-1 flex gap-4 text-[12px]">
           <span className="text-pos">● P(YES)</span>
           <span className="text-neg">● P(NO)</span>
         </div>
