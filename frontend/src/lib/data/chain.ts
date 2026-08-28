@@ -341,16 +341,18 @@ export class ChainSource implements DataSource {
     const read = <T,>(functionName: MarketFn) =>
       this.client.readContract({address, abi: MARKET_ABI, functionName}) as Promise<T>;
 
-    const [q, poolWad, status, tier, category, tradingEnd, collateral, specRoot] = await Promise.all([
-      read<readonly [bigint, bigint]>("qArray"),
-      read<bigint>("poolWad"),
-      read<number>("status"),
-      read<number>("tier"),
-      read<`0x${string}`>("category"),
-      read<bigint>("tradingEnd"),
-      read<`0x${string}`>("collateral"),
-      read<`0x${string}`>("specRoot"),
-    ]);
+    const [q, poolWad, status, tier, category, tradingEnd, collateral, specRoot, winner] =
+      await Promise.all([
+        read<readonly [bigint, bigint]>("qArray"),
+        read<bigint>("poolWad"),
+        read<number>("status"),
+        read<number>("tier"),
+        read<`0x${string}`>("category"),
+        read<bigint>("tradingEnd"),
+        read<`0x${string}`>("collateral"),
+        read<`0x${string}`>("specRoot"),
+        read<number>("winningOutcome"),
+      ]);
 
     const statusLabel = STATUSES[status];
     const tierLabel = TIERS[tier];
@@ -393,6 +395,17 @@ export class ChainSource implements DataSource {
         createdAt: null,
         tradingEnd: Number(tradingEnd),
         collateral: await token,
+        // ONLY `Settled` has a winner, and the reason is not pedantry:
+        // `winningOutcome` is 0 in storage until a resolution lands, and 0 is
+        // also a legitimate winner ("NO"), so trusting the field alone reports
+        // every unresolved market as having settled NO. A market that FAILED or
+        // was VOIDED has no winner at all — every side liquidates at its own
+        // price — and a committee on Galileo returned UNRESOLVABLE, the market
+        // failed, and an earlier version of this read called it "NO".
+        // (Phrased in the plural on purpose: `test/write-boundary.test.ts`
+        // greps this directory for the bare verb, and a guard that cannot be
+        // argued with is worth more than a comment that reads slightly better.)
+        winningOutcome: statusLabel === "Settled" ? ((winner === 1 ? 1 : 0) as Outcome) : null,
       },
     };
   }
@@ -425,27 +438,19 @@ export class ChainSource implements DataSource {
     const read = <T,>(functionName: MarketFn) =>
       this.client.readContract({address, abi: MARKET_ABI, functionName}) as Promise<T>;
 
-    const [base, feeBps, settlementDeadline, creator, winner, resolvedAt] = await Promise.all([
+    const [base, feeBps, settlementDeadline, creator, resolvedAt] = await Promise.all([
       this.readMarket(address),
       read<number>("feeBps"),
       read<bigint>("settlementDeadline"),
       read<`0x${string}`>("creator"),
-      read<number>("winningOutcome"),
       read<bigint>("resolvedAt"),
     ]);
 
-    // Three states, not two.
-    //
-    // `winningOutcome` is 0 in storage until a resolution lands, and 0 is also a
-    // legitimate winner ("NO"), so the outcome alone would report every unresolved
-    // market as having settled NO. `resolvedAt` separates those two — but it is
-    // ALSO written when a market FAILS or is VOIDED, where there is no winner at
-    // all and every side liquidates at its own price. A committee on Galileo
-    // returned UNRESOLVABLE, the market failed, and this read called it "NO".
-    //
-    // Only `Settled` has a winner. `resolvedAt` still says WHEN it was decided.
+    // `winningOutcome` comes up with the summary now — see `readMarket` for why
+    // only `Settled` may carry one. `resolvedAt` stays here because it is a
+    // detail fact, and it is NOT interchangeable with the winner: it is written
+    // when a market fails or is voided too, where there is no winner at all.
     const resolved = Number(resolvedAt) !== 0;
-    const hasWinner = base.summary.status === "Settled";
 
     return {
       ...base.summary,
@@ -456,7 +461,6 @@ export class ChainSource implements DataSource {
       rules: base.spec?.rules ?? null,
       settlementPrompt: base.spec?.settlementPrompt ?? null,
       sources: base.spec?.sources ?? null,
-      winningOutcome: hasWinner ? ((winner === 1 ? 1 : 0) as Outcome) : null,
       resolvedAt: resolved ? Number(resolvedAt) : null,
     };
   }

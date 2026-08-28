@@ -16,6 +16,7 @@ import {useMarkets} from "@/hooks/useMarkets";
 import {useDataSource} from "@/hooks/provider";
 import {probabilityWad} from "@/lib/dpm-view";
 import {delta24h, tradingState, volumeOf} from "@/lib/market-rows";
+import {PHASES, isPhase, phaseInfo, phaseOf, type Phase} from "@/lib/market-phase";
 import {useNowSeconds} from "@/lib/use-now";
 import {
   formatCollateral,
@@ -25,7 +26,7 @@ import {
   formatTimestamp,
   shortAddress,
 } from "@/lib/format";
-import type {Candle, CollateralInfo, MarketSummary, Query, Trade} from "@/lib/data/types";
+import type {Candle, CollateralInfo, MarketStatus, MarketSummary, Query, Trade} from "@/lib/data/types";
 
 const SORTS = [
   {key: "volume", label: "Volume"},
@@ -33,6 +34,12 @@ const SORTS = [
   {key: "newest", label: "Newest"},
 ] as const;
 type SortKey = (typeof SORTS)[number]["key"];
+
+/** A market with its position in the unfiltered list, which the fan-out uses. */
+interface Row {
+  market: MarketSummary;
+  index: number;
+}
 
 export function MarketList(): React.JSX.Element {
   const markets = useMarkets();
@@ -64,6 +71,22 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
   const params = useListParams();
   const [search, setSearch] = useState("");
 
+  /**
+   * The phase split happens FIRST, and the counts come from this rather than
+   * from `rows`: a tab has to say how many markets it holds, not how many
+   * survive whatever search the reader has typed into another tab.
+   */
+  const byPhase = useMemo(() => {
+    // The index travels with the market because `trades` and `candles` are
+    // fanned out over the ORIGINAL array and are addressed positionally. Looking
+    // it up again per row would work and would also be the kind of quadratic
+    // detail that stops being free at the size this page is already near.
+    const map = new Map<Phase, Row[]>(PHASES.map((p) => [p.key, []]));
+    markets.forEach((market, index) => map.get(phaseOf(market, now))!.push({market, index}));
+    return map;
+  }, [markets, now]);
+  const inPhase = byPhase.get(params.phase)!;
+
   const volumes = useMemo(() => {
     const map = new Map<string, bigint | null>();
     markets.forEach((m, i) => {
@@ -78,10 +101,21 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
     [markets],
   );
 
+  /**
+   * Only the statuses that actually occur in this phase, so the dropdown can
+   * never offer a combination that returns nothing — picking "Settled" while
+   * looking at Live used to empty the table and say "no market matches these
+   * filters", which is true and useless. Below two it is hidden entirely: a
+   * filter with one option filters nothing.
+   */
+  const statuses = useMemo(
+    () => [...new Set(inPhase.map(({market}) => market.status))].sort() as MarketStatus[],
+    [inPhase],
+  );
+
   const rows = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return markets
-      .map((market, index) => ({market, index}))
+    return inPhase
       .filter(
         ({market}) =>
           (!params.category || market.category === params.category) &&
@@ -96,11 +130,17 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
             market.address.toLowerCase().includes(needle)),
       )
       .sort((a, b) => compareRows(a.market, b.market, params.sort, volumes));
-  }, [markets, params.category, params.status, params.tier, params.sort, search, volumes]);
+  }, [inPhase, params.category, params.status, params.tier, params.sort, search, volumes]);
 
   return (
     <div className="flex flex-col gap-5">
       <SummaryTiles markets={markets} trades={trades} now={now} />
+
+      <PhaseTabs
+        current={params.phase}
+        counts={byPhase}
+        onSelect={(next) => params.set("phase", next)}
+      />
 
       <Panel testId="market-table" className="overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-border p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -111,7 +151,7 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
               data-testid="market-count"
               className="rounded-full bg-bg-sunken px-2 py-0.5 font-mono text-[11px] text-text-muted"
             >
-              {rows.length} / {markets.length}
+              {rows.length} / {inPhase.length}
             </span>
           </p>
 
@@ -138,13 +178,15 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
               options={categories}
               allLabel="All categories"
             />
-            <Select
-              label="Status"
-              value={params.status}
-              onChange={(v) => params.set("status", v)}
-              options={["Open", "Closed", "Proposed", "Disputed", "Settled", "Failed", "Voided"]}
-              allLabel="All statuses"
-            />
+            {statuses.length > 1 && (
+              <Select
+                label="Status"
+                value={params.status}
+                onChange={(v) => params.set("status", v)}
+                options={statuses}
+                allLabel="All statuses"
+              />
+            )}
             <Select
               label="Tier"
               value={params.tier}
@@ -178,8 +220,18 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
         </div>
 
         {rows.length === 0 ? (
-          <p className="px-4 py-12 text-center text-[14px] text-text-muted">
-            No market matches these filters.
+          /*
+            Two different absences. An empty PHASE is a fact about the
+            deployment — on Galileo the Live tab is genuinely empty, and telling
+            a reader "no market matches these filters" would send them hunting
+            through filters they never set. An empty RESULT is about the filters,
+            and only then is that the right sentence.
+          */
+          <p
+            data-testid="market-empty"
+            className="mx-auto max-w-md px-4 py-12 text-center text-[14px] leading-relaxed text-text-muted"
+          >
+            {inPhase.length === 0 ? phaseInfo(params.phase).empty : "No market matches these filters."}
           </p>
         ) : (
           /*
@@ -219,7 +271,14 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
                     Status
                   </th>
                   <th scope="col" className="px-3 py-3 text-right font-medium">
-                    Closes
+                    {/* The last column answers whatever question the phase makes
+                        current. A countdown on a resolved market is noise, and
+                        "Closes" over a date that has passed is worse than noise. */}
+                    {params.phase === "live"
+                      ? "Closes"
+                      : params.phase === "pending"
+                        ? "Trading ended"
+                        : "Outcome"}
                   </th>
                   <th scope="col" className="px-4 py-3">
                     <span className="sr-only">Open market</span>
@@ -230,6 +289,7 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
                 {rows.map(({market, index}) => (
                   <MarketRow
                     now={now}
+                    phase={params.phase}
                     key={market.address}
                     market={market}
                     trades={trades[index]}
@@ -260,12 +320,14 @@ function MarketRow({
   trades,
   candles,
   now,
+  phase,
 }: {
   market: MarketSummary;
   trades: Query<Trade[]> | undefined;
   candles: Query<Candle[]> | undefined;
   /** Passed in, not read here: one clock for the whole table. */
   now: number | null;
+  phase: Phase;
 }) {
   const state = tradingState(market, now);
   // The live mode, not a guess. A cell that names the wrong mode is worse than
@@ -325,10 +387,11 @@ function MarketRow({
         className="px-3 py-4 text-right font-mono text-[13px] text-text-muted"
         title={formatTimestamp(market.tradingEnd)}
       >
-        {/* A countdown is only meaningful while trading is still open; on a
-            closed market it would read "closed", which the status badge on this
-            same row already says. */}
-        {market.status === "Open" ? (
+        {phase === "resolved" ? (
+          <OutcomeCell market={market} />
+        ) : phase === "live" ? (
+          /* A countdown is only meaningful while trading is still open; past
+             that it would read "closed", which the badge on this row says. */
           <Countdown until={market.tradingEnd} />
         ) : (
           formatTimestamp(market.tradingEnd)
@@ -342,6 +405,40 @@ function MarketRow({
         />
       </td>
     </tr>
+  );
+}
+
+/**
+ * Which side won — the one fact that distinguishes two resolved markets, and the
+ * reason a history list is worth reading rather than a list of names.
+ *
+ * `winningOutcome` is null for `Failed` and `Voided` and that is not a gap: no
+ * side won, both liquidate at their own price, and printing "NO" there would
+ * take the absence of an answer for an answer. It is the same collapse the
+ * detail page had to be repaired for.
+ */
+function OutcomeCell({market}: {market: MarketSummary}): React.JSX.Element {
+  if (market.winningOutcome !== null) {
+    return (
+      <span
+        className={`font-medium ${market.winningOutcome === 1 ? "text-pos" : "text-neg"}`}
+        title="The side the resolution paid"
+      >
+        {market.winningOutcome === 1 ? "YES" : "NO"}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="text-[12px] text-text-faint"
+      title={
+        market.status === "Failed"
+          ? "No outcome was decided before the settlement deadline. Both sides can liquidate at their own price."
+          : "The market was voided. Both sides can liquidate at their own price."
+      }
+    >
+      refunded
+    </span>
   );
 }
 
@@ -397,6 +494,66 @@ function VolumeCell({
     case "loading":
       return <Skeleton className="h-3 w-16" />;
   }
+}
+
+/**
+ * The coarse cut, and the only navigation on this page that changes what a
+ * reader is looking at rather than how it is sorted.
+ *
+ * Counts sit on the tabs because an empty Live tab is otherwise indistinguishable
+ * from a page that failed: "Live 0 · Awaiting settlement 3 · Resolved 4" says
+ * the deployment has finished its work, which is a different message from
+ * silence. They are the phase totals, not the filtered ones — a tab reports what
+ * it holds, not what survives a search typed while looking somewhere else.
+ *
+ * `role="tablist"` is deliberately NOT used. These are links between views of a
+ * list, not tab panels: the URL changes, the content is addressable, and the
+ * arrow-key semantics a tablist promises are not implemented here. Claiming the
+ * role without the behaviour is worse for a screen reader than not claiming it.
+ */
+function PhaseTabs({
+  current,
+  counts,
+  onSelect,
+}: {
+  current: Phase;
+  counts: Map<Phase, Row[]>;
+  onSelect: (phase: Phase) => void;
+}) {
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5" data-testid="phase-tabs">
+        {PHASES.map((phase) => {
+          const active = phase.key === current;
+          const count = counts.get(phase.key)?.length ?? 0;
+          return (
+            <button
+              key={phase.key}
+              type="button"
+              onClick={() => onSelect(phase.key)}
+              aria-pressed={active}
+              data-testid={`phase-${phase.key}`}
+              className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                active
+                  ? "border-accent bg-accent text-accent-fg"
+                  : "border-border text-text-muted hover:border-border-strong hover:text-text"
+              }`}
+            >
+              {phase.label}
+              <span
+                className={`rounded-full px-1.5 font-mono text-[11px] ${
+                  active ? "bg-accent-fg/15 text-accent-fg" : "bg-bg-sunken text-text-faint"
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[13px] leading-relaxed text-text-muted">{phaseInfo(current).blurb}</p>
+    </div>
+  );
 }
 
 function SummaryTiles({
@@ -535,12 +692,25 @@ function useListParams() {
     const next = new URLSearchParams(params.toString());
     if (value === "") next.delete(key);
     else next.set(key, value);
+    // Changing phase clears the finer filters. A status or category chosen while
+    // looking at Live usually does not occur in Resolved, and carrying it across
+    // lands the reader on an empty table that reads as a broken tab rather than
+    // as a filter they set themselves two clicks ago.
+    if (key === "phase") {
+      next.delete("status");
+      next.delete("category");
+      next.delete("tier");
+    }
     const query = next.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, {scroll: false});
   }
 
   const sort = params.get("sort");
+  const phase = params.get("phase");
   return {
+    // `live` by default: it is the only phase in which a reader can still act,
+    // and an unrecognised value falls back to it rather than emptying the page.
+    phase: (phase !== null && isPhase(phase) ? phase : "live") as Phase,
     category: params.get("category") ?? "",
     status: params.get("status") ?? "",
     tier: params.get("tier") ?? "",

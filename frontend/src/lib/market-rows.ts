@@ -1,3 +1,4 @@
+import {tradingHasEnded} from "@/lib/market-phase";
 import type {Candle, MarketStatus} from "@/lib/data/types";
 
 const DAY = 86_400;
@@ -71,7 +72,7 @@ export function tradingState(
   market: {status: MarketStatus; tradingEnd: number},
   now: number | null,
 ): {label: string; tone: Tone; hint: string} {
-  if (market.status === "Open" && now !== null && now >= market.tradingEnd) {
+  if (tradingHasEnded(market, now)) {
     return {
       label: "Awaiting close",
       tone: "warning",

@@ -100,6 +100,20 @@ export interface MarketSummary {
   createdAt: number | null;
   tradingEnd: number;
   collateral: CollateralInfo;
+  /**
+   * The side that won, read from `Market.winningOutcome` on chain.
+   *
+   * `null` means NOT RESOLVED, never "NO" — outcome 0 IS "NO" and the two must
+   * not collapse. It comes from the chain rather than from the settlement
+   * receipt because the chain is what pays out: a mode with no receipt still
+   * knows who won, and a report that could not name the winner would be missing
+   * the one fact everything else explains.
+   *
+   * On the SUMMARY rather than only on the detail, because a list of resolved
+   * markets that cannot say which side won is a list of names — a reader would
+   * have to open all of them to learn the one fact that distinguishes them.
+   */
+  winningOutcome: Outcome | null;
 }
 
 export interface MarketDetail extends MarketSummary {
@@ -125,16 +139,6 @@ export interface MarketDetail extends MarketSummary {
    * creator named none.
    */
   sources: readonly SpecSource[] | null;
-  /**
-   * The side that won, read from `Market.winningOutcome` on chain.
-   *
-   * `null` means NOT RESOLVED, never "NO" — outcome 0 IS "NO" and the two must
-   * not collapse. It comes from the chain rather than from the settlement
-   * receipt because the chain is what pays out: a mode with no receipt still
-   * knows who won, and a report that could not name the winner would be missing
-   * the one fact everything else explains.
-   */
-  winningOutcome: Outcome | null;
   /** When `settle`/`fail`/`void` landed, unix seconds. `null` before that. */
   resolvedAt: number | null;
 }

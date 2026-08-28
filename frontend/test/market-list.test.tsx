@@ -33,6 +33,16 @@ function renderList(source = new MockSource(), query = "") {
   );
 }
 
+/**
+ * The registry is split into phases now, so "every market" is no longer one
+ * view. These are the fixture counts per phase — four markets still trading,
+ * one closed and waiting on a resolver, one settled.
+ *
+ * Derived from the fixtures rather than typed, so adding a fixture cannot leave
+ * a test asserting a stale total while still passing for the wrong reason.
+ */
+const LIVE = FIXTURE_MARKETS.filter((m) => m.status === "Open").length;
+
 /** The row header holds the question, so it identifies a row unambiguously. */
 async function questionOrder(): Promise<string[]> {
   const table = await screen.findByRole("table");
@@ -55,14 +65,15 @@ function rowFor(table: HTMLElement, needle: string): HTMLElement {
 }
 
 describe("MarketList", () => {
-  it("renders one row per market, with P(YES) as p squared", async () => {
+  it("renders one row per market in the phase, with P(YES) as p squared", async () => {
     renderList();
     const table = await screen.findByRole("table");
-    expect(within(table).getAllByRole("rowheader")).toHaveLength(FIXTURE_MARKETS.length);
+    expect(within(table).getAllByRole("rowheader")).toHaveLength(LIVE);
     // q = [1000, 1200] -> P(YES) = 59.0%. The marginal price is 0.7682.
     expect(within(table).getByText("59.0%")).toBeInTheDocument();
     expect(within(table).getByText("50.0%")).toBeInTheDocument();
-    expect(within(table).getByText("10.0%")).toBeInTheDocument();
+    // 10.0% belongs to the settled market, which is no longer in this view.
+    expect(within(table).queryByText("10.0%")).not.toBeInTheDocument();
   });
 
   /** The twin of the probability trap: a marginal price must never carry a % sign. */
@@ -79,6 +90,13 @@ describe("MarketList", () => {
     const table = await screen.findByRole("table");
     expect(within(table).getByText("1,562.05")).toBeInTheDocument();
     expect(within(table).getByText("1,000.00")).toBeInTheDocument();
+    expect(within(table).getByText("1,664.33")).toBeInTheDocument();
+  });
+
+  /** Depth is chain state and does not stop being knowable once a market ends. */
+  it("shows depth in the resolved phase too", async () => {
+    renderList(new MockSource(), "phase=resolved");
+    const table = await screen.findByRole("table");
     expect(within(table).getByText("1,897.37")).toBeInTheDocument();
   });
 
@@ -89,7 +107,12 @@ describe("MarketList", () => {
     // says how many markets happen to share a figure, which is a fact about the
     // fixture set; naming the row says which market shows what, which is the claim.
     await waitFor(() => expect(rowFor(table, "ETH/USD")).toHaveTextContent("+1.4 pt"));
-    expect(rowFor(table, "euro-area")).toHaveTextContent("+0.5 pt");
+  });
+
+  it("measures the change on a resolved market too, over its own history", async () => {
+    renderList(new MockSource(), "phase=resolved");
+    const table = await screen.findByRole("table");
+    await waitFor(() => expect(rowFor(table, "euro-area")).toHaveTextContent("+0.5 pt"));
   });
 
   /**
@@ -103,13 +126,9 @@ describe("MarketList", () => {
     const table = await screen.findByRole("table");
 
     await waitFor(() =>
-      expect(within(table).getAllByText(/trade history not available/i).length).toBe(
-        FIXTURE_MARKETS.length,
-      ),
+      expect(within(table).getAllByText(/trade history not available/i).length).toBe(LIVE),
     );
-    expect(within(table).getAllByText(/price history not available/i).length).toBe(
-      FIXTURE_MARKETS.length,
-    );
+    expect(within(table).getAllByText(/price history not available/i).length).toBe(LIVE);
 
     // Depth and probability come from MARKET_STATE, so they survive.
     expect(within(table).getByText("1,562.05")).toBeInTheDocument();
@@ -140,13 +159,14 @@ describe("MarketList", () => {
   it("sorts by newest using createdAt from the market summary", async () => {
     renderList(new MockSource(), "sort=newest");
     const order = await questionOrder();
-    // 72h, 96h and 240h before the fixture clock.
-    expect(positionOf(order, "ETH/USD")).toBeLessThan(positionOf(order, "euro-area"));
-    expect(positionOf(order, "euro-area")).toBeLessThan(positionOf(order, "mainnet v2"));
+    // Man City, ETH/USD and mainnet v2 were created 6h, 72h and 240h before the
+    // fixture clock. All three are still trading, so one view holds them.
+    expect(positionOf(order, "Manchester City")).toBeLessThan(positionOf(order, "ETH/USD"));
+    expect(positionOf(order, "ETH/USD")).toBeLessThan(positionOf(order, "mainnet v2"));
   });
 
-  it("filters by status from the URL", async () => {
-    renderList(new MockSource(), "status=Settled");
+  it("filters by status from the URL, within the phase", async () => {
+    renderList(new MockSource(), "phase=resolved&status=Settled");
     const order = await questionOrder();
     expect(order).toHaveLength(1);
     expect(order[0]).toContain("euro-area");
@@ -181,5 +201,101 @@ describe("MarketList", () => {
     renderList(new MockSource({omit: ["LIST_MARKETS"]}));
     expect(await screen.findByText(/market list not available/i)).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The dashboard used to be one table of everything, so on a deployment where
+ * every market had finished it showed a full page on which nothing could be
+ * traded. The split is by what a reader can do, not by status.
+ */
+describe("the phase split", () => {
+  it("shows only markets that are still trading by default", async () => {
+    renderList();
+    const table = await screen.findByRole("table");
+    const order = await questionOrder();
+    expect(order).toHaveLength(LIVE);
+    // The settled market and the one waiting on a resolver are elsewhere.
+    expect(order.join(" ")).not.toContain("euro-area");
+    expect(order.join(" ")).not.toContain("Artemis");
+    expect(within(table).queryByText("Settled")).not.toBeInTheDocument();
+  });
+
+  it("gives a finished market a place to be found", async () => {
+    renderList(new MockSource(), "phase=resolved");
+    const order = await questionOrder();
+    expect(order).toHaveLength(1);
+    expect(order[0]).toContain("euro-area");
+  });
+
+  it("does not file an unresolved market under history", async () => {
+    // Closed and past its trading window: over for a trader, unfinished for the
+    // protocol. Putting it in Resolved would hide that somebody still owes this
+    // market an answer and that the collateral is locked until they give one.
+    renderList(new MockSource(), "phase=pending");
+    const order = await questionOrder();
+    expect(order).toHaveLength(1);
+    expect(order[0]).toContain("Artemis");
+  });
+
+  it("counts each phase on its own tab, so an empty one reads as a fact", async () => {
+    renderList();
+    await screen.findByRole("table");
+    expect(screen.getByTestId("phase-live")).toHaveTextContent(String(LIVE));
+    expect(screen.getByTestId("phase-pending")).toHaveTextContent("1");
+    expect(screen.getByTestId("phase-resolved")).toHaveTextContent("1");
+  });
+
+  /**
+   * Which side won is the one fact that separates two settled markets. A history
+   * list without it is a list of names, and a reader would have to open every
+   * row to learn the thing they came for.
+   */
+  it("names the winning side in the resolved view", async () => {
+    renderList(new MockSource(), "phase=resolved");
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("Outcome")).toBeInTheDocument();
+    expect(within(rowFor(table, "euro-area")).getByText("YES")).toBeInTheDocument();
+  });
+
+  it("does not offer a countdown on a market that has stopped trading", async () => {
+    renderList(new MockSource(), "phase=pending");
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("Trading ended")).toBeInTheDocument();
+    expect(within(table).queryByText("Closes")).not.toBeInTheDocument();
+  });
+
+  /**
+   * An empty PHASE and an empty RESULT are different absences. On Galileo the
+   * Live tab is genuinely empty, and "no market matches these filters" would
+   * send a reader hunting through filters they never set.
+   */
+  it("tells an empty phase apart from an empty search", async () => {
+    const user = userEvent.setup();
+    renderList(new MockSource({omit: []}), "phase=resolved");
+    await screen.findByRole("table");
+    await user.type(screen.getByTestId("market-search"), "zzzzz");
+    expect(await screen.findByTestId("market-empty")).toHaveTextContent(
+      /no market matches these filters/i,
+    );
+  });
+
+  it("offers only the statuses the phase actually contains", async () => {
+    // Choosing "Settled" while looking at Live emptied the table and blamed the
+    // filters. A filter that can only produce nothing should not be offered —
+    // and with one status left there is nothing to filter, so it is hidden.
+    renderList();
+    await screen.findByRole("table");
+    expect(screen.queryByTestId("filter-status")).not.toBeInTheDocument();
+  });
+
+  it("keeps the whole registry in the tiles above the split", async () => {
+    // The tiles describe the deployment, not the tab: hiding finished markets
+    // from the table must not quietly shrink the count of what exists.
+    renderList();
+    await screen.findByRole("table");
+    expect(screen.getByText("Indexed markets").previousSibling).toHaveTextContent(
+      String(FIXTURE_MARKETS.length).padStart(2, "0"),
+    );
   });
 });
