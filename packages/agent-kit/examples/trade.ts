@@ -50,14 +50,22 @@ console.log(`agent ${client.address}`);
 const markets = await client.listMarkets();
 const open = markets.filter((m) => m.status === "Open");
 if (open.length === 0) throw new Error("no Open market to trade — create one with STOP_AFTER_CREATE=1");
-const market = open[open.length - 1]!;
+const want = process.env.MARKET?.toLowerCase();
+const market = want ? open.find((m) => m.address.toLowerCase() === want) : open[open.length - 1];
+if (!market) {
+  // "not found" is a poor answer when the address is right and the market has
+  // simply closed, which is the usual reason a rerun stops working.
+  const known = markets.find((m) => m.address.toLowerCase() === want);
+  throw new Error(
+    known
+      ? `market ${known.address} is ${known.status}, not Open — nothing to trade`
+      : `MARKET ${process.env.MARKET} is not on this factory`,
+  );
+}
 
 console.log(`market ${market.address}  (${market.status}, ${market.tier}, ${market.category})`);
 console.log(`  P(YES) ${pct(market.impliedProbabilityWad[1])}   marginal price ${x(market.marginalPriceWad[1])}`);
 console.log(`  NOTE: those are different numbers. The price is not the probability.`);
-
-const OUTCOME: Outcome = 1;
-const P = market.impliedProbabilityWad[OUTCOME];
 
 // The question comes from the market's OWN document, fetched by the root the
 // chain holds and verified against it. An agent told the question by its
@@ -105,13 +113,32 @@ const belief = judgement.impliedProbabilityWad;
  * is what a ported LMSR agent does, because under LMSR the two are the same
  * number — systematically mis-sizes every position.
  */
-if (belief <= P) {
-  console.log(`  belief ${pct(belief)} is not above the market's ${pct(P)} — no edge, nothing to do`);
+/**
+ * Which side first, and only then how much.
+ *
+ * A belief of 70% YES is equally a belief of 30% NO, and a market pricing YES at
+ * 72.7% is pricing NO at 27.3%. Reading only the YES side of both — which this
+ * file did until it was pointed at a market that had already run past its own
+ * model — discards half of every belief the agent forms, and reports "no edge"
+ * on a book that is plainly mispriced in the other direction.
+ *
+ * Because Σ probability == WAD, the two edges are one number with opposite
+ * signs: at most one side is cheap, and it is not always YES.
+ */
+const beliefOn: readonly [bigint, bigint] = [WAD - belief, belief];
+const OUTCOME: Outcome = beliefOn[1] > market.impliedProbabilityWad[1] ? 1 : 0;
+const SIDE = OUTCOME === 1 ? "YES" : "NO";
+const P = market.impliedProbabilityWad[OUTCOME];
+const myP = beliefOn[OUTCOME];
+
+if (myP <= P) {
+  console.log(`  ${pct(belief)} YES against a book at ${pct(market.impliedProbabilityWad[1])} — no edge on either side, nothing to do`);
   process.exit(0);
 }
-const kellyWad = ((belief - P) * WAD) / (WAD - P);
+console.log(`  the edge is on ${SIDE}: model ${pct(myP)} vs book ${pct(P)}`);
+const kellyWad = ((myP - P) * WAD) / (WAD - P);
 const fraction = Math.min(Number(kellyWad) / 1e18, BANKROLL_FRACTION_CAP);
-console.log(`  belief ${pct(belief)}  →  Kelly ${(Number(kellyWad) / 1e16).toFixed(2)}%, capped to ${(fraction * 100).toFixed(2)}%`);
+console.log(`  P(${SIDE}) ${pct(myP)}  →  Kelly ${(Number(kellyWad) / 1e16).toFixed(2)}%, capped to ${(fraction * 100).toFixed(2)}%`);
 
 const free = await client.getBalance(market.collateral);
 const kellyTokens = BigInt(Math.floor(Number(free) * fraction));
@@ -138,7 +165,7 @@ const kellyTokens = BigInt(Math.floor(Number(free) * fraction));
  * The move is therefore bounded by whichever is smaller: the standing impact
  * limit, or the distance to the belief.
  */
-const edgeBps = ((belief - P) * 10_000n) / WAD;
+const edgeBps = ((myP - P) * 10_000n) / WAD;
 const impactCapBps = edgeBps < MAX_IMPACT_BPS ? edgeBps : MAX_IMPACT_BPS;
 if (impactCapBps < MAX_IMPACT_BPS) {
   console.log(`  only ${Number(edgeBps) / 100}pp of edge left, so the move is capped there rather than at ${Number(MAX_IMPACT_BPS) / 100}pp`);
@@ -156,9 +183,9 @@ console.log(`  Kelly wants ${usd(kellyTokens, market.collateralDecimals)}; the b
 const {sharesOut} = await client.quoteBuySpend(market.address, OUTCOME, stakeTokens);
 const preview = await client.previewBuy(market.address, OUTCOME, sharesOut);
 
-console.log(`\nbuying ${(Number(sharesOut) / 1e18).toFixed(2)} YES shares`);
+console.log(`\nbuying ${(Number(sharesOut) / 1e18).toFixed(2)} ${SIDE} shares`);
 console.log(`  cost      ${usd(preview.tokensIn, market.collateralDecimals)} (fee ${usd(preview.feeTokens, market.collateralDecimals)})`);
-console.log(`  P(YES)    ${pct(preview.impliedProbabilityBeforeWad)} → ${pct(preview.impliedProbabilityAfterWad)}`);
+console.log(`  P(${SIDE})${SIDE === "NO" ? " " : ""}    ${pct(preview.impliedProbabilityBeforeWad)} → ${pct(preview.impliedProbabilityAfterWad)}`);
 console.log(`  payout    ${x(preview.payoutPerShareBeforeWad)} → ${x(preview.payoutPerShareAfterWad)}   ← the prize SHRINKS as we take it`);
 
 const maxTokensIn = preview.tokensIn + (preview.tokensIn * SLIPPAGE_BPS) / 10_000n;
@@ -166,7 +193,7 @@ await client.ensureAllowance(market.address, market.collateral, maxTokensIn);
 const bought = await client.buyShares({market: market.address, outcome: OUTCOME, sharesOut, maxTokensIn});
 console.log(`  filled    ${bought.hash}`);
 console.log(`  paid      ${usd(-bought.tokensDelta, market.collateralDecimals)}  ·  now holding ${(Number(bought.sharesAfter) / 1e18).toFixed(2)} shares`);
-console.log(`  P(YES)    now ${pct(bought.impliedProbabilityAfterWad[1])}`);
+console.log(`  P(${SIDE})${SIDE === "NO" ? " " : ""}    now ${pct(bought.impliedProbabilityAfterWad[OUTCOME])}`);
 
 /**
  * Sell a third of WHAT THIS RUN BOUGHT, not a third of the position.
@@ -185,7 +212,7 @@ console.log(`\nselling ${(Number(sellShares) / 1e18).toFixed(2)} back for at lea
 const sold = await client.sellShares({market: market.address, outcome: OUTCOME, sharesIn: sellShares, minTokensOut});
 console.log(`  filled    ${sold.hash}`);
 console.log(`  received  ${usd(sold.tokensDelta, market.collateralDecimals)}  ·  now holding ${(Number(sold.sharesAfter) / 1e18).toFixed(2)} shares`);
-console.log(`  P(YES)    now ${pct(sold.impliedProbabilityAfterWad[1])}`);
+console.log(`  P(${SIDE})${SIDE === "NO" ? " " : ""}    now ${pct(sold.impliedProbabilityAfterWad[OUTCOME])}`);
 
 /**
  * Per share, so the comparison holds whatever the position size.
