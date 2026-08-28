@@ -1,19 +1,19 @@
 {
   "chainId": 16602,
   "contracts": {
-    "AgentRegistry": "0x0D2d2cdA7d3d88103632551B18fEcc53f8F27FAc",
-    "AgentRegistryImpl": "0xBF2f5d412cCe7f9790b631D22433680Adf9c7D8b",
-    "ConfigRegistry": "0x364c2281D583681A3561aBF781C5633704783203",
-    "ConfigRegistryImpl": "0xe026866256676DD1F7A71e3e1fEe1a69e4E1E370",
-    "MarketFactory": "0x8a3bb57458a497562B97a3602147300987Ee48E1",
-    "MarketFactoryImpl": "0x3A37B67eDF5C2df476eaDcB50bA14e60FB2D0823",
-    "MarketImplementation": "0xF1b25f606edfb401ee5901D5F091cBE2AB3B5319",
-    "MockUSDC": "0x466b2aCbBf2ad403cA1b53dB2FdcD0906a3fe294",
-    "OutcomeShares": "0x7Bda4fB2B33E5211DAa1FD7121F034c188d8BE16",
-    "ResolutionModule": "0x4857E4694192673A85B03bbC61dDdbeC120aceC0",
-    "ResolutionModuleImpl": "0x2d79988cb2D2A1d1B62A0cDe4D2291447da0713f",
-    "Timelock": "0x6732db288d7eEADe6739DE8a65A85c0B77962e43"
+    "AgentRegistry": "0xCFa1C50236cDc584aFf24830d337D51345AeD008",
+    "AgentRegistryImpl": "0x3B0Dc736eBC2099A6f9225D0bF9be20D885eE9D1",
+    "ConfigRegistry": "0x7527fE0C4Fa43518Dcb7179a55E520265725Cce9",
+    "ConfigRegistryImpl": "0xf680B7fD81d4EC834219100839fE90090D36a284",
+    "MarketFactory": "0x76d10eDf6d0A4E022689a8F079E100e790AB1E6d",
+    "MarketFactoryImpl": "0xaA3363f23aD176f60D745743c0107D58b9F9F817",
+    "MarketImplementation": "0x6dD77E89A2Ce37c2b31a91f58f9673F34a22181f",
+    "MockUSDC": "0x863F34286ec407C8DeBb968C405285AbB16E4e71",
+    "OutcomeShares": "0xe7fBf30DAcdF493faa3028EB37211F9B43c8cF94",
+    "ResolutionModule": "0x24f0c8f68Db218E21807f44d25Ff44B4F84C0ED7",
+    "ResolutionModuleImpl": "0x2EF79c905766e11695e29327d33d3e849967690c",
+    "Timelock": "0x4Bdcdd1d35cC21656Cc5Bcb61b47f0FcF805E831"
   },
-  "deployedAt": 1787907913,
-  "deploymentBlock": 51813606
+  "deployedAt": 1787910383,
+  "deploymentBlock": 51818678
 }
