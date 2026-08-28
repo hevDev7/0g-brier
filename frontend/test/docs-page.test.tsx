@@ -11,7 +11,9 @@ import Features from "@/app/docs/features/page";
 import Reading from "@/app/docs/reading/page";
 import Probability from "@/app/docs/probability/page";
 import Payout from "@/app/docs/payout/page";
+import Creation from "@/app/docs/creation/page";
 import Lifecycle from "@/app/docs/lifecycle/page";
+import Settlement from "@/app/docs/settlement/page";
 import Parameters from "@/app/docs/parameters/page";
 import Agent from "@/app/docs/agent/page";
 import Setup from "@/app/docs/setup/page";
@@ -35,7 +37,9 @@ const ROUTES: Record<string, () => ReactElement> = {
   reading: Reading,
   probability: Probability,
   payout: Payout,
+  creation: Creation,
   lifecycle: Lifecycle,
+  settlement: Settlement,
   parameters: Parameters,
   agent: Agent,
   setup: Setup,
@@ -198,6 +202,27 @@ describe("what each page has to say", () => {
     // A state described only by what it allows is the one a reader gets wrong.
     expect(text.match(/Cannot:/g)?.length).toBe(4);
     expect(text.match(/Can:/g)?.length).toBe(4);
+  });
+
+  it("creation names every gate the factory actually enforces", () => {
+    const text = textOf("creation");
+    // Four refusals, each with its own named error in MarketFactory.
+    expect(text).toContain("CollateralNotAllowlisted");
+    expect(text).toContain("UnknownCategory");
+    expect(text).toContain("ApprovalAlreadyUsed");
+    // And the one that has already gone wrong once, in a live market.
+    expect(text).toMatch(/verbatim/i);
+  });
+
+  it("settlement walks the whole commit-reveal sequence", () => {
+    const text = textOf("settlement");
+    expect(text).toContain("openResolution");
+    expect(text).toContain("keccak256(abi.encode(market, outcome, salt, receiptRoot, msg.sender))");
+    // The guarantee the mechanism exists for: no settlement without reasoning.
+    expect(text).toMatch(/zero receipt root is rejected/i);
+    // And the honest disclosure that the shortcut is what testnet actually used.
+    expect(text).toContain("viaCommittee == false");
+    for (const rate of ["5%", "1%", "20%"]) expect(text).toContain(rate);
   });
 
   it("parameters states the dispute windows, and that they run opposite to the guess", () => {

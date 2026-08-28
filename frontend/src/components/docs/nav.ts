@@ -64,9 +64,19 @@ export const DOCS: readonly DocGroup[] = [
         blurb: "The payout floats, so holding is a decision rather than a default.",
       },
       {
+        slug: "creation",
+        title: "How a market is made",
+        blurb: "What a creator has to supply, sign for, and stake before a question becomes tradable.",
+      },
+      {
         slug: "lifecycle",
         title: "A market's life",
         blurb: "Five states, three endings, and only one of the three has a winner.",
+      },
+      {
+        slug: "settlement",
+        title: "How it settles",
+        blurb: "Who decides the outcome, what they must publish, and how a wrong answer is challenged.",
       },
       {
         slug: "parameters",
