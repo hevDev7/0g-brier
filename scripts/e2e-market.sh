@@ -204,6 +204,18 @@ COUNT="$(call "$FACTORY" "marketCount()(uint256)")"
 MARKET="$(call "$FACTORY" "marketAt(uint256)(address)" $(( ${COUNT%% *} - 1 )))"
 echo "   market $MARKET"
 
+# A market to trade against, rather than a lifecycle to watch. The rest of this
+# script closes and settles what it creates, which leaves nothing Open for an
+# agent to buy into — so `STOP_AFTER_CREATE=1 TRADING_WINDOW_SECONDS=86400`
+# leaves one standing.
+if [[ "${STOP_AFTER_CREATE:-0}" == "1" ]]; then
+  echo
+  echo -e "\033[1;32m✓ market open for $((WINDOW / 60)) minutes on chain $CHAIN_ID\033[0m"
+  echo "  market $MARKET"
+  echo "  spec   $SPEC_ROOT"
+  exit 0
+fi
+
 p() { call "$MARKET" "probability(uint8)(uint256)" "$1" | cut -d' ' -f1; }
 pool() { call "$MARKET" "poolWad()(uint256)" | cut -d' ' -f1; }
 pct() { python3 -c "print(f'{int('$1')/10**16:.2f}%')"; }
