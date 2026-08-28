@@ -74,8 +74,30 @@ export class LogSource implements DataSource {
   private readonly client: PublicClient;
   private readonly factory: `0x${string}`;
   private readonly fromBlock: bigint;
-  /** A block's timestamp never changes, and one tape hits the same block repeatedly. */
-  private readonly blockTimes = new Map<string, number>();
+  /**
+   * A block's timestamp never changes, and one tape hits the same block
+   * repeatedly.
+   *
+   * The promise is cached, not the number, and that is the fix rather than a
+   * stylistic choice: a tape decodes all of its logs at once, so with a value
+   * cache every log in a block reached the lookup before the first one had
+   * answered and each of them fetched the block again. Four trades in a block
+   * cost four `eth_getBlockByNumber`; now they cost one.
+   */
+  private readonly blockTimes = new Map<string, Promise<number>>();
+  /**
+   * The tape currently being read for a market, while it is being read.
+   *
+   * The leaderboard asks for a market's positions and its trades in the same
+   * tick, and both are the same `getLogs` over the same range — one of the two
+   * was pure waste. The entry is dropped the moment it settles, so this
+   * coalesces concurrent readers and never serves a range that has aged: a
+   * refetch a second later still goes to the chain.
+   */
+  private readonly tapes = new Map<string, Promise<Trade[]>>();
+  /** The creation index while it is being built, for the same reason. `null`
+   *  when nothing is in flight. */
+  private created: Promise<Map<string, number>> | null = null;
 
   constructor(config: LogSourceConfig) {
     this.chain = new ChainSource(config);
@@ -85,18 +107,47 @@ export class LogSource implements DataSource {
     this.fromBlock = config.fromBlock;
   }
 
-  private async timestampOf(blockNumber: bigint): Promise<number> {
+  /**
+   * Holds a promise in a cache, and forgets it if it rejects. A failed read
+   * remembered as the answer would outlive the outage that caused it.
+   */
+  private static remember<K, T>(cache: Map<K, Promise<T>>, key: K, pending: Promise<T>): Promise<T> {
+    cache.set(key, pending);
+    pending.catch(() => {
+      if (cache.get(key) === pending) cache.delete(key);
+    });
+    return pending;
+  }
+
+  private timestampOf(blockNumber: bigint): Promise<number> {
     const key = blockNumber.toString();
     const cached = this.blockTimes.get(key);
     if (cached !== undefined) return cached;
-    const block = await this.client.getBlock({blockNumber});
-    const seconds = Number(block.timestamp);
-    this.blockTimes.set(key, seconds);
-    return seconds;
+    return LogSource.remember(
+      this.blockTimes,
+      key,
+      this.client.getBlock({blockNumber}).then((block) => Number(block.timestamp)),
+    );
+  }
+
+  /**
+   * The tape, read once per burst however many callers want it. See `tapes`.
+   */
+  private tape(address: `0x${string}`): Promise<Trade[]> {
+    const key = address.toLowerCase();
+    const inFlight = this.tapes.get(key);
+    if (inFlight !== undefined) return inFlight;
+    const pending = this.readTape(address);
+    const forget = () => {
+      if (this.tapes.get(key) === pending) this.tapes.delete(key);
+    };
+    this.tapes.set(key, pending);
+    pending.then(forget, forget);
+    return pending;
   }
 
   /** Newest first, matching every other tape in this codebase. */
-  private async tape(address: `0x${string}`): Promise<Trade[]> {
+  private async readTape(address: `0x${string}`): Promise<Trade[]> {
     const logs = await this.client.getLogs({
       address,
       event: TRADE_EVENT,
@@ -130,19 +181,39 @@ export class LogSource implements DataSource {
     return trades.sort((x, y) => y.timestamp - x.timestamp || y.id.localeCompare(x.id));
   }
 
-  private async createdAt(): Promise<Map<string, number>> {
+  /** Built once per burst however many callers want it. See `created`. */
+  private createdAt(): Promise<Map<string, number>> {
+    if (this.created !== null) return this.created;
+    const pending = this.readCreatedAt();
+    const forget = () => {
+      if (this.created === pending) this.created = null;
+    };
+    this.created = pending;
+    pending.then(forget, forget);
+    return pending;
+  }
+
+  private async readCreatedAt(): Promise<Map<string, number>> {
     const logs = await this.client.getLogs({
       address: this.factory,
       event: MARKET_CREATED_EVENT,
       fromBlock: this.fromBlock,
       toBlock: "latest",
     });
-    const out = new Map<string, number>();
-    for (const log of logs) {
-      const market = log.args.market;
-      if (market) out.set(market.toLowerCase(), await this.timestampOf(log.blockNumber!));
-    }
-    return out;
+    // Concurrently, not in a loop that awaits. The loop was one round trip per
+    // market, in series, for a set of timestamps that have nothing to do with
+    // each other — thirteen markets meant thirteen sequential waits on an
+    // endpoint that answers in about a second.
+    const entries = await Promise.all(
+      logs.flatMap((log) => {
+        const market = log.args.market;
+        if (!market) return [];
+        return [
+          this.timestampOf(log.blockNumber!).then((seconds) => [market.toLowerCase(), seconds] as const),
+        ];
+      }),
+    );
+    return new Map(entries);
   }
 
   // ── delegated to the chain, then enriched ────────────────────────────────
@@ -171,9 +242,19 @@ export class LogSource implements DataSource {
     return candlesFrom(await this.tape(address), interval);
   }
 
+  /**
+   * The collateral, not the market.
+   *
+   * `positionsFrom` needs one number from the chain — the token's decimals, to
+   * turn what was paid into a price per share — and this used to ask
+   * `getMarket` for it, which reads thirteen values and a 0G Storage document.
+   * On a leaderboard that is every market's full state fetched a second time,
+   * after the list has already fetched it, to learn a constant. The positions
+   * themselves come from the tape and are byte-for-byte what they were.
+   */
   async getPositions(address: `0x${string}`): Promise<Position[]> {
-    const [market, trades] = await Promise.all([this.chain.getMarket(address), this.tape(address)]);
-    return positionsFrom(trades, market.collateral.decimals);
+    const [collateral, trades] = await Promise.all([this.chain.collateralOf(address), this.tape(address)]);
+    return positionsFrom(trades, collateral.decimals);
   }
 
   // ── still out of reach, and it is not the log's fault ────────────────────

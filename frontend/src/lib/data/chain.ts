@@ -1,6 +1,7 @@
 import {
   createPublicClient,
   defineChain,
+  fallback,
   hexToString,
   http,
   keccak256,
@@ -77,6 +78,115 @@ const AGENT_REGISTRY_KEY = keccak256(toBytes("AGENT_REGISTRY"));
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const ZERO_ROOT = `0x${"0".repeat(64)}`;
 
+/**
+ * How many JSON-RPC calls may be in flight to the endpoint at one time.
+ *
+ * Measured, not chosen. Ask the public Galileo endpoint for more than fifty at
+ * once and it answers the excess with, verbatim:
+ *
+ *     -32005 request rate exceeded: Too many requests (exceeds 50),
+ *            try again after 11ms
+ *
+ * one error per call over the line. The leaderboard's cold read is a few hundred
+ * calls wide, so without a ceiling it trips this on every load — which is what
+ * "the page never finishes" actually was. Batching does not help by itself: the
+ * cap counts CALLS, and a batch of fifty is fifty of them.
+ *
+ * Forty rather than fifty because the limit is the endpoint's and the margin is
+ * ours: a page has other reads in the air, and being one over costs a failed
+ * call while being ten under costs a fraction of a round trip.
+ */
+const IN_FLIGHT_CALLS = 40;
+
+/**
+ * How many JSON-RPC calls may share one HTTP request.
+ *
+ * Kept at half the in-flight budget so two full batches fit inside it — one
+ * wider than the budget could never be admitted on a busy line, and the gate
+ * would have to let it through anyway.
+ */
+const BATCH_SIZE = 20;
+
+/**
+ * How long the transport holds a call back looking for company, in ms.
+ *
+ * Reads that sit either side of an `await` — the market list's `marketAt`
+ * enumeration and the state reads that follow it — are issued in different ticks
+ * and would otherwise never share a request. Twelve milliseconds is long enough
+ * to catch them and short enough to vanish beside a round trip to a public
+ * endpoint, which costs on the order of a second.
+ */
+const BATCH_WAIT_MS = 12;
+
+/**
+ * Batch JSON-RPC where the endpoint accepts it, one call per request where it
+ * does not.
+ *
+ * The public Galileo endpoint takes batches today, but a UI that assumed so
+ * would go completely blank against one that does not — and "the chain is down"
+ * is exactly the wrong thing to tell a reader whose only real problem is that
+ * their RPC dislikes arrays. `fallback` retries the individual call on an
+ * unbatched transport whenever the batched one errors, so the page degrades to
+ * the request pattern it had before batching existed rather than failing.
+ *
+ * Batch JSON-RPC rather than Multicall3, deliberately. Multicall would need a
+ * contract to be deployed on every chain this points at — including the local
+ * anvil `make demo` brings up — and it can only aggregate `eth_call`. Half the
+ * traffic here is `eth_getLogs` and `eth_getBlockByNumber`, which it cannot
+ * touch at all.
+ */
+function batchedHttp(rpcUrl: string): Transport {
+  // ONE gate, shared by both transports. Two would each be allowed the whole
+  // budget, and the degraded path — which fires the most calls of all — is
+  // exactly where the ceiling matters most.
+  const fetchFn = callGate(IN_FLIGHT_CALLS);
+  return fallback([
+    http(rpcUrl, {batch: {batchSize: BATCH_SIZE, wait: BATCH_WAIT_MS}, fetchFn}),
+    http(rpcUrl, {fetchFn}),
+  ]);
+}
+
+/** How many JSON-RPC calls one HTTP body carries. */
+function callsIn(body: BodyInit | null | undefined): number {
+  if (typeof body !== "string") return 1;
+  try {
+    const parsed: unknown = JSON.parse(body);
+    return Array.isArray(parsed) ? Math.max(parsed.length, 1) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
+ * A `fetch` that will not let more than `limit` JSON-RPC calls be outstanding.
+ *
+ * It counts CALLS rather than requests, which is the only counting that matches
+ * what the endpoint measures: a single batched request can be worth twenty of
+ * them, and a degraded client sends the same twenty as twenty requests. Both
+ * must be held to the same ceiling or the ceiling means nothing.
+ */
+function callGate(limit: number): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
+  let inFlight = 0;
+  const waiting: Array<() => void> = [];
+
+  return async (input, init) => {
+    const cost = callsIn(init?.body);
+    // `inFlight > 0` is the escape hatch for a request wider than the whole
+    // budget: it waits for a quiet line and then goes regardless, because a
+    // request that can never fit would otherwise wait forever.
+    while (inFlight > 0 && inFlight + cost > limit) {
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    }
+    inFlight += cost;
+    try {
+      return await fetch(input, init);
+    } finally {
+      inFlight -= cost;
+      while (waiting.length > 0 && inFlight < limit) waiting.shift()!();
+    }
+  };
+}
+
 export interface ChainSourceConfig {
   rpcUrl: string;
   chainId: number;
@@ -124,8 +234,23 @@ export class ChainSource implements DataSource {
   private readonly specs: ZgStore | null;
   /** `undefined` = not looked up yet; `null` = looked, and there is none. */
   private registryAddress: `0x${string}` | null | undefined;
-  /** Token metadata never changes, and a market list would otherwise re-read it once per row. */
-  private readonly tokens = new Map<string, CollateralInfo>();
+  /**
+   * Token metadata by token address. Keyed on the PROMISE rather than the
+   * resolved value, which is the whole point: a market list reads every row at
+   * once, so with a value cache all thirteen rows reach the lookup before the
+   * first one has answered, every one of them misses, and one token's symbol and
+   * decimals get read twenty-six times. Storing the in-flight promise is what
+   * makes the cache actually catch the case it was written for.
+   */
+  private readonly tokens = new Map<string, Promise<CollateralInfo>>();
+  /**
+   * Market address → its collateral.
+   *
+   * Kept for the life of the source, and safe to: `Market.collateral` is
+   * assigned once in `initialize` and never written again, so a hit here cannot
+   * go stale the way a price or a status could.
+   */
+  private readonly marketTokens = new Map<string, Promise<CollateralInfo>>();
 
   constructor(config: ChainSourceConfig) {
     this.factory = config.factory;
@@ -145,7 +270,7 @@ export class ChainSource implements DataSource {
         nativeCurrency: {name: "0G", symbol: "0G", decimals: 18},
         rpcUrls: {default: {http: [config.rpcUrl]}},
       }),
-      transport: config.transport ?? http(config.rpcUrl),
+      transport: config.transport ?? batchedHttp(config.rpcUrl),
     });
   }
 
@@ -153,16 +278,52 @@ export class ChainSource implements DataSource {
     throw new CapabilityUnavailableError(capability, this.mode);
   }
 
-  private async collateralInfo(address: `0x${string}`): Promise<CollateralInfo> {
-    const cached = this.tokens.get(address.toLowerCase());
+  /**
+   * Holds a promise in a cache, and forgets it if it rejects.
+   *
+   * Without the second half a single failed read would be remembered as the
+   * answer for the rest of the session, and a source that recovered on its own
+   * would keep reporting the outage.
+   */
+  private remember<T>(cache: Map<string, Promise<T>>, key: string, pending: Promise<T>): Promise<T> {
+    cache.set(key, pending);
+    pending.catch(() => {
+      if (cache.get(key) === pending) cache.delete(key);
+    });
+    return pending;
+  }
+
+  private collateralInfo(address: `0x${string}`): Promise<CollateralInfo> {
+    const key = address.toLowerCase();
+    const cached = this.tokens.get(key);
     if (cached) return cached;
-    const [symbol, decimals] = await Promise.all([
+    const pending = Promise.all([
       this.client.readContract({address, abi: ERC20_ABI, functionName: "symbol"}),
       this.client.readContract({address, abi: ERC20_ABI, functionName: "decimals"}),
-    ]);
-    const info: CollateralInfo = {address, symbol, decimals};
-    this.tokens.set(address.toLowerCase(), info);
-    return info;
+    ]).then(([symbol, decimals]): CollateralInfo => ({address, symbol, decimals}));
+    return this.remember(this.tokens, key, pending);
+  }
+
+  /**
+   * A market's collateral on its own, for a caller that needs the token and not
+   * the market.
+   *
+   * `positionsFrom` needs exactly one number out of a market — its collateral's
+   * decimals — and the only way to ask for it used to be `getMarket`, which
+   * reads thirteen values and a 0G Storage document to answer it. Across a
+   * leaderboard that was thirteen `eth_call`s per market spent on a constant.
+   *
+   * Free after `readMarket` has run, which is the normal order: the list is what
+   * tells the page which markets to ask about.
+   */
+  collateralOf(address: `0x${string}`): Promise<CollateralInfo> {
+    const key = address.toLowerCase();
+    const cached = this.marketTokens.get(key);
+    if (cached) return cached;
+    const pending = this.client
+      .readContract({address, abi: MARKET_ABI, functionName: "collateral"})
+      .then((token) => this.collateralInfo(token));
+    return this.remember(this.marketTokens, key, pending);
   }
 
   /**
@@ -198,6 +359,16 @@ export class ChainSource implements DataSource {
     if (statusLabel === undefined) throw new Error(`Market ${address} returned unknown status ${status}`);
     if (tierLabel === undefined) throw new Error(`Market ${address} returned unknown tier ${tier}`);
 
+    // Started here rather than awaited at the bottom, and registered against the
+    // MARKET as well as the token: the storage fetch below goes to a different
+    // network entirely and there is no reason for the two to queue behind each
+    // other. Registering it is what makes a later `collateralOf` for this market
+    // free, which is how the leaderboard reads a position book without also
+    // re-reading every market it belongs to.
+    const key = address.toLowerCase();
+    const token =
+      this.marketTokens.get(key) ?? this.remember(this.marketTokens, key, this.collateralInfo(collateral));
+
     // Awaited after the enum checks so a market this UI cannot describe fails on
     // that, not on a storage fetch it was never going to be able to use.
     const spec = this.specs ? await this.specs.getSpec(specRoot) : null;
@@ -221,7 +392,7 @@ export class ChainSource implements DataSource {
         poolWad,
         createdAt: null,
         tradingEnd: Number(tradingEnd),
-        collateral: await this.collateralInfo(collateral),
+        collateral: await token,
       },
     };
   }
