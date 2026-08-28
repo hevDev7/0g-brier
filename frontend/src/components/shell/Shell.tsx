@@ -3,7 +3,7 @@
 import {useState} from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
-import {BookOpen, LineChart, Menu, Radio, Trophy, X} from "lucide-react";
+import {BookOpen, FileText, LineChart, Menu, Radio, Trophy, X} from "lucide-react";
 import {ModeIndicator} from "./ModeIndicator";
 import {ThemeToggle} from "./ThemeToggle";
 
@@ -11,6 +11,7 @@ const NAV = [
   {href: "/", label: "Markets", icon: LineChart},
   {href: "/leaderboard", label: "Leaderboard", icon: Trophy},
   {href: "/portfolio", label: "Portfolio", icon: BookOpen},
+  {href: "/docs", label: "Docs", icon: FileText},
 ] as const;
 
 /** `/market/[address]` belongs to Markets, so the section stays lit while inspecting one. */
