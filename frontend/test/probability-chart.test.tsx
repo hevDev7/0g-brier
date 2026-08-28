@@ -142,3 +142,39 @@ describe("ProbabilityChart — choosing a bucket width", () => {
     expect(screen.getByTestId("probability-chart")).toHaveTextContent(/narrower bucket/i);
   });
 });
+
+/**
+ * The axis moved to the right so that a reader following a curve arrives at its
+ * label, instead of tracking back across the plot to find one.
+ */
+describe("ProbabilityChart — the value each line ends at", () => {
+  it("prints the last value against each line, not the nearest gridline", () => {
+    // Closes at 59%, which sits between the 50% and 75% gridlines.
+    render(<ProbabilityChart candles={cs} interval="1h" onIntervalChange={() => {}} />);
+    const yes = screen.getByTestId("probability-chart").querySelector('[data-endlabel="yes"]');
+    const no = screen.getByTestId("probability-chart").querySelector('[data-endlabel="no"]');
+    expect(yes).toHaveTextContent("59.0%");
+    expect(no).toHaveTextContent("41.0%");
+  });
+
+  it("puts the labels on the right, past the plot", () => {
+    const {container} = render(
+      <ProbabilityChart candles={cs} interval="1h" onIntervalChange={() => {}} />,
+    );
+    const yes = container.querySelector('[data-endlabel="yes"]')!;
+    // The plot ends at width - padRight; every label sits beyond it.
+    expect(Number(yes.getAttribute("x"))).toBeGreaterThan(600 - 54);
+  });
+
+  /**
+   * The fixed-scale claim still has to hold, so the gridline labels remain — except
+   * where a badge covers one. Two numbers a few pixels apart invite a reader to take
+   * the round one for the real one.
+   */
+  it("keeps the 0–100% gridline labels, minus any a badge sits on", () => {
+    render(<ProbabilityChart candles={cs} interval="1h" onIntervalChange={() => {}} />);
+    for (const label of ["0%", "25%", "100%"]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
+  });
+});

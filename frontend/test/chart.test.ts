@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {areaPath, seriesPath, yTicks, xTicks, type Box} from "@/lib/chart";
+import {areaPath, endLabels, seriesPath, valueY, yTicks, xTicks, type Box} from "@/lib/chart";
 import type {Candle} from "@/lib/data/types";
 
 const WAD = 10n ** 18n;
@@ -97,5 +97,53 @@ describe("areaPath", () => {
   it("never emits NaN, even for a single bucket", () => {
     const one = [candles[0]!];
     expect(areaPath(one, box, {minT: 0, maxT: 0}, (c) => c.close)).not.toContain("NaN");
+  });
+});
+
+/**
+ * The point of moving the axis: a gridline says 75%, but a line finishing just under
+ * it is at 72.7%, and a reader tracing the endpoint to the nearest label reads the
+ * wrong number. The badge carries what the line actually reached.
+ */
+describe("endLabels", () => {
+  const box: Box = {width: 600, height: 300, padLeft: 8, padRight: 54, padTop: 8, padBottom: 24};
+  const pct = (n: number) => (WAD * BigInt(n)) / 100n;
+
+  it("places a label at the value's own height", () => {
+    const [only] = endLabels([{key: "yes", value: pct(50)}], box);
+    expect(only!.y).toBe(valueY(pct(50), box));
+  });
+
+  /** Two labels on top of each other are not readable at all. */
+  it("pushes two labels apart when they would collide", () => {
+    const ends = endLabels(
+      [{key: "yes", value: pct(50)}, {key: "no", value: pct(50)}],
+      box,
+      13,
+    );
+    expect(Math.abs(ends[0]!.y - ends[1]!.y)).toBeGreaterThanOrEqual(13);
+  });
+
+  /** …by the SAME amount each, so neither is further from its line than the other. */
+  it("moves both by half the shortfall, not one out of the way of the other", () => {
+    const at = valueY(pct(50), box);
+    const ends = endLabels([{key: "yes", value: pct(50)}, {key: "no", value: pct(50)}], box, 13);
+    const drifts = ends.map((e) => Math.abs(e.y - at));
+    expect(drifts[0]).toBeCloseTo(drifts[1]!, 5);
+  });
+
+  it("leaves labels alone when they already clear each other", () => {
+    const ends = endLabels([{key: "yes", value: pct(90)}, {key: "no", value: pct(10)}], box, 13);
+    expect(ends.find((e) => e.key === "yes")!.y).toBe(valueY(pct(90), box));
+    expect(ends.find((e) => e.key === "no")!.y).toBe(valueY(pct(10), box));
+  });
+
+  /** A series at 0% or 100% must not print off the canvas. */
+  it("keeps an extreme value inside the plot", () => {
+    const ends = endLabels([{key: "yes", value: WAD}, {key: "no", value: 0n}], box, 13);
+    for (const e of ends) {
+      expect(e.y).toBeGreaterThanOrEqual(box.padTop);
+      expect(e.y).toBeLessThanOrEqual(box.height - box.padBottom);
+    }
   });
 });

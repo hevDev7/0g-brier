@@ -100,6 +100,51 @@ export function yTicks(box: Box): {y: number; label: string}[] {
   }));
 }
 
+/** Where a probability sits on the plot, in viewBox units. */
+export function valueY(value: bigint, box: Box): number {
+  const h = plotBottom(box) - plotTop(box);
+  return round(plotBottom(box) - wadToUnit(value) * h);
+}
+
+/**
+ * Where each series ENDS, so its last value can be printed against it.
+ *
+ * The point of the exercise: a gridline says 75%, but the line finishing just under
+ * it is at 72.7%, and a reader tracing the endpoint to the nearest label reads the
+ * wrong number. The badge carries the value the line actually reached.
+ *
+ * Two series ending close together would print one label over the other, so they are
+ * nudged apart — the LOWER one down, the upper one up, by half the shortfall each, so
+ * neither is moved further from its line than the other. A label a few pixels off its
+ * endpoint is still unambiguous; two overlapping labels are not readable at all.
+ *
+ * @param minGap the smallest vertical distance two labels may sit at, in viewBox units.
+ */
+export function endLabels(
+  series: readonly {value: bigint; key: string}[],
+  box: Box,
+  minGap = 13,
+): {key: string; y: number; value: bigint}[] {
+  const placed = series
+    .map((s) => ({key: s.key, value: s.value, y: valueY(s.value, box)}))
+    .sort((a, b) => a.y - b.y);
+
+  for (let i = 1; i < placed.length; i++) {
+    const above = placed[i - 1]!;
+    const below = placed[i]!;
+    const gap = below.y - above.y;
+    if (gap >= minGap) continue;
+    const push = (minGap - gap) / 2;
+    above.y -= push;
+    below.y += push;
+  }
+  // Kept inside the plot, so a series at 0% or 100% does not print off the edge.
+  return placed.map((p) => ({
+    ...p,
+    y: round(Math.min(Math.max(p.y, plotTop(box) + 4), plotBottom(box) - 2)),
+  }));
+}
+
 const TWO_DAYS = 2 * 86_400;
 
 /**

@@ -1,11 +1,13 @@
 import {TrendingUp} from "lucide-react";
 import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {formatProbability} from "@/lib/format";
-import {areaPath, seriesPath, xTicks, yTicks, type Box} from "@/lib/chart";
+import {areaPath, endLabels, seriesPath, valueY, xTicks, yTicks, type Box} from "@/lib/chart";
 import type {Candle, Interval} from "@/lib/data/types";
 
 const WAD = 10n ** 18n;
-const BOX: Box = {width: 600, height: 300, padLeft: 40, padRight: 8, padTop: 8, padBottom: 24};
+// The axis sits on the RIGHT, where the lines end. A reader following a curve
+// arrives at its label instead of tracking back across the plot to find one.
+const BOX: Box = {width: 600, height: 300, padLeft: 8, padRight: 54, padTop: 8, padBottom: 24};
 
 /**
  * The Y axis is fixed at 0–100% and is never scaled to the data range: a market
@@ -126,6 +128,23 @@ export function ProbabilityChart({
   // is ALREADY a probability (spec §5.1) — there is no arithmetic here beyond
   // the complement WAD - close, which is exact because the two probabilities are
   // guaranteed to sum to WAD by construction, not by rounding.
+  const last = candles[candles.length - 1]!;
+  // The last CLOSE, which is the last observation and not "now" — this panel is
+  // headed Observation history and the badge inherits that meaning.
+  const ends = endLabels(
+    [
+      {key: "yes", value: last.close},
+      {key: "no", value: WAD - last.close},
+    ],
+    BOX,
+  );
+  // Where each line genuinely finishes, before any nudging and without the clamp
+  // `endLabels` applies to keep a label on the canvas. The leader has to point at the
+  // curve, not at where the label was allowed to go.
+  const endY: Record<string, number> = {
+    yes: valueY(last.close, BOX),
+    no: valueY(WAD - last.close, BOX),
+  };
   const yes = seriesPath(candles, BOX, extent, (c) => c.close);
   const yesArea = areaPath(candles, BOX, extent, (c) => c.close);
   const no = seriesPath(candles, BOX, extent, (c) => WAD - c.close);
@@ -156,9 +175,19 @@ export function ProbabilityChart({
                   className="stroke-border"
                   strokeWidth={1}
                 />
-                <text x={0} y={t.y + 4} className="fill-text-faint text-[10px]">
-                  {t.label}
-                </text>
+                {/* Suppressed where an end badge would sit on top of it. The badge
+                    carries the value the line actually reached; the gridline only says
+                    which quarter it is in, and two numbers a few pixels apart invite a
+                    reader to take the round one for the real one. */}
+                {ends.every((e) => Math.abs(e.y - t.y) > 9) && (
+                  <text
+                    x={BOX.width - BOX.padRight + 6}
+                    y={t.y + 4}
+                    className="fill-text-faint text-[10px]"
+                  >
+                    {t.label}
+                  </text>
+                )}
               </g>
             ))}
             {xTicks(candles, BOX, extent, 5).map((t) => (
@@ -177,6 +206,29 @@ export function ProbabilityChart({
             <path data-area="yes" d={yesArea} className="fill-pos/10" stroke="none" />
             <path data-series="no" d={no} fill="none" className="stroke-neg" strokeWidth={1.5} />
             <path data-series="yes" d={yes} fill="none" className="stroke-pos" strokeWidth={1.5} />
+            {/* The value each line actually finished at, against the line. A leader
+                runs from the endpoint to the label when the two were nudged apart, so
+                a reader is never left guessing which badge belongs to which curve. */}
+            {ends.map((e) => (
+              <g key={e.key}>
+                <line
+                  x1={BOX.width - BOX.padRight}
+                  x2={BOX.width - BOX.padRight + 4}
+                  y1={endY[e.key]}
+                  y2={e.y}
+                  className={e.key === "yes" ? "stroke-pos" : "stroke-neg"}
+                  strokeWidth={1}
+                />
+                <text
+                  data-endlabel={e.key}
+                  x={BOX.width - BOX.padRight + 6}
+                  y={e.y + 3.5}
+                  className={`text-[10px] font-medium ${e.key === "yes" ? "fill-pos" : "fill-neg"}`}
+                >
+                  {formatProbability(e.value)}
+                </text>
+              </g>
+            ))}
           </svg>
         </div>
         <div className="mt-1 flex gap-4 text-[11px]">
