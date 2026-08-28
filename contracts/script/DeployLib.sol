@@ -13,9 +13,30 @@ library DeployLib {
     /// @dev The local anvil chain. The only chain where an unset operational address may fall
     ///      back to the deployer's own key.
     uint256 internal constant LOCAL_CHAIN_ID = 31337;
+    uint256 internal constant GALILEO_CHAIN_ID = 16602;
+    uint256 internal constant MAINNET_CHAIN_ID = 16661;
+
+    /// @notice Every key a deployment answers to, resolved in one place so that no
+    ///         chain can be given fewer of them than it needs.
+    struct Roles {
+        /// @dev Becomes the timelock's proposer and executor. Intended to be a
+        ///      multisig; nothing here can check that it is one, which is why the
+        ///      distinctness rules below matter.
+        address governance;
+        /// @dev A single key by design (spec §13.3). It may `pause()` and `void()` a
+        ///      market that has not closed, and nothing else — it cannot move funds and
+        ///      cannot change an outcome. Fast action needs one signature.
+        address guardian;
+        address treasury;
+        address curatorSigner;
+    }
 
     error TreasuryUnset(uint256 chainId);
     error CuratorSignerUnset(uint256 chainId);
+    error GovernanceUnset(uint256 chainId);
+    error GuardianUnset(uint256 chainId);
+    error RoleHeldByDeployer(uint256 chainId, bytes32 role);
+    error RolesNotDistinct(bytes32 a, bytes32 b);
 
     /// @notice Resolves TREASURY and CURATOR_SIGNER, refusing to invent them off-chain.
     ///
@@ -39,6 +60,51 @@ library DeployLib {
         if (treasury == address(0)) revert TreasuryUnset(chainId);
         if (curatorSigner == address(0)) revert CuratorSignerUnset(chainId);
         return (treasury, curatorSigner);
+    }
+
+    /// @notice Resolve every role for a chain, and refuse the ones that must not ship.
+    ///
+    /// @dev The rules get stricter as the chain gets more real, because the same
+    ///      arrangement means different things on each:
+    ///
+    ///      - 31337: the deployer fills every role. It is a throwaway chain and a
+    ///        second key would only be ceremony.
+    ///      - Any other TESTNET: every role must be named. They MAY coincide — a
+    ///        testnet lifecycle often wants one key driving everything — but naming
+    ///        them forces the choice to be deliberate rather than defaulted.
+    ///      - MAINNET: every role must be named, none may be the deployer, and
+    ///        governance must differ from the guardian. The guardian exists precisely
+    ///        so that fast action does not need the key that can change the rules; one
+    ///        key holding both is the arrangement this function exists to refuse.
+    ///
+    ///      Pure, and takes the chain id as an argument, so the policy can be tested
+    ///      without deploying anything.
+    function resolveRoles(uint256 chainId, Roles memory r, address deployer) internal pure returns (Roles memory) {
+        if (chainId == LOCAL_CHAIN_ID) {
+            return Roles({
+                governance: r.governance == address(0) ? deployer : r.governance,
+                guardian: r.guardian == address(0) ? deployer : r.guardian,
+                treasury: r.treasury == address(0) ? deployer : r.treasury,
+                curatorSigner: r.curatorSigner == address(0) ? deployer : r.curatorSigner
+            });
+        }
+
+        if (r.governance == address(0)) revert GovernanceUnset(chainId);
+        if (r.guardian == address(0)) revert GuardianUnset(chainId);
+        if (r.treasury == address(0)) revert TreasuryUnset(chainId);
+        if (r.curatorSigner == address(0)) revert CuratorSignerUnset(chainId);
+
+        if (chainId == MAINNET_CHAIN_ID) {
+            if (r.governance == deployer) revert RoleHeldByDeployer(chainId, "GOVERNANCE");
+            if (r.guardian == deployer) revert RoleHeldByDeployer(chainId, "GUARDIAN");
+            if (r.treasury == deployer) revert RoleHeldByDeployer(chainId, "TREASURY");
+            if (r.curatorSigner == deployer) revert RoleHeldByDeployer(chainId, "CURATOR_SIGNER");
+            // The one pair that must not be the same address. A guardian that is also
+            // governance can pause the protocol AND rewrite the rules under it, which
+            // is the concentration the separation exists to prevent.
+            if (r.governance == r.guardian) revert RolesNotDistinct("GOVERNANCE", "GUARDIAN");
+        }
+        return r;
     }
 
     function applyDefaults(ConfigRegistry config, address collateral) internal {

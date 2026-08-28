@@ -11,10 +11,24 @@ import {OutcomeShares} from "../src/core/OutcomeShares.sol";
 import {Market} from "../src/core/Market.sol";
 import {MarketFactory} from "../src/core/MarketFactory.sol";
 import {ResolutionModule} from "../src/core/ResolutionModule.sol";
+import {AgentRegistry} from "../src/core/AgentRegistry.sol";
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {DeployLib} from "./DeployLib.sol";
 
-/// @notice Deploys P0+P1: MockUSDC, ConfigRegistry, OutcomeShares, the Market implementation,
-///         and MarketFactory (both behind an ERC1967Proxy) + the default parameters.
+/// @notice Deploys the protocol: collateral, ConfigRegistry, OutcomeShares, the Market
+///         implementation, MarketFactory, AgentRegistry and ResolutionModule, plus a
+///         TimelockController that governs the upgradeable ones.
+///
+/// @dev Two refusals are built in, and both exist because of what the live testnet
+///      deployment looks like — one key holding every role.
+///
+///      ROLES: `DeployLib.resolveRoles` refuses a mainnet deployment where any role is
+///      the deployer's, or where the guardian is also governance. See DeployRoles.t.sol.
+///
+///      COLLATERAL: MockUSDC has an open `mintTo`. It is deployed on a testnet and
+///      NEVER on mainnet, where `COLLATERAL` must name a real token. A mock stablecoin
+///      on mainnet is not a smaller version of the real thing; it is a market whose
+///      collateral anyone can print.
 contract Deploy is Script {
     /// @dev Grouped rather than passed positionally. Ten bare addresses in a row exhausts
     ///      the EVM stack ("stack too deep"), and well before that it stops being possible
@@ -29,6 +43,9 @@ contract Deploy is Script {
         address usdc;
         address resolutionModule;
         address resolutionModuleImpl;
+        address agentRegistry;
+        address agentRegistryImpl;
+        address timelock;
         uint256 fromBlock;
     }
 
@@ -36,83 +53,101 @@ contract Deploy is Script {
         uint256 pk = vm.envUint("DEPLOYER_KEY");
         address deployer = vm.addr(pk);
 
-        // Resolved BEFORE broadcasting, so a misconfigured non-local deployment fails without
-        // having sent a single transaction. See `DeployLib.resolveOperationalAddresses`.
-        (address treasury, address curatorSigner) = DeployLib.resolveOperationalAddresses(
-            block.chainid, vm.envOr("TREASURY", address(0)), vm.envOr("CURATOR_SIGNER", address(0)), deployer
+        // Resolved BEFORE broadcasting, so a misconfigured deployment fails without having
+        // sent a single transaction. On mainnet this is what refuses a deployer who kept
+        // every role for itself — see DeployRoles.t.sol.
+        DeployLib.Roles memory roles = DeployLib.resolveRoles(
+            block.chainid,
+            DeployLib.Roles({
+                governance: vm.envOr("GOVERNANCE", address(0)),
+                guardian: vm.envOr("GUARDIAN", address(0)),
+                treasury: vm.envOr("TREASURY", address(0)),
+                curatorSigner: vm.envOr("CURATOR_SIGNER", address(0))
+            }),
+            deployer
         );
 
-        // A LOWER BOUND on the deployment block, not the block itself: a forge script sends its
-        // broadcast after the body has run, so nothing here can observe the block the contracts
-        // actually land in. Lower is the safe direction — an indexer that backfills from too
-        // early only wastes time, whereas one that starts too late misses events permanently.
-        // On a fresh anvil this is 0, which is a correct if uninformative lower bound.
-        uint256 fromBlock = block.number;
+        // Accumulated into the manifest as we go, rather than into a dozen locals. Past
+        // about eight addresses `run` exhausts the EVM stack, and long before that a wall
+        // of same-typed names stops being readable.
+        Manifest memory m;
+        // A LOWER BOUND on the deployment block, not the block itself: a forge script sends
+        // its broadcast after the body has run, so nothing here can observe the block the
+        // contracts actually land in. Lower is the safe direction — an indexer that
+        // backfills from too early only wastes time, whereas one that starts too late
+        // misses events permanently.
+        m.fromBlock = block.number;
 
         vm.startBroadcast(pk);
 
-        MockUSDC usdc = new MockUSDC();
-
-        ConfigRegistry impl = new ConfigRegistry();
+        m.usdc = _collateral();
+        m.configImpl = address(new ConfigRegistry());
+        // The DEPLOYER owns the registry through the rest of this script, because every
+        // `setParam` and `setAddress` below is owner-gated. Ownership is handed to the
+        // timelock at the end, once there is nothing left to configure.
         ConfigRegistry config = ConfigRegistry(
-            address(new ERC1967Proxy(address(impl), abi.encodeCall(ConfigRegistry.initialize, (deployer, deployer))))
-        );
-        DeployLib.applyDefaults(config, address(usdc));
-
-        // The order binds: MarketFactory SNAPSHOTS the OutcomeShares address at initialize,
-        // while OutcomeShares' `setRegistry` needs the factory address and can be called only
-        // ONCE in its lifetime, by its deployer. So shares is born first, the factory follows,
-        // and then the loop is closed.
-        OutcomeShares sharesContract = new OutcomeShares("https://delphi.0g/{id}.json");
-        Market marketImpl = new Market();
-
-        MarketFactory factoryImpl = new MarketFactory();
-        MarketFactory factory = MarketFactory(
             address(
-                new ERC1967Proxy(
-                    address(factoryImpl),
-                    abi.encodeCall(
-                        MarketFactory.initialize,
-                        (deployer, address(config), address(sharesContract), address(marketImpl))
-                    )
-                )
+                new ERC1967Proxy(m.configImpl, abi.encodeCall(ConfigRegistry.initialize, (deployer, roles.guardian)))
             )
         );
-        sharesContract.setRegistry(address(factory));
-        config.setAddress(ConfigKeys.MARKET_FACTORY, address(factory));
-        config.setAddress(ConfigKeys.OUTCOME_SHARES, address(sharesContract));
-        config.setAddress(ConfigKeys.TREASURY, treasury);
-        config.setAddress(ConfigKeys.CURATOR_SIGNER, curatorSigner);
+        m.configProxy = address(config);
+        DeployLib.applyDefaults(config, m.usdc);
+
+        m.outcomeShares = address(new OutcomeShares("https://delphi.0g/{id}.json"));
+        m.marketImplementation = address(new Market());
+        m.marketFactory = _deployFactory(config, deployer, m);
+
+        config.setAddress(ConfigKeys.MARKET_FACTORY, m.marketFactory);
+        config.setAddress(ConfigKeys.OUTCOME_SHARES, m.outcomeShares);
+        config.setAddress(ConfigKeys.TREASURY, roles.treasury);
+        config.setAddress(ConfigKeys.CURATOR_SIGNER, roles.curatorSigner);
+        config.setAddress(ConfigKeys.STAKE_TOKEN, m.usdc);
 
         // After MARKET_FACTORY, not before: the module checks every market it records
         // against the factory, and initialising it into a registry that cannot answer
         // `isMarket` would leave it unable to anchor anything.
-        (address resolutionModule, address resolutionImpl) = _deployResolutionModule(config, deployer);
+        (m.agentRegistry, m.agentRegistryImpl) = _deployAgentRegistry(config, deployer);
+        (m.resolutionModule, m.resolutionModuleImpl) = _deployResolutionModule(config, deployer);
+        m.timelock = _handOver(config, deployer, roles.governance, m.agentRegistry, m.resolutionModule);
 
         vm.stopBroadcast();
 
-        _writeManifest(
-            Manifest({
-                configProxy: address(config),
-                configImpl: address(impl),
-                outcomeShares: address(sharesContract),
-                marketImplementation: address(marketImpl),
-                marketFactory: address(factory),
-                marketFactoryImpl: address(factoryImpl),
-                usdc: address(usdc),
-                resolutionModule: resolutionModule,
-                resolutionModuleImpl: resolutionImpl,
-                fromBlock: fromBlock
-            })
-        );
+        _writeManifest(m);
+        _report(m, roles);
+    }
 
-        console2.log("ConfigRegistry (proxy):", address(config));
-        console2.log("OutcomeShares:         ", address(sharesContract));
-        console2.log("MarketFactory (proxy): ", address(factory));
-        console2.log("MockUSDC:              ", address(usdc));
-        console2.log("Treasury:              ", treasury);
-        console2.log("Curator signer:        ", curatorSigner);
-        console2.log("ResolutionModule:      ", resolutionModule);
+    /// @dev The order binds: MarketFactory SNAPSHOTS the OutcomeShares address at
+    ///      initialize, while `setRegistry` needs the factory and can be called only ONCE
+    ///      in its lifetime, by its deployer. Shares is born first, the factory follows,
+    ///      and then the loop is closed.
+    function _deployFactory(ConfigRegistry config, address deployer, Manifest memory m)
+        internal
+        returns (address factory)
+    {
+        m.marketFactoryImpl = address(new MarketFactory());
+        factory = address(
+            new ERC1967Proxy(
+                m.marketFactoryImpl,
+                abi.encodeCall(
+                    MarketFactory.initialize, (deployer, address(config), m.outcomeShares, m.marketImplementation)
+                )
+            )
+        );
+        OutcomeShares(m.outcomeShares).setRegistry(factory);
+    }
+
+    function _report(Manifest memory m, DeployLib.Roles memory roles) internal pure {
+        console2.log("ConfigRegistry (proxy):", m.configProxy);
+        console2.log("OutcomeShares:         ", m.outcomeShares);
+        console2.log("MarketFactory (proxy): ", m.marketFactory);
+        console2.log("AgentRegistry:         ", m.agentRegistry);
+        console2.log("ResolutionModule:      ", m.resolutionModule);
+        console2.log("Collateral:            ", m.usdc);
+        console2.log("Timelock:              ", m.timelock);
+        console2.log("Governance:            ", roles.governance);
+        console2.log("Guardian:              ", roles.guardian);
+        console2.log("Treasury:              ", roles.treasury);
+        console2.log("Curator signer:        ", roles.curatorSigner);
     }
 
     /// @dev Split out of `run` because `run` had run out of stack slots, and it earns its
@@ -120,6 +155,83 @@ contract Deploy is Script {
     ///      and for a testnet and wrong beyond them. A resolver key signs a settlement for
     ///      every market; it should not also be the key that can replace this contract.
     ///      Pass RESOLVER to separate them.
+    /// @notice The collateral a market settles in.
+    ///
+    /// @dev MockUSDC has an open `mintTo` and is deployed ONLY where that is harmless.
+    ///      On mainnet `COLLATERAL` must name a real token: a mock stablecoin there is
+    ///      not a smaller version of the real thing, it is a market whose collateral
+    ///      anyone can print at will.
+    function _collateral() internal returns (address) {
+        address supplied = vm.envOr("COLLATERAL", address(0));
+        if (block.chainid == DeployLib.MAINNET_CHAIN_ID) {
+            require(supplied != address(0), "Deploy: COLLATERAL must name a real token on mainnet");
+            require(supplied.code.length > 0, "Deploy: COLLATERAL has no code");
+            return supplied;
+        }
+        if (supplied != address(0)) return supplied;
+        return address(new MockUSDC());
+    }
+
+    function _deployAgentRegistry(ConfigRegistry config, address deployer)
+        internal
+        returns (address registry, address implementation)
+    {
+        AgentRegistry impl = new AgentRegistry();
+        AgentRegistry deployed = AgentRegistry(
+            address(
+                new ERC1967Proxy(address(impl), abi.encodeCall(AgentRegistry.initialize, (deployer, address(config))))
+            )
+        );
+        config.setAddress(ConfigKeys.AGENT_REGISTRY, address(deployed));
+        return (address(deployed), address(impl));
+    }
+
+    /// @notice Put the upgradeable contracts under a timelock and start handing them over.
+    ///
+    /// @dev The timelock is the ADMIN of every upgrade path, which is what stops one key
+    ///      being able to replace the logic under a live market (spec §13.3). Governance
+    ///      proposes and executes; nobody holds the timelock's own admin role, so its
+    ///      delay cannot be lowered by whoever happens to hold a key.
+    ///
+    ///      `transferOwnership` here is the FIRST half of a two-step handover. Ownership
+    ///      does not move until governance calls `acceptOwnership` through the timelock,
+    ///      and that is deliberate: a one-step transfer to a wrong address is
+    ///      unrecoverable, and these contracts are the ones you least want to lose. Until
+    ///      that acceptance lands, the deployer still owns them — a real window, and the
+    ///      script says so rather than implying the job is finished.
+    function _handOver(
+        ConfigRegistry config,
+        address deployer,
+        address governance,
+        address agentRegistry,
+        address resolutionModule
+    ) internal returns (address) {
+        if (block.chainid == DeployLib.LOCAL_CHAIN_ID) {
+            console2.log("Timelock:               skipped on 31337 (the deployer keeps ownership)");
+            return address(0);
+        }
+
+        address[] memory proposers = new address[](1);
+        address[] memory executors = new address[](1);
+        proposers[0] = governance;
+        executors[0] = governance;
+        // admin = address(0): nobody can shorten the delay or grant themselves a role.
+        TimelockController timelock =
+            new TimelockController(vm.envOr("TIMELOCK_DELAY", uint256(48 hours)), proposers, executors, address(0));
+
+        config.transferOwnership(address(timelock));
+        MarketFactory(config.addresses(ConfigKeys.MARKET_FACTORY)).transferOwnership(address(timelock));
+        AgentRegistry(agentRegistry).transferOwnership(address(timelock));
+        ResolutionModule(resolutionModule).transferOwnership(address(timelock));
+
+        console2.log("");
+        console2.log("HANDOVER IS NOT COMPLETE. Ownership is PENDING on four contracts.");
+        console2.log("Governance must schedule and execute acceptOwnership() on each,");
+        console2.log("through the timelock, before the deployer stops being able to");
+        console2.log("change parameters. Deployer still in control until then:", deployer);
+        return address(timelock);
+    }
+
     function _deployResolutionModule(ConfigRegistry config, address deployer)
         internal
         returns (address module, address implementation)
@@ -132,7 +244,21 @@ contract Deploy is Script {
                 )
             )
         );
-        deployed.setResolver(vm.envOr("RESOLVER", deployer), true);
+        // The direct-settlement bypass, and it stays EMPTY unless someone asks for it.
+        //
+        // It used to default to the deployer, which quietly contradicted the contract's
+        // own claim that the allowlist is empty until an owner fills it — and put a key
+        // that can settle any market to any outcome into every deployment, including
+        // mainnet, without anyone choosing that.
+        //
+        // On 31337 the deployer is filled in regardless, because a local demo has no
+        // committee to stake and nothing to protect.
+        address resolver = vm.envOr("RESOLVER", address(0));
+        if (block.chainid == DeployLib.LOCAL_CHAIN_ID && resolver == address(0)) resolver = deployer;
+        if (resolver != address(0)) {
+            require(block.chainid != DeployLib.MAINNET_CHAIN_ID, "Deploy: no direct-settlement resolver on mainnet");
+            deployed.setResolver(resolver, true);
+        }
         config.setAddress(ConfigKeys.RESOLUTION_MODULE, address(deployed));
         return (address(deployed), address(impl));
     }
@@ -149,7 +275,10 @@ contract Deploy is Script {
         vm.serializeAddress(contractsKey, "MarketFactoryImpl", m.marketFactoryImpl);
         vm.serializeAddress(contractsKey, "MockUSDC", m.usdc);
         vm.serializeAddress(contractsKey, "ResolutionModuleImpl", m.resolutionModuleImpl);
-        string memory contractsJson = vm.serializeAddress(contractsKey, "ResolutionModule", m.resolutionModule);
+        vm.serializeAddress(contractsKey, "ResolutionModule", m.resolutionModule);
+        vm.serializeAddress(contractsKey, "AgentRegistryImpl", m.agentRegistryImpl);
+        vm.serializeAddress(contractsKey, "AgentRegistry", m.agentRegistry);
+        string memory contractsJson = vm.serializeAddress(contractsKey, "Timelock", m.timelock);
 
         string memory root = "manifest";
         vm.serializeUint(root, "chainId", block.chainid);
