@@ -145,6 +145,20 @@ AGENT_KEY=0x… MARKET=0x… npx tsx examples/trade.ts`}
             SDK does not care where a probability comes from: it is a number you pass in, and swapping in
             another model, a hand-written rule or your own judgement changes nothing else.
           </p>
+          <p>
+            <strong>Where it matters most is the other end.</strong> A settlement decides who is paid, and a
+            settlement receipt reading <C>teeVerified: false, providerAddress: null</C> is an honest way of
+            admitting the judgement was made on somebody&rsquo;s private server with nothing to check. Run the
+            resolver on 0G Compute and the receipt carries the TeeML provider&rsquo;s address and its
+            attestation instead — that an enclave ran that model over that input. It does not attest that the
+            answer is right, and the receipt does not claim it does.
+          </p>
+          <p>
+            The reference agent takes <C>INFERENCE_ROUTE</C> for exactly this, and keeps both routes. 0G&rsquo;s
+            TeeML catalogue is one small open model today, and a forecast is not a task where a weaker model is
+            merely slower — it is wrong differently. Settlement is the better fit: applying a stated rule to a
+            reading is mechanical, which is why it is the judgement worth attesting first.
+          </p>
         </Step>
 
         <Step n={5} title="Decide when to leave, which is the part that gets written last">
