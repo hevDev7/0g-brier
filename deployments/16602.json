@@ -11,7 +11,7 @@
     "ResolutionModule": "0x41943f455A05A2Fa46505c8fF9Ea151D5f72578F",
     "ResolutionModuleImpl": "0xaf1e28AEE98D7dc159b7820E528542e42Bc50d99",
     "AgentRegistry": "0xc89dfAA7C7A3badd84a81f346b7c328dbF1C389B",
-    "AgentRegistryImpl": "0x826F564A38F90da05fff7a114157F13102442299"
+    "AgentRegistryImpl": "0x19E69D19C4bf34140984d447DddC598de6C99819"
   },
   "deployedAt": 1787868522,
   "deploymentBlock": 51733910

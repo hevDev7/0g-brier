@@ -10,8 +10,9 @@ import {
   type WalletClient,
 } from "viem";
 import {privateKeyToAccount} from "viem/accounts";
+import {keccak256, stringToHex, toBytes, pad} from "viem";
 import {WAD, dpm, quote, toWad, networkFor, type ChainMode} from "@0g-delphi/protocol";
-import {ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "./abi";
+import {AGENT_REGISTRY_ABI, CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "./abi";
 import {suggestFees} from "./fees";
 import type {Claim, Fill, MarketView, Outcome, Preview, Tier, MarketStatus} from "./types";
 
@@ -27,6 +28,42 @@ const STATUSES: readonly MarketStatus[] = [
 ];
 
 const TIERS: readonly Tier[] = ["FAST", "VERIFIED", "DETERMINISTIC"];
+
+/** `IAgentRegistry.Role`, in the order the enum declares them. */
+export const AGENT_ROLES = ["Creator", "Curator", "Resolver", "Trader"] as const;
+export type AgentRole = (typeof AGENT_ROLES)[number];
+
+const AGENT_REGISTRY_KEY = keccak256(toBytes("AGENT_REGISTRY"));
+const REQUIRE_REGISTERED_TRADER_KEY = keccak256(toBytes("REQUIRE_REGISTERED_TRADER"));
+
+/**
+ * A handle, as the chain stores it: bytes32, right-padded.
+ *
+ * 31 bytes, not 32 — `stringToHex` with `size: 32` would silently TRUNCATE a longer
+ * name, and an agent discovering its handle was cut short after registering has no
+ * way to tell that from having typed it wrong.
+ */
+export function encodeAgentName(name: string): `0x${string}` {
+  const bytes = new TextEncoder().encode(name);
+  if (bytes.length === 0) throw new Error("an agent name cannot be empty");
+  if (bytes.length > 31) {
+    throw new Error(`"${name}" is ${bytes.length} bytes; an agent name must fit in 31`);
+  }
+  return pad(stringToHex(name), {size: 32, dir: "right"});
+}
+
+export function decodeAgentName(raw: `0x${string}`): string | null {
+  if (/^0x0*$/.test(raw)) return null;
+  const name = hexToString(raw, {size: 32}).replace(/\0+$/, "");
+  return name.length > 0 ? name : null;
+}
+
+export interface AgentIdentity {
+  agentId: bigint;
+  name: string | null;
+  role: AgentRole;
+  operator: `0x${string}`;
+}
 
 export interface ClientConfig {
   network: ChainMode;
@@ -65,6 +102,10 @@ export class DelphiZeroClient {
   private readonly factory: `0x${string}`;
   private readonly shares: `0x${string}`;
   private readonly tokens = new Map<string, {symbol: string; decimals: number}>();
+  /** `undefined` = not looked up; `null` = looked, and there is none. */
+  private configAddress: `0x${string}` | null | undefined;
+  private registryAddress: `0x${string}` | null | undefined;
+  private gated: boolean | undefined;
 
   constructor(config: ClientConfig) {
     const net = networkFor(config.network);
@@ -210,6 +251,111 @@ export class DelphiZeroClient {
       functionName: "balanceOfOutcome",
       args: [this.address, market, outcome],
     });
+  }
+
+  // ── identity ─────────────────────────────────────────────────────────────
+
+  /**
+   * Register this agent, so its trades can be attributed to a name.
+   *
+   * PERMISSIONLESS — nobody grants this. An identity here is a handle the protocol
+   * can display, not a licence, and what it costs is a name nobody else has taken.
+   *
+   * The operator defaults to the key this client signs with, because that is the
+   * key whose trades need attributing. Pass one explicitly to register on behalf of
+   * a machine that will sign elsewhere.
+   */
+  async registerAgent(args: {
+    name: string;
+    role?: AgentRole;
+    operator?: `0x${string}`;
+    metadataRoot?: `0x${string}`;
+  }): Promise<AgentIdentity> {
+    const registry = await this.requireAgentRegistry();
+    const operator = args.operator ?? this.address;
+    const role = AGENT_ROLES.indexOf(args.role ?? "Trader");
+
+    // Checked before spending gas, and separately, because the two failures need
+    // different fixes: a taken name wants a different name, a busy key wants a
+    // different key.
+    const encoded = encodeAgentName(args.name);
+    if (await this.publicClient.readContract({address: registry, abi: AGENT_REGISTRY_ABI, functionName: "nameTaken", args: [encoded]})) {
+      throw new Error(`the name "${args.name}" is already registered`);
+    }
+    const acting = await this.publicClient.readContract({
+      address: registry,
+      abi: AGENT_REGISTRY_ABI,
+      functionName: "agentOf",
+      args: [operator],
+    });
+    if (acting !== 0n) throw new Error(`${operator} already acts for agent ${acting}`);
+
+    await this.send(registry, AGENT_REGISTRY_ABI, "register", [
+      role,
+      operator,
+      encoded,
+      args.metadataRoot ?? `0x${"0".repeat(64)}`,
+    ]);
+    // Read back rather than trusting the return value of a transaction, which a
+    // receipt does not carry.
+    const identity = await this.agentOf(operator);
+    if (identity === null) throw new Error("registration landed but the agent cannot be found");
+    return identity;
+  }
+
+  /** Rename an agent. Releases the old handle for someone else. */
+  async setAgentName(agentId: bigint, name: string): Promise<`0x${string}`> {
+    const registry = await this.requireAgentRegistry();
+    return this.send(registry, AGENT_REGISTRY_ABI, "setName", [agentId, encodeAgentName(name)]);
+  }
+
+  /** Rotate the key that trades for an agent. The old key stops being it. */
+  async setAgentOperator(agentId: bigint, operator: `0x${string}`): Promise<`0x${string}`> {
+    const registry = await this.requireAgentRegistry();
+    return this.send(registry, AGENT_REGISTRY_ABI, "setOperator", [agentId, operator]);
+  }
+
+  /** This client's own identity, or `null` if its key acts for no agent. */
+  async myAgent(): Promise<AgentIdentity | null> {
+    return this.agentOf(this.address);
+  }
+
+  async agentOf(operator: `0x${string}`): Promise<AgentIdentity | null> {
+    const registry = await this.agentRegistry();
+    if (registry === null) return null;
+    const agentId = await this.publicClient.readContract({
+      address: registry,
+      abi: AGENT_REGISTRY_ABI,
+      functionName: "agentOf",
+      args: [operator],
+    });
+    if (agentId === 0n) return null;
+    const [rawName, role] = await Promise.all([
+      this.publicClient.readContract({address: registry, abi: AGENT_REGISTRY_ABI, functionName: "nameOf", args: [agentId]}),
+      this.publicClient.readContract({address: registry, abi: AGENT_REGISTRY_ABI, functionName: "roleOf", args: [agentId]}),
+    ]);
+    return {
+      agentId,
+      name: decodeAgentName(rawName),
+      role: AGENT_ROLES[role] ?? "Trader",
+      operator,
+    };
+  }
+
+  /**
+   * Whether this deployment requires a registered Trader before it will take an
+   * order, so a client can say so before a revert does.
+   */
+  async requiresRegisteredTrader(): Promise<boolean> {
+    const config = await this.configRegistry();
+    if (config === null) return false;
+    const value = await this.publicClient.readContract({
+      address: config,
+      abi: CONFIG_ABI,
+      functionName: "params",
+      args: [REQUIRE_REGISTERED_TRADER_KEY],
+    });
+    return value !== 0n;
   }
 
   // ── quotes ───────────────────────────────────────────────────────────────
@@ -358,6 +504,7 @@ export class DelphiZeroClient {
     sharesOut: bigint;
     maxTokensIn: bigint;
   }): Promise<Fill> {
+    await this.requireIdentityIfGated();
     const before = await this.balanceOfCollateral(args.market);
     const hash = await this.send(args.market, MARKET_ABI, "buy", [
       args.outcome,
@@ -377,6 +524,7 @@ export class DelphiZeroClient {
     sharesIn: bigint;
     minTokensOut: bigint;
   }): Promise<Fill> {
+    await this.requireIdentityIfGated();
     const before = await this.balanceOfCollateral(args.market);
     const hash = await this.send(args.market, MARKET_ABI, "sell", [
       args.outcome,
@@ -438,6 +586,75 @@ export class DelphiZeroClient {
   }
 
   // ── internals ────────────────────────────────────────────────────────────
+
+  /**
+   * Stop before spending gas on an order the market will refuse.
+   *
+   * The contract's own check is what enforces this; this only makes the refusal
+   * legible. A raw `UnregisteredTrader` from inside a market tells an operator
+   * nothing about what to do next, and it arrives after the gas is gone.
+   *
+   * Both reads are session-stable and cached, so the happy path costs one round
+   * trip on the first order and nothing after.
+   *
+   * NOT applied to `redeem` or `liquidate`: exits are never gated, and a client
+   * that refused one because an identity had lapsed would be inventing a rule the
+   * contract does not have.
+   */
+  private async requireIdentityIfGated(): Promise<void> {
+    if (this.gated === undefined) this.gated = await this.requiresRegisteredTrader();
+    if (!this.gated) return;
+    const identity = await this.myAgent();
+    if (identity === null) {
+      throw new Error(
+        `${this.address} acts for no registered agent, and this deployment only accepts ` +
+          "orders from one. Call registerAgent({name}) first.",
+      );
+    }
+    if (identity.role !== "Trader") {
+      throw new Error(
+        `agent ${identity.agentId} ("${identity.name}") is registered as a ${identity.role}, not a Trader. ` +
+          "A resolver holding a position in a market it may be sampled to judge is the conflict the roles separate.",
+      );
+    }
+  }
+
+  private async configRegistry(): Promise<`0x${string}` | null> {
+    if (this.configAddress !== undefined) return this.configAddress;
+    try {
+      this.configAddress = await this.publicClient.readContract({
+        address: this.factory,
+        abi: FACTORY_ABI,
+        functionName: "config",
+      });
+    } catch {
+      this.configAddress = null;
+    }
+    return this.configAddress;
+  }
+
+  /** Found the way the contracts find it, never from configuration handed in. */
+  private async agentRegistry(): Promise<`0x${string}` | null> {
+    if (this.registryAddress !== undefined) return this.registryAddress;
+    const config = await this.configRegistry();
+    if (config === null) return (this.registryAddress = null);
+    const registry = await this.publicClient.readContract({
+      address: config,
+      abi: CONFIG_ABI,
+      functionName: "addresses",
+      args: [AGENT_REGISTRY_KEY],
+    });
+    this.registryAddress = /^0x0+$/.test(registry) ? null : registry;
+    return this.registryAddress;
+  }
+
+  private async requireAgentRegistry(): Promise<`0x${string}`> {
+    const registry = await this.agentRegistry();
+    if (registry === null) {
+      throw new Error("this deployment has no AgentRegistry — there is nothing to register with");
+    }
+    return registry;
+  }
 
   private async tokenInfo(address: `0x${string}`): Promise<{symbol: string; decimals: number}> {
     const key = address.toLowerCase();

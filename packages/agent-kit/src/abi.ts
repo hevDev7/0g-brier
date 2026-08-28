@@ -88,6 +88,7 @@ export const MARKET_ABI = [
 ] as const;
 
 export const FACTORY_ABI = [
+  {type: "function", name: "config", stateMutability: "view", inputs: [], outputs: [{type: "address"}]},
   {type: "function", name: "marketCount", stateMutability: "view", inputs: [], outputs: [{type: "uint256"}]},
   {
     type: "function",
@@ -131,5 +132,64 @@ export const SHARES_ABI = [
     stateMutability: "view",
     inputs: [{type: "address"}, {type: "address"}, {type: "uint8"}],
     outputs: [{type: "uint256"}],
+  },
+] as const;
+
+export const CONFIG_ABI = [
+  {
+    type: "function",
+    name: "addresses",
+    stateMutability: "view",
+    inputs: [{type: "bytes32"}],
+    outputs: [{type: "address"}],
+  },
+  {
+    type: "function",
+    name: "params",
+    stateMutability: "view",
+    inputs: [{type: "bytes32"}],
+    outputs: [{type: "uint256"}],
+  },
+] as const;
+
+/**
+ * `AgentRegistry` — identity, and the reverse index that makes a trade attributable.
+ *
+ * Registration is PERMISSIONLESS. Anyone can mint an agent for themselves, which is
+ * the point: an identity here is a handle the protocol can show, not a licence
+ * somebody grants. What it costs is a name nobody else has taken.
+ */
+export const AGENT_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "register",
+    stateMutability: "nonpayable",
+    inputs: [{type: "uint8"}, {type: "address"}, {type: "bytes32"}, {type: "bytes32"}],
+    outputs: [{type: "uint256"}],
+  },
+  {
+    type: "function",
+    name: "setName",
+    stateMutability: "nonpayable",
+    inputs: [{type: "uint256"}, {type: "bytes32"}],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "setOperator",
+    stateMutability: "nonpayable",
+    inputs: [{type: "uint256"}, {type: "address"}],
+    outputs: [],
+  },
+  {type: "function", name: "agentOf", stateMutability: "view", inputs: [{type: "address"}], outputs: [{type: "uint256"}]},
+  {type: "function", name: "nameOf", stateMutability: "view", inputs: [{type: "uint256"}], outputs: [{type: "bytes32"}]},
+  {type: "function", name: "roleOf", stateMutability: "view", inputs: [{type: "uint256"}], outputs: [{type: "uint8"}]},
+  {type: "function", name: "nextAgentId", stateMutability: "view", inputs: [], outputs: [{type: "uint256"}]},
+  {
+    type: "function",
+    name: "nameTaken",
+    stateMutability: "view",
+    inputs: [{type: "bytes32"}],
+    outputs: [{type: "bool"}],
   },
 ] as const;

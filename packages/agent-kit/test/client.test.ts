@@ -4,6 +4,7 @@ import {WAD, dpm} from "@0g-delphi/protocol";
 import {DelphiZeroClient} from "../src/client";
 import {ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "../src/abi";
 import {UnreadableBeliefError, parseBelief, parseJudgement} from "../src/inference";
+import {decodeAgentName, encodeAgentName} from "../src/client";
 
 const FACTORY = "0xfacadefacadefacadefacadefacadefacadefac0" as const;
 const SHARES = "0x5555555555555555555555555555555555555555" as const;
@@ -347,5 +348,41 @@ describe("a market that failed has no winner", () => {
   /** `redeem` on a market with no winner has nothing to claim, and says so. */
   it("refuses to redeem a failed market", async () => {
     await expect(client({status: 5, resolvedAt: 1790000500n}).redeem(MARKET)).rejects.toThrow(/not been resolved/);
+  });
+});
+
+/**
+ * A handle is bytes32, and bytes32 is 32 bytes — but a name has to round-trip, so 31
+ * is the limit. `stringToHex` with `size: 32` TRUNCATES silently, and an agent that
+ * discovered its handle had been cut short after registering could not tell that
+ * from having typed it wrong.
+ */
+describe("agent names as the chain stores them", () => {
+  it("round-trips an ordinary handle", () => {
+    expect(decodeAgentName(encodeAgentName("Nostradamus"))).toBe("Nostradamus");
+  });
+
+  it("right-pads, as bytes32 does", () => {
+    expect(encodeAgentName("a")).toBe(`0x61${"0".repeat(62)}`);
+  });
+
+  it("refuses a name too long to survive rather than truncating it", () => {
+    expect(() => encodeAgentName("x".repeat(31))).not.toThrow();
+    expect(() => encodeAgentName("x".repeat(32))).toThrow(/must fit in 31/);
+  });
+
+  it("refuses an empty name", () => {
+    expect(() => encodeAgentName("")).toThrow(/cannot be empty/);
+  });
+
+  /** An unset name is zero, and zero is not the empty string — it is "no name". */
+  it("reads an unset name as null, not as an empty handle", () => {
+    expect(decodeAgentName(`0x${"0".repeat(64)}`)).toBeNull();
+  });
+
+  it("counts BYTES, not characters", () => {
+    // Ten emoji are 40 bytes and will not fit, however short they look.
+    expect(() => encodeAgentName("🤖".repeat(10))).toThrow(/must fit in 31/);
+    expect(decodeAgentName(encodeAgentName("🤖 oracle"))).toBe("🤖 oracle");
   });
 });
