@@ -1,5 +1,6 @@
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
 import {render, screen} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import {ProbabilityChart} from "@/components/market/ProbabilityChart";
 import type {Candle} from "@/lib/data/types";
 
@@ -12,19 +13,19 @@ const cs: Candle[] = [
 
 describe("ProbabilityChart", () => {
   it("draws two series", () => {
-    const {container} = render(<ProbabilityChart candles={cs} />);
+    const {container} = render(<ProbabilityChart candles={cs} interval="1h" onIntervalChange={() => {}} />);
     expect(container.querySelectorAll("path[data-series]").length).toBe(2);
   });
 
   it("labels the Y axis 0% to 100%, not the data range", () => {
-    render(<ProbabilityChart candles={cs} />);
+    render(<ProbabilityChart candles={cs} interval="1h" onIntervalChange={() => {}} />);
     for (const label of ["0%", "25%", "50%", "75%", "100%"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
   });
 
   it("the NO series is the complement of the YES series", () => {
-    const {container} = render(<ProbabilityChart candles={cs} />);
+    const {container} = render(<ProbabilityChart candles={cs} interval="1h" onIntervalChange={() => {}} />);
     const yes = container.querySelector('path[data-series="yes"]')!.getAttribute("d")!;
     const no = container.querySelector('path[data-series="no"]')!.getAttribute("d")!;
     expect(yes).not.toBe(no);
@@ -33,7 +34,7 @@ describe("ProbabilityChart", () => {
   });
 
   it("names the axis as a probability, not a price", () => {
-    render(<ProbabilityChart candles={cs} />);
+    render(<ProbabilityChart candles={cs} interval="1h" onIntervalChange={() => {}} />);
     // Named in both the panel title and the series legend, which is why this
     // counts matches rather than demanding exactly one.
     expect(screen.getAllByText(/P\(YES\)/).length).toBeGreaterThan(0);
@@ -43,8 +44,11 @@ describe("ProbabilityChart", () => {
   });
 
   it("empty data renders a message, not a bare axis", () => {
-    render(<ProbabilityChart candles={[]} />);
-    expect(screen.getByText(/no history yet/i)).toBeInTheDocument();
+    render(<ProbabilityChart candles={[]} interval="1h" onIntervalChange={() => {}} />);
+    // `toHaveTextContent`, not `getByText`: the sentence now names the bucket width,
+    // so it is split across elements by the interpolation and `getByText` — which
+    // joins only an element's DIRECT text nodes — would never match it.
+    expect(screen.getByTestId("probability-chart")).toHaveTextContent(/no history in 1h buckets/i);
   });
 });
 
@@ -65,7 +69,7 @@ describe("a single observation bucket", () => {
     close: 622_000_000_000_000_000n, volume: 312_460_000n}];
 
   it("states the value instead of plotting a trend that never happened", () => {
-    const {container} = render(<ProbabilityChart candles={one} />);
+    const {container} = render(<ProbabilityChart candles={one} interval="1h" onIntervalChange={() => {}} />);
     expect(screen.getByTestId("probability-chart")).toHaveTextContent("62.2%");
     expect(screen.getByTestId("probability-chart")).toHaveTextContent(/one observation bucket/i);
     // Targeted at the chart's own marks, not at "any svg": the panel header
@@ -77,7 +81,64 @@ describe("a single observation bucket", () => {
 
   it("still draws once there are two buckets to draw between", () => {
     const two = [one[0]!, {...one[0]!, bucketStart: one[0]!.bucketStart + 3600}];
-    const {container} = render(<ProbabilityChart candles={two} />);
+    const {container} = render(<ProbabilityChart candles={two} interval="1h" onIntervalChange={() => {}} />);
     expect(container.querySelector('path[data-series="yes"]')).not.toBeNull();
+  });
+});
+
+/**
+ * The reader picks the bucket width, and the choice reaches the DATA SOURCE, not
+ * just the drawing: a different width is a different aggregation, so the page has to
+ * re-ask for it. These cover the control; `market-page.test.tsx` covers the wiring.
+ */
+describe("ProbabilityChart — choosing a bucket width", () => {
+  const widths = ["1h", "1d", "1w", "30d"] as const;
+
+  it("offers hour, day, week and thirty days", () => {
+    render(<ProbabilityChart candles={cs} interval="1h" onIntervalChange={() => {}} />);
+    for (const w of widths) expect(screen.getByTestId(`interval-${w}`)).toBeInTheDocument();
+  });
+
+  /**
+   * Thirty days, and it says so. A calendar month is not a fixed number of seconds,
+   * and a bucket labelled "1M" would put February and August on one axis as equals —
+   * a small lie a chart makes easy and a reader cannot check.
+   */
+  it("calls the widest bucket 30d, never 1M", () => {
+    render(<ProbabilityChart candles={cs} interval="1h" onIntervalChange={() => {}} />);
+    expect(screen.getByTestId("interval-30d")).toHaveTextContent("30d");
+    expect(screen.queryByText("1M")).not.toBeInTheDocument();
+  });
+
+  it("marks the chosen width as pressed, and only that one", () => {
+    render(<ProbabilityChart candles={cs} interval="1d" onIntervalChange={() => {}} />);
+    expect(screen.getByTestId("interval-1d")).toHaveAttribute("aria-pressed", "true");
+    for (const w of widths.filter((x) => x !== "1d")) {
+      expect(screen.getByTestId(`interval-${w}`)).toHaveAttribute("aria-pressed", "false");
+    }
+  });
+
+  it("reports the width the reader picked", async () => {
+    const onIntervalChange = vi.fn();
+    render(<ProbabilityChart candles={cs} interval="1h" onIntervalChange={onIntervalChange} />);
+    await userEvent.click(screen.getByTestId("interval-1w"));
+    expect(onIntervalChange).toHaveBeenCalledWith("1w");
+  });
+
+  /**
+   * An empty chart is often a bucket too wide or too narrow for the history that
+   * exists. A reader who cannot change it has to guess whether the market is quiet
+   * or the question was wrong.
+   */
+  it("keeps the picker reachable when there is nothing to plot", () => {
+    render(<ProbabilityChart candles={[]} interval="30d" onIntervalChange={() => {}} />);
+    expect(screen.getByTestId("interval-1h")).toBeInTheDocument();
+    expect(screen.getByTestId("probability-chart")).toHaveTextContent(/no history in 30d buckets/i);
+  });
+
+  it("keeps it reachable when a single bucket swallowed every trade", () => {
+    render(<ProbabilityChart candles={[cs[0]!]} interval="30d" onIntervalChange={() => {}} />);
+    expect(screen.getByTestId("interval-1h")).toBeInTheDocument();
+    expect(screen.getByTestId("probability-chart")).toHaveTextContent(/narrower bucket/i);
   });
 });

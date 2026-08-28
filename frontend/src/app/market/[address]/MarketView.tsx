@@ -20,6 +20,7 @@ import {TradeTape} from "@/components/market/TradeTape";
 import {FinalOutcome} from "@/components/settlement/FinalOutcome";
 import {SettlementReport} from "@/components/settlement/SettlementReport";
 import {useDataSource} from "@/hooks/provider";
+import {useState} from "react";
 import {useCandles} from "@/hooks/useCandles";
 import {useMarket} from "@/hooks/useMarket";
 import {usePositions} from "@/hooks/usePositions";
@@ -28,6 +29,7 @@ import {useTrades} from "@/hooks/useTrades";
 import {statusTone} from "@/lib/market-rows";
 import type {
   Candle,
+  Interval,
   CollateralInfo,
   DataMode,
   MarketDetail,
@@ -79,8 +81,12 @@ export function MarketView({address}: {address: `0x${string}`}): React.JSX.Eleme
 
 function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
   const source = useDataSource();
+  // The bucket width lives here rather than inside the chart, because the HOOK needs
+  // it too: changing it re-asks the source for a different aggregation, not just a
+  // different drawing of the same numbers.
+  const [interval, setInterval] = useState<Interval>("1h");
   const trades = useTrades(market.address, 24);
-  const candles = useCandles(market.address, "1h");
+  const candles = useCandles(market.address, interval);
   const positions = usePositions(market.address);
   const receipt = useReceipt(market.address);
 
@@ -133,7 +139,7 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
               probability, rather than in the sidebar: it is the only place a human
               is ever told the payout floats, so it must not sit below the fold. */}
           <PayoutPanel q={market.q} />
-          {renderChart(candles)}
+          {renderChart(candles, interval, setInterval)}
           {renderPositions(positions, market, source.mode)}
           {renderTrades(trades, market.collateral)}
 
@@ -209,10 +215,16 @@ function renderTrades(trades: Query<Trade[]>, collateral: CollateralInfo): React
   }
 }
 
-function renderChart(candles: Query<Candle[]>): React.JSX.Element {
+function renderChart(
+  candles: Query<Candle[]>,
+  interval: Interval,
+  onIntervalChange: (next: Interval) => void,
+): React.JSX.Element {
   switch (candles.status) {
     case "ready":
-      return <ProbabilityChart candles={candles.data} />;
+      return (
+        <ProbabilityChart candles={candles.data} interval={interval} onIntervalChange={onIntervalChange} />
+      );
     case "unavailable":
       return <Unavailable capability={candles.capability} mode={candles.mode} />;
     case "error":

@@ -2,7 +2,7 @@ import {TrendingUp} from "lucide-react";
 import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {formatProbability} from "@/lib/format";
 import {areaPath, seriesPath, xTicks, yTicks, type Box} from "@/lib/chart";
-import type {Candle} from "@/lib/data/types";
+import type {Candle, Interval} from "@/lib/data/types";
 
 const WAD = 10n ** 18n;
 const BOX: Box = {width: 600, height: 300, padLeft: 40, padRight: 8, padTop: 8, padBottom: 24};
@@ -12,13 +12,74 @@ const BOX: Box = {width: 600, height: 300, padLeft: 40, padRight: 8, padTop: 8, 
  * that moved from 49% to 51% must look like a market that barely moved. It is
  * labelled P(YES) explicitly so no reader takes it for the marginal price p_i.
  */
-export function ProbabilityChart({candles}: {candles: Candle[]}) {
+/**
+ * The bucket widths a reader can choose between, coarsest last.
+ *
+ * `30d` is thirty days and is labelled so. Calling it "1M" would put February and
+ * August on one axis as equals, which is a small lie of exactly the kind a chart
+ * makes easy and a reader cannot check.
+ */
+export const CHART_INTERVALS: readonly {value: Interval; label: string}[] = [
+  {value: "1h", label: "1h"},
+  {value: "1d", label: "1d"},
+  {value: "1w", label: "1w"},
+  {value: "30d", label: "30d"},
+];
+
+function IntervalPicker({
+  interval,
+  onChange,
+}: {
+  interval: Interval;
+  onChange: (next: Interval) => void;
+}) {
+  return (
+    <div className="flex gap-0.5" role="group" aria-label="Bucket width">
+      {CHART_INTERVALS.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          data-testid={`interval-${option.value}`}
+          aria-pressed={option.value === interval}
+          onClick={() => onChange(option.value)}
+          className={`rounded px-2 py-1 font-mono text-[11px] transition-colors ${
+            option.value === interval
+              ? "bg-accent/15 text-accent"
+              : "text-text-faint hover:bg-bg-sunken hover:text-text"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function ProbabilityChart({
+  candles,
+  interval,
+  onIntervalChange,
+}: {
+  candles: Candle[];
+  interval: Interval;
+  onIntervalChange: (next: Interval) => void;
+}) {
+  const picker = <IntervalPicker interval={interval} onChange={onIntervalChange} />;
   if (candles.length === 0) {
     return (
       <Panel testId="probability-chart">
-        <PanelHeader eyebrow="Observation history" title="P(YES) over time" icon={TrendingUp} />
+        <PanelHeader
+          eyebrow="Observation history"
+          title="P(YES) over time"
+          icon={TrendingUp}
+          action={picker}
+        />
+        {/* The picker stays reachable here on purpose. An empty chart is often a
+            bucket too WIDE or too narrow for the history that exists, and a reader
+            who cannot change it has to guess whether the market is quiet or the
+            question was wrong. */}
         <p className="px-4 py-10 text-center text-[13px] text-text-muted">
-          No history yet for this market.
+          No history in {interval} buckets yet for this market.
         </p>
       </Panel>
     );
@@ -39,12 +100,18 @@ export function ProbabilityChart({candles}: {candles: Candle[]}) {
     const only = candles[0]!;
     return (
       <Panel testId="probability-chart">
-        <PanelHeader eyebrow="Observation history" title="P(YES) over time" icon={TrendingUp} />
+        <PanelHeader
+          eyebrow="Observation history"
+          title="P(YES) over time"
+          icon={TrendingUp}
+          action={picker}
+        />
         <div className="px-4 py-8 text-center md:px-5">
           <p className="font-mono text-[24px] leading-none text-text">{formatProbability(only.close)}</p>
           <p className="mt-2 text-[13px] leading-relaxed text-text-muted">
             One observation bucket so far — every trade in this market landed inside the same
-            interval, so there is no movement to plot yet.
+            {" "}{interval} interval, so there is no movement to plot yet. A narrower bucket may
+            show the movement inside it.
           </p>
         </div>
       </Panel>
@@ -69,6 +136,7 @@ export function ProbabilityChart({candles}: {candles: Candle[]}) {
         eyebrow="Observation history"
         title="P(YES) over time · fixed 0–100% scale"
         icon={TrendingUp}
+        action={picker}
       />
       <div className="p-3 md:p-4">
         <div className="overflow-x-auto">

@@ -52,7 +52,14 @@ export type MarketStatus =
   | "Open" | "Closed" | "Proposed" | "Disputed" | "Settled" | "Failed" | "Voided";
 
 export type Tier = "FAST" | "VERIFIED" | "DETERMINISTIC";
-export type Interval = "1m" | "5m" | "1h" | "1d";
+/**
+ * A bucket width, in the shape a fixed number of seconds can take.
+ *
+ * `30d` is thirty days and is NOT called `1M`, because a calendar month is not a
+ * fixed number of seconds and a bucket that pretends otherwise would put February
+ * and August on the same axis and call them equal.
+ */
+export type Interval = "1m" | "5m" | "1h" | "1d" | "1w" | "30d";
 
 export interface CollateralInfo {
   address: `0x${string}`;

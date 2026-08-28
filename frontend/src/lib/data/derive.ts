@@ -24,6 +24,11 @@ export const BUCKET_SECONDS: Record<Interval, number> = {
   "5m": 5 * 60,
   "1h": 60 * 60,
   "1d": 24 * 60 * 60,
+  "1w": 7 * 24 * 60 * 60,
+  // Thirty days, and named for what it is. A calendar month is not a fixed number
+  // of seconds; a bucket that called itself one would put February and August on
+  // the same axis and imply they were the same width.
+  "30d": 30 * 24 * 60 * 60,
 };
 
 /**

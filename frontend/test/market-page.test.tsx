@@ -1,6 +1,6 @@
 import userEvent from "@testing-library/user-event";
 import {render, screen, waitFor, within} from "@testing-library/react";
-import {describe, expect, it} from "vitest";
+import {describe, expect, it, vi} from "vitest";
 import {MarketView} from "@/app/market/[address]/MarketView";
 import {AppProviders} from "@/hooks/provider";
 import {FIXTURE_MARKETS, MockSource} from "@/lib/data/mock";
@@ -130,5 +130,24 @@ describe("a market whose spec blob cannot be read", () => {
     expect(panel).toHaveTextContent(/question and rules not available/i);
     // The assertion that matters: the panel is not merely empty.
     expect(panel.textContent?.replace(/\s+/g, " ").trim().length).toBeGreaterThan(30);
+  });
+});
+
+/**
+ * The wiring, not the control. Changing the bucket width re-asks the DATA SOURCE
+ * for a different aggregation — it is not a different drawing of the same numbers —
+ * so the page has to pass the choice down to the hook and not keep it in the chart.
+ */
+describe("MarketView — bucket width", () => {
+  it("asks the source again when the reader picks a different width", async () => {
+    const source = new MockSource();
+    const getCandles = vi.spyOn(source, "getCandles");
+    renderMarket(source, OPEN);
+    await screen.findByTestId("probability-chart");
+
+    const widthsAsked = () => getCandles.mock.calls.map((call) => call[1]);
+    expect(widthsAsked()).toContain("1h");
+    await userEvent.click(screen.getByTestId("interval-1d"));
+    await waitFor(() => expect(widthsAsked()).toContain("1d"));
   });
 });
