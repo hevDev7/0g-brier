@@ -7,7 +7,7 @@
  * TEE-attested model on 0G Compute, write the receipt (§7.5), store it on 0G
  * Storage, then commit and reveal the vote on chain.
  *
- * TWO LIMITATIONS, and neither is hidden by the output:
+ * THREE LIMITATIONS, and none is hidden by the output:
  *
  *  1. ONE PROCESS HOLDS EVERY OPERATOR KEY. A real committee is independent
  *     parties; this is one machine voting three times. What the chain enforces —
@@ -16,6 +16,12 @@
  *  2. ONE COMPUTE LEDGER pays for every inference, because a ledger costs 3 0G to
  *     open and we have one. The attestation still says a real enclave ran each
  *     request; it does not say three unrelated parties did.
+ *  3. ONE READ OF THE EVIDENCE is shared by the whole committee. §7.4 has each
+ *     resolver gather for itself, and that is right for independent operators —
+ *     but on one machine it would mean three fetches of the same candle seconds
+ *     apart, three legitimately different closes, and a split vote that nothing
+ *     was actually wrong with. The sources are read once, before the loop, and
+ *     every member judges the same observations.
  *
  * A resolver whose answer comes back unattested does NOT commit its outcome. Per
  * §7.4 it falls through to UNRESOLVABLE, because an unverified answer is not
@@ -26,7 +32,15 @@ import {privateKeyToAccount} from "viem/accounts";
 import {loadDeployment} from "@brier/protocol/node";
 import {networkFor} from "@brier/protocol";
 import {ZgStore} from "@brier/zg-storage";
-import {ZgInference, suggestFees, type Judgement} from "../src/index";
+import {
+  ZgInference,
+  gatherEvidence,
+  observedIndices,
+  receiptEvidence,
+  renderObservation,
+  suggestFees,
+  type Judgement,
+} from "../src/index";
 import {readFileSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 
@@ -174,7 +188,7 @@ const spec = (await new ZgStore(ZG_INDEXER).get(specRoot)) as {
   rules?: string;
   category?: string;
   settlementPrompt?: string;
-  sources?: {url: string; selector?: string}[];
+  sources?: {kind?: string; url: string; selector?: string}[];
 } | null;
 if (!spec?.question || !spec.rules) throw new Error(`no readable MarketSpec at ${specRoot}`);
 
@@ -188,6 +202,31 @@ if ((await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "st
 
 const members = await pub.readContract({address: MODULE, abi: MODULE_ABI, functionName: "committeeOf", args: [MARKET]});
 console.log(`committee ${members.map(String).join(", ")}`);
+
+// §7.4 step 2. Done before a single inference is paid for: if nothing could be
+// read, that is worth seeing before spending 0G to be told UNRESOLVABLE.
+console.log(`\nreading ${(spec.sources ?? []).length} source(s)`);
+const observations = await gatherEvidence(spec.sources, {
+  timeoutMs: Number(process.env.EVIDENCE_TIMEOUT_MS ?? 10_000),
+  maxBytes: Number(process.env.EVIDENCE_MAX_BYTES ?? 256 * 1024),
+});
+for (const o of observations) {
+  console.log(
+    o.ok
+      ? `  [${o.index}] ${o.via === "selector" ? "selected" : "read"} ${o.value.length} chars from ${o.url} — sha256 ${o.fetch.sha256.slice(0, 16)}…`
+      : `  [${o.index}] NOT OBSERVED ${o.url} — ${o.reason}: ${o.detail}`,
+  );
+}
+// The exact blocks the model will be shown, for when a committee says
+// UNRESOLVABLE and the question is whether it was right to.
+if (process.env.EVIDENCE_DUMP === "1") for (const o of observations) console.log(`\n${renderObservation(o)}`);
+if (observations.length > 0 && observations.every((o) => !o.ok)) {
+  // Not an abort. A committee that cannot see anything should say UNRESOLVABLE
+  // on the record, with the reasons in its receipts, rather than have the job
+  // quietly not run — a market nobody voted on fails at the deadline with no
+  // explanation attached to it.
+  console.log(`  no source could be read; the committee will be asked to judge on that`);
+}
 
 const inference = await ZgInference.connect({network: "galileo", privateKey: KEY, provider: ZG_PROVIDER});
 const votes: {agentId: bigint; pk: `0x${string}`; j: Judgement | null; outcome: number; salt: `0x${string}`; receipt: `0x${string}`}[] = [];
@@ -204,7 +243,7 @@ for (const agentId of members) {
     rules: spec.rules,
     category: spec.category ?? null,
     settlementPrompt: spec.settlementPrompt ?? null,
-    evidence: (spec.sources ?? []).map((s) => ({url: s.url})),
+    observations,
   });
   // §7.4: an unattested answer is not evidence. Do not commit it.
   const attested = j.teeVerified;
@@ -227,11 +266,15 @@ for (const agentId of members) {
       temperature: 0,
       simulated: false,
     },
-    evidence: (spec.sources ?? []).map((s) => ({url: s.url, fetchedAt: Math.floor(Date.now() / 1000)})),
+    // What was READ, not where it lives: the value, its digest, the status, and
+    // the instant — enough for a stranger holding this receipt to repeat the read.
+    evidence: receiptEvidence(observations),
     outcome: OUTCOME_NAMES[outcome],
     confidence: j.confidence,
     rationale: j.rationale,
-    citations: (spec.sources ?? []).map((_, i) => i),
+    // Only the sources that produced an observation. Listing every index claimed
+    // the resolver had consulted documents it never managed to fetch.
+    citations: observedIndices(observations),
     rawResponse: j.raw,
   });
   console.log(`  receipt ${receipt}`);
