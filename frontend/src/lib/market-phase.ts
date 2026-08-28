@@ -27,7 +27,7 @@ export type Phase = "live" | "pending" | "resolved";
  * not tradable — `sell` reverts with `TradingEnded` — so both the badge and the
  * phase have to treat the clock, not the enum, as what settles it. Two copies of
  * this comparison would eventually disagree, and the disagreement would show as
- * a market badged "Awaiting close" sitting under the Live tab.
+ * a market badged "Awaiting close" while the Live filter is what selected it.
  *
  * `now === null` before the browser reports a clock. Nothing is guessed: the
  * market keeps the chain's own answer and sharpens once the clock arrives.
@@ -60,18 +60,23 @@ export function phaseOf(
 export interface PhaseInfo {
   key: Phase;
   label: string;
-  /** Shown under the tabs: what this phase IS, in one line. */
+  /** Shown under the filter row: what this phase IS, in one line. */
   blurb: string;
   /** Shown in place of the table when the phase holds nothing. */
   empty: string;
 }
 
 /**
- * Ordered as a market moves through them, so the tabs read left to right as
- * time. The default is `live` because that is the only phase in which a reader
- * can still do anything — but it is deliberately not the only one reachable, and
- * each tab carries its count so an empty Live tab reads as "nothing is trading"
- * rather than as a page that failed to load.
+ * Ordered as a market moves through them, so the control reads as time rather
+ * than as an alphabetical list. The default is `live` because that is the only
+ * phase in which a reader can still do anything.
+ *
+ * The control that selects a phase carries each phase's COUNT. There is no "all"
+ * option to fall back to — an entry meaning "everything" would have to map to
+ * the empty string, which reads back as `live`, so it would promise the whole
+ * registry and deliver a third of it. Without that fallback the counts have to
+ * be visible from the control itself, or an empty Live view is indistinguishable
+ * from a page that failed to load.
  */
 export const PHASES: readonly PhaseInfo[] = [
   {
@@ -79,7 +84,7 @@ export const PHASES: readonly PhaseInfo[] = [
     label: "Live",
     blurb: "Trading is open. An agent can buy or sell through the SDK until the window closes.",
     empty:
-      "No market is open for trading right now. Markets that have stopped trading are under Awaiting settlement and Resolved.",
+      "No market is open for trading right now. Switch the phase filter to Awaiting settlement or Resolved to see the ones that have stopped.",
   },
   {
     key: "pending",

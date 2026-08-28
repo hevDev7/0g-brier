@@ -136,12 +136,6 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
     <div className="flex flex-col gap-5">
       <SummaryTiles markets={markets} trades={trades} now={now} />
 
-      <PhaseTabs
-        current={params.phase}
-        counts={byPhase}
-        onSelect={(next) => params.set("phase", next)}
-      />
-
       <Panel testId="market-table" className="overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-border p-4 lg:flex-row lg:items-center lg:justify-between">
           <p className="flex items-center gap-2">
@@ -171,6 +165,26 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
                 className="h-8 w-full rounded-md border border-border bg-bg pr-3 pl-8 text-[13px] placeholder:text-text-faint sm:w-[180px]"
               />
             </label>
+            {/*
+              The coarsest cut, and deliberately shaped like the filters beside
+              it rather than like navigation: it is the same kind of question
+              they ask — which markets do I want to see — so a second visual
+              language for it only makes the page look like it has two minds.
+
+              It carries counts because there is no "all" option to fall back to.
+              A reader who lands on an empty Live tab has to be able to see where
+              the markets went without opening anything else, and "Live (0)"
+              beside "Resolved (4)" says it in the control itself.
+            */}
+            <Select
+              label="Phase"
+              value={params.phase}
+              onChange={(v) => params.set("phase", v)}
+              options={PHASES.map((p) => p.key)}
+              labelFor={(key) =>
+                `${phaseInfo(key as Phase).label} (${byPhase.get(key as Phase)?.length ?? 0})`
+              }
+            />
             <Select
               label="Category"
               value={params.category}
@@ -196,6 +210,16 @@ function MarketsBody({markets}: {markets: MarketSummary[]}) {
             />
           </div>
         </div>
+
+        {/* What this phase IS, in one line. It matters most on Awaiting
+            settlement, where the fact a reader needs — the collateral is locked
+            and nobody has decided anything — is not deducible from the word. */}
+        <p
+          data-testid="phase-blurb"
+          className="border-b border-border px-4 py-2.5 text-[12px] leading-relaxed text-text-muted"
+        >
+          {phaseInfo(params.phase).blurb}
+        </p>
 
         <div className="flex items-center justify-between gap-3 border-b border-border bg-bg-sunken/60 px-4 py-2">
           <span className="eyebrow text-text-faint">Sort</span>
@@ -496,66 +520,6 @@ function VolumeCell({
   }
 }
 
-/**
- * The coarse cut, and the only navigation on this page that changes what a
- * reader is looking at rather than how it is sorted.
- *
- * Counts sit on the tabs because an empty Live tab is otherwise indistinguishable
- * from a page that failed: "Live 0 · Awaiting settlement 3 · Resolved 4" says
- * the deployment has finished its work, which is a different message from
- * silence. They are the phase totals, not the filtered ones — a tab reports what
- * it holds, not what survives a search typed while looking somewhere else.
- *
- * `role="tablist"` is deliberately NOT used. These are links between views of a
- * list, not tab panels: the URL changes, the content is addressable, and the
- * arrow-key semantics a tablist promises are not implemented here. Claiming the
- * role without the behaviour is worse for a screen reader than not claiming it.
- */
-function PhaseTabs({
-  current,
-  counts,
-  onSelect,
-}: {
-  current: Phase;
-  counts: Map<Phase, Row[]>;
-  onSelect: (phase: Phase) => void;
-}) {
-  return (
-    <div>
-      <div className="flex flex-wrap gap-1.5" data-testid="phase-tabs">
-        {PHASES.map((phase) => {
-          const active = phase.key === current;
-          const count = counts.get(phase.key)?.length ?? 0;
-          return (
-            <button
-              key={phase.key}
-              type="button"
-              onClick={() => onSelect(phase.key)}
-              aria-pressed={active}
-              data-testid={`phase-${phase.key}`}
-              className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-[13px] font-medium transition-colors ${
-                active
-                  ? "border-accent bg-accent text-accent-fg"
-                  : "border-border text-text-muted hover:border-border-strong hover:text-text"
-              }`}
-            >
-              {phase.label}
-              <span
-                className={`rounded-full px-1.5 font-mono text-[11px] ${
-                  active ? "bg-accent-fg/15 text-accent-fg" : "bg-bg-sunken text-text-faint"
-                }`}
-              >
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-2 text-[13px] leading-relaxed text-text-muted">{phaseInfo(current).blurb}</p>
-    </div>
-  );
-}
-
 function SummaryTiles({
   markets,
   trades,
@@ -651,12 +615,21 @@ function Select({
   onChange,
   options,
   allLabel,
+  labelFor,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: readonly string[];
-  allLabel: string;
+  /**
+   * Omitted where "all" is not one of the answers. The phase control always has
+   * exactly one selection: an "All phases" entry would have to map to the empty
+   * string, which `useListParams` reads back as `live` — so the option would
+   * claim to show everything and quietly show one third of it.
+   */
+  allLabel?: string;
+  /** Display text for an option, where the stored value is not what to show. */
+  labelFor?: (value: string) => string;
 }) {
   return (
     <label>
@@ -667,10 +640,10 @@ function Select({
         onChange={(e) => onChange(e.target.value)}
         className="h-8 rounded-md border border-border bg-bg px-2 text-[13px] text-text"
       >
-        <option value="">{allLabel}</option>
+        {allLabel !== undefined && <option value="">{allLabel}</option>}
         {options.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {labelFor ? labelFor(option) : option}
           </option>
         ))}
       </select>

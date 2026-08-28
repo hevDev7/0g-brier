@@ -8,10 +8,10 @@ import type {Capability} from "@/lib/data/types";
 
 // `vi.mock` is hoisted above every `let`, so the mutable bag it reads from has
 // to be created with `vi.hoisted` rather than declared below.
-const routing = vi.hoisted(() => ({params: new URLSearchParams()}));
+const routing = vi.hoisted(() => ({params: new URLSearchParams(), replace: vi.fn()}));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({replace: vi.fn(), push: vi.fn()}),
+  useRouter: () => ({replace: routing.replace, push: vi.fn()}),
   usePathname: () => "/",
   useSearchParams: () => routing.params,
 }));
@@ -53,6 +53,7 @@ async function questionOrder(): Promise<string[]> {
 
 beforeEach(() => {
   routing.params = new URLSearchParams();
+  routing.replace.mockClear();
 });
 
 /** The table row whose heading contains `needle`. */
@@ -238,12 +239,45 @@ describe("the phase split", () => {
     expect(order[0]).toContain("Artemis");
   });
 
-  it("counts each phase on its own tab, so an empty one reads as a fact", async () => {
+  /**
+   * The phase control is shaped like the filters beside it, so it asks the same
+   * kind of question in the same way. What it cannot borrow from them is an
+   * "all" option — that would have to mean the empty string, which reads back as
+   * `live`, promising the whole registry and delivering a third of it. So the
+   * counts live in the options: an empty Live view has to be legible as a fact
+   * about the deployment without the reader opening anything else.
+   */
+  it("counts each phase in the control, since there is no all to fall back to", async () => {
     renderList();
     await screen.findByRole("table");
-    expect(screen.getByTestId("phase-live")).toHaveTextContent(String(LIVE));
-    expect(screen.getByTestId("phase-pending")).toHaveTextContent("1");
-    expect(screen.getByTestId("phase-resolved")).toHaveTextContent("1");
+    const select = screen.getByTestId("filter-phase");
+    expect(within(select).getByText(`Live (${LIVE})`)).toBeInTheDocument();
+    expect(within(select).getByText("Awaiting settlement (1)")).toBeInTheDocument();
+    expect(within(select).getByText("Resolved (1)")).toBeInTheDocument();
+    // No option may claim to show everything.
+    expect(within(select).queryByText(/^all/i)).not.toBeInTheDocument();
+    expect(within(select).getAllByRole("option")).toHaveLength(3);
+  });
+
+  it("changes what is listed when the phase is chosen from the control", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByRole("table");
+    await user.selectOptions(screen.getByTestId("filter-phase"), "resolved");
+    // `useSearchParams` is stubbed, so the router call is what proves the
+    // selection reached the URL — which is where the phase actually lives.
+    expect(routing.replace).toHaveBeenCalledWith(
+      expect.stringContaining("phase=resolved"),
+      expect.anything(),
+    );
+  });
+
+  it("says what the selected phase means, not only its name", async () => {
+    renderList(new MockSource(), "phase=pending");
+    await screen.findByRole("table");
+    // The fact a reader needs here is not deducible from the words "awaiting
+    // settlement": the collateral is locked and nobody has decided anything.
+    expect(screen.getByTestId("phase-blurb")).toHaveTextContent(/collateral stays locked/i);
   });
 
   /**
