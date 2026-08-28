@@ -9,7 +9,7 @@ import {
   type PublicClient,
   type Transport,
 } from "viem";
-import {CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, RESOLUTION_ABI} from "./abi";
+import {AGENT_REGISTRY_ABI, CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, RESOLUTION_ABI} from "./abi";
 import {ZgStore, type MarketSpec} from "./zg-storage";
 import {
   CapabilityUnavailableError,
@@ -72,6 +72,7 @@ const TIERS: readonly Tier[] = ["FAST", "VERIFIED", "DETERMINISTIC"];
 /** `ConfigKeys.RESOLUTION_MODULE`, derived rather than pasted — a mistyped
  *  bytes32 constant reads as "no module configured" and would be silent. */
 const RESOLUTION_MODULE_KEY = keccak256(toBytes("RESOLUTION_MODULE"));
+const AGENT_REGISTRY_KEY = keccak256(toBytes("AGENT_REGISTRY"));
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const ZERO_ROOT = `0x${"0".repeat(64)}`;
@@ -121,6 +122,8 @@ export class ChainSource implements DataSource {
   private readonly factory: `0x${string}`;
   /** Absent when no 0G Storage indexer is configured. */
   private readonly specs: ZgStore | null;
+  /** `undefined` = not looked up yet; `null` = looked, and there is none. */
+  private registryAddress: `0x${string}` | null | undefined;
   /** Token metadata never changes, and a market list would otherwise re-read it once per row. */
   private readonly tokens = new Map<string, CollateralInfo>();
 
@@ -294,6 +297,68 @@ export class ChainSource implements DataSource {
       functionName: "balanceOf",
       args: [agent],
     });
+  }
+
+  /**
+   * Names for the keys that have traded, found the way the contracts find them:
+   * factory → its ConfigRegistry → AGENT_REGISTRY → `nameOfOperator`.
+   *
+   * Returns what it knows and nothing else. A deployment with no registry yields an
+   * empty map rather than an error, because "nobody here has a name" is a true
+   * description of such a deployment — every row then shows its address, which is
+   * what it showed before names existed.
+   */
+  async getAgentNames(agents: readonly `0x${string}`[]): Promise<ReadonlyMap<string, string>> {
+    const names = new Map<string, string>();
+    if (agents.length === 0) return names;
+
+    const registry = await this.agentRegistry();
+    if (registry === null) return names;
+
+    const raw = await Promise.all(
+      agents.map((agent) =>
+        this.client.readContract({
+          address: registry,
+          abi: AGENT_REGISTRY_ABI,
+          functionName: "nameOfOperator",
+          args: [agent],
+        }),
+      ),
+    );
+    agents.forEach((agent, i) => {
+      const value = raw[i];
+      if (value === undefined || value === ZERO_ROOT) return;
+      // bytes32, right-padded with zeros. Without the explicit size the label carries
+      // NUL characters that render as nothing and break an exact-text match — the same
+      // trap `category` has.
+      const name = hexToString(value, {size: 32}).replace(/\0+$/, "");
+      if (name.length > 0) names.set(agent.toLowerCase(), name);
+    });
+    return names;
+  }
+
+  /** Cached: a deployment does not change its registry between renders. */
+  private async agentRegistry(): Promise<`0x${string}` | null> {
+    if (this.registryAddress !== undefined) return this.registryAddress;
+    try {
+      const configAddress = await this.client.readContract({
+        address: this.factory,
+        abi: FACTORY_ABI,
+        functionName: "config",
+      });
+      const registry = await this.client.readContract({
+        address: configAddress,
+        abi: CONFIG_ABI,
+        functionName: "addresses",
+        args: [AGENT_REGISTRY_KEY],
+      });
+      this.registryAddress = registry.toLowerCase() === ZERO_ADDRESS ? null : registry;
+    } catch {
+      // A factory too old to have `config`, or a registry key never set. Both mean
+      // there are no names to be had, which is not an error worth surfacing.
+      this.registryAddress = null;
+    }
+    return this.registryAddress;
   }
 
   // ── everything below needs events, and says so ───────────────────────────

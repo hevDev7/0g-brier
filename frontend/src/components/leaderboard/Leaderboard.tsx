@@ -15,6 +15,7 @@ import {collect} from "@/lib/collect";
 import {agentsSeen} from "@/lib/agent-book";
 import {compareRows, leaderboard, type LeaderboardRow, type SortKey} from "@/lib/leaderboard";
 import {formatCollateral, shortAddress} from "@/lib/format";
+import {useAgentNames} from "@/hooks/useAgentNames";
 import type {CollateralInfo, DataMode, MarketSummary} from "@/lib/data/types";
 
 /** The fixtures hold 24 trades a market; a real indexer would page this. */
@@ -76,6 +77,7 @@ function Body({markets}: {markets: MarketSummary[]}): React.JSX.Element {
   }, [positions, trades]);
 
   const balanceQueries = useBalances(agents, collateral?.address);
+  const names = useAgentNames(agents);
   const balances = collect(balanceQueries);
 
   const params = useSortParam();
@@ -110,6 +112,7 @@ function Body({markets}: {markets: MarketSummary[]}): React.JSX.Element {
     tradesByMarket: trades.kind === "ready" ? trades.data : null,
     balances: balanceMap,
     balancesKnown: balances.kind === "ready" && collateral !== undefined,
+    names,
   }).sort((a, b) => compareRows(a, b, params.sort));
 
   return (
@@ -234,11 +237,26 @@ function Row({
         {String(rank).padStart(2, "0")}
       </td>
       <th scope="row" className="px-3 py-3 text-left font-normal">
-        <Link
-          href={`/portfolio/${row.agent}`}
-          className="font-mono text-[12px] text-text group-hover:text-accent"
-        >
-          {shortAddress(row.agent)}
+        {/*
+          The registered handle where there is one, the address where there is not.
+          Not a fallback to something worse — an address identifies the agent exactly,
+          it just cannot be said out loud. The address stays visible under a name so a
+          reader can still tell two agents apart when one has picked a confusable
+          handle, and so the row remains searchable by what the chain actually holds.
+        */}
+        <Link href={`/portfolio/${row.agent}`} className="block group-hover:text-accent">
+          {row.name === null ? (
+            <span className="font-mono text-[12px] text-text">{shortAddress(row.agent)}</span>
+          ) : (
+            <>
+              <span data-testid="lb-name" className="block text-[13px] font-semibold text-text">
+                {row.name}
+              </span>
+              <span className="block font-mono text-[10px] text-text-faint">
+                {shortAddress(row.agent)}
+              </span>
+            </>
+          )}
         </Link>
       </th>
       <Cell testId="lb-trades" value={row.trades} render={(v) => String(v)} capability="TRADE_TAPE" mode={mode} />

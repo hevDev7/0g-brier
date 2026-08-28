@@ -132,3 +132,33 @@ describe("Leaderboard", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+/**
+ * The column a reader actually looks at. A name where there is one, an address
+ * where there is not — never a blank, and never a name without the address under
+ * it, because two agents can pick confusable handles and the chain only knows one
+ * of them apart.
+ */
+describe("Leaderboard — agent identity", () => {
+  it("shows the registered handle above the address", async () => {
+    renderBoard();
+    await screen.findByTestId("leaderboard");
+    const names = await screen.findAllByTestId("lb-name");
+    expect(names.length).toBeGreaterThan(0);
+    expect(names.map((n) => n.textContent)).toContain("Nostradamus");
+    // The address stays visible beneath it.
+    const row = names[0]!.closest("tr")!;
+    expect(row.textContent).toMatch(/0x[0-9a-fA-F]{4}/);
+  });
+
+  it("falls back to the address for an agent with no registered name", async () => {
+    renderBoard();
+    const table = await screen.findByTestId("leaderboard");
+    const named = screen.queryAllByTestId("lb-name").length;
+    const rows = within(table).getAllByRole("row").length - 1; // minus the header
+    // Some agents are named and some are not, which is what makes the fallback
+    // observable at all.
+    expect(named).toBeLessThan(rows);
+    expect(named).toBeGreaterThan(0);
+  });
+});

@@ -392,6 +392,28 @@ export class MockSource implements DataSource {
     return fixtureBalance(agent, known.collateral.decimals);
   }
 
+  /**
+   * Fixture names for the fixture traders.
+   *
+   * Deliberately incomplete: some addresses have a name and some do not, because the
+   * list has to render both. A fixture where everyone was named would never exercise
+   * the fallback, and the fallback is what most rows will use for a long time.
+   */
+  async getAgentNames(agents: readonly `0x${string}`[]): Promise<ReadonlyMap<string, string>> {
+    const known: Record<string, string> = {
+      // `fixtureTrades` derives a trader per index: 0xbb + the index + zeros.
+      "0xbb00000000000000000000000000000000000000": "Nostradamus",
+      "0xbb01000000000000000000000000000000000000": "Pythia",
+      "0xbb0c000000000000000000000000000000000000": "Cassandra",
+    };
+    const names = new Map<string, string>();
+    for (const agent of agents) {
+      const name = known[agent.toLowerCase()];
+      if (name) names.set(agent.toLowerCase(), name);
+    }
+    return names;
+  }
+
   async getReceipt(address: `0x${string}`): Promise<SettlementReceipt> {
     this.require("SETTLEMENT_RECEIPT");
     const m = this.find(address);

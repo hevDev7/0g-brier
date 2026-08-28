@@ -3,6 +3,15 @@ import type {MarketSummary, Position, Trade} from "@/lib/data/types";
 
 export interface LeaderboardRow {
   agent: `0x${string}`;
+  /**
+   * The agent's registered handle, or `null` when no name is known.
+   *
+   * Null covers two causes and does so safely: the key acts for no registered
+   * agent, or no registry is configured to ask. Both display as the address,
+   * which is true either way — an address IS a complete identity, just an
+   * unfriendly one.
+   */
+  name: string | null;
   /** null when TRADE_TAPE cannot be read. Never 0 — an unknown count is not none. */
   trades: number | null;
   /** Unsigned traded value, collateral units. TRADE_TAPE. */
@@ -46,8 +55,10 @@ export function leaderboard(input: {
   /** Keyed by lowercased address. A missing key means AGENT_BALANCE is unknown. */
   balances: ReadonlyMap<string, bigint>;
   balancesKnown: boolean;
+  /** Keyed by lowercased address. A missing key means no name is known. */
+  names?: ReadonlyMap<string, string>;
 }): LeaderboardRow[] {
-  const {markets, positionsByMarket, tradesByMarket, balances, balancesKnown} = input;
+  const {markets, positionsByMarket, tradesByMarket, balances, balancesKnown, names} = input;
 
   const tallies = new Map<string, {count: number; volume: bigint; fees: bigint}>();
   const order: `0x${string}`[] = [];
@@ -99,6 +110,7 @@ export function leaderboard(input: {
 
     return {
       agent,
+      name: names?.get(key) ?? null,
       trades: tradesByMarket === null ? null : (tally?.count ?? 0),
       volumeTokens: tradesByMarket === null ? null : (tally?.volume ?? 0n),
       feesTokens: tradesByMarket === null ? null : (tally?.fees ?? 0n),

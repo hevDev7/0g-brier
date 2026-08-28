@@ -25,7 +25,7 @@ describe("the data layer does not write to the chain", () => {
       .filter((n) => n !== "constructor" && typeof (src as never)[n] === "function");
     const allowed = new Set([
       "listMarkets", "getMarket", "getTrades", "getCandles",
-      "getPositions", "getBalance", "getReceipt", "require", "find",
+      "getPositions", "getBalance", "getReceipt", "getAgentNames", "require", "find",
     ]);
     for (const m of methods) {
       expect(allowed.has(m), `unexpected method on MockSource: ${m}`).toBe(true);

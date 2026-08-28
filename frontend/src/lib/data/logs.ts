@@ -183,4 +183,9 @@ export class LogSource implements DataSource {
   getReceipt(address: `0x${string}`): Promise<SettlementReceipt | null> {
     return this.chain.getReceipt(address);
   }
+
+  /** Delegated: a name is chain state, not history. */
+  getAgentNames(agents: readonly `0x${string}`[]): Promise<ReadonlyMap<string, string>> {
+    return this.chain.getAgentNames(agents);
+  }
 }

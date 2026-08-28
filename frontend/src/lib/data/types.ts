@@ -250,4 +250,16 @@ export interface DataSource {
    * would report a fact about the settlement as a limitation of the reader.
    */
   getReceipt(address: `0x${string}`): Promise<SettlementReceipt | null>;
+
+  /**
+   * Display names for the keys that have traded, keyed by LOWERCASED address.
+   *
+   * A missing entry means no name is known, and that covers two causes on
+   * purpose: the key acts for no registered agent, or no registry is configured
+   * to ask. Both lead to the same honest display — the address itself — because
+   * an address IS a complete identity, just an unfriendly one. This is the rare
+   * case where two unknowns collapse safely, and it collapses because the
+   * fallback is true in both.
+   */
+  getAgentNames(agents: readonly `0x${string}`[]): Promise<ReadonlyMap<string, string>>;
 }

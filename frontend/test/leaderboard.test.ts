@@ -156,6 +156,7 @@ describe("leaderboard in a limited mode", () => {
 describe("compareRows", () => {
   const row = (over: Partial<LeaderboardRow>): LeaderboardRow => ({
     agent: `0x${"1".repeat(40)}`,
+    name: null,
     trades: 0, volumeTokens: 0n, feesTokens: 0n, marketsHeld: 0,
     positionValueTokens: 0n, unrealisedTokens: 0n, balanceTokens: 0n,
     accountValueTokens: 0n, ...over,
@@ -183,5 +184,52 @@ describe("compareRows", () => {
     const many = row({trades: 100});
     const few = row({trades: 9});
     expect([few, many].sort((a, b) => compareRows(a, b, "trades"))[0]).toBe(many);
+  });
+});
+
+/**
+ * A `Trade` carries `msg.sender` and nothing else, so a name is only ever reachable
+ * by going backwards from the key that signed it. What the column must never do is
+ * go blank when that lookup finds nothing.
+ */
+describe("agent identity on the leaderboard", () => {
+  const rowsWith = (names?: ReadonlyMap<string, string>) =>
+    leaderboard({
+      markets: FIXTURE_MARKETS,
+      positionsByMarket: null,
+      tradesByMarket: [[{
+        id: "t1",
+        timestamp: 1,
+        trader: `0x${"ab".repeat(20)}` as `0x${string}`,
+        outcome: 1,
+        sharesDelta: 1n,
+        tokens: 1n,
+        fee: 0n,
+        probAfterWad: 5n * 10n ** 17n,
+      }]],
+      balances: new Map(),
+      balancesKnown: false,
+      ...(names ? {names} : {}),
+    });
+
+  it("carries the registered handle when one is known", () => {
+    const named = new Map([[`0x${"ab".repeat(20)}`, "Nostradamus"]]);
+    expect(rowsWith(named)[0]?.name).toBe("Nostradamus");
+  });
+
+  /**
+   * Null, and the row then shows its address. Two causes collapse here — the key
+   * acts for no agent, or no registry is configured — and they collapse SAFELY,
+   * because the address is a true and complete identity in both.
+   */
+  it("carries null rather than an empty string when no name is known", () => {
+    expect(rowsWith()[0]?.name).toBeNull();
+    expect(rowsWith(new Map())[0]?.name).toBeNull();
+  });
+
+  it("matches an address whatever its casing", () => {
+    const named = new Map([[`0x${"ab".repeat(20)}`, "Pythia"]]);
+    const rows = rowsWith(named);
+    expect(rows[0]?.name).toBe("Pythia");
   });
 });

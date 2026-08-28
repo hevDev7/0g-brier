@@ -14,6 +14,10 @@
  * absence would trip it.
  */
 export const FACTORY_ABI = [
+  // The registry this factory obeys, so a client can find the AgentRegistry the same
+  // way the contracts do rather than being told where to look by configuration that
+  // could disagree with the chain.
+  {type: "function", name: "config", stateMutability: "view", inputs: [], outputs: [{type: "address"}]},
   {type: "function", name: "marketCount", stateMutability: "view", inputs: [], outputs: [{type: "uint256"}]},
   {
     type: "function",
@@ -119,5 +123,22 @@ export const RESOLUTION_ABI = [
     stateMutability: "view",
     inputs: [{type: "address"}],
     outputs: [{type: "bytes32"}, {type: "address"}],
+  },
+] as const;
+
+/**
+ * `AgentRegistry.nameOfOperator` — the handle behind a key that signed a trade.
+ *
+ * A `Trade` event carries `msg.sender` and nothing else, so a name is only ever
+ * reachable by going backwards from the key. Zero means the key acts for no
+ * registered agent, which is a fact about that key and not a gap in this client.
+ */
+export const AGENT_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "nameOfOperator",
+    stateMutability: "view",
+    inputs: [{type: "address"}],
+    outputs: [{type: "bytes32"}],
   },
 ] as const;
