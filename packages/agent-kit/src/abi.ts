@@ -185,6 +185,17 @@ export const AGENT_REGISTRY_ABI = [
   {type: "function", name: "nameOf", stateMutability: "view", inputs: [{type: "uint256"}], outputs: [{type: "bytes32"}]},
   {type: "function", name: "roleOf", stateMutability: "view", inputs: [{type: "uint256"}], outputs: [{type: "uint8"}]},
   {type: "function", name: "nextAgentId", stateMutability: "view", inputs: [], outputs: [{type: "uint256"}]},
+  {type: "function", name: "metadataRootOf", stateMutability: "view", inputs: [{type: "uint256"}], outputs: [{type: "bytes32"}]},
+  {
+    // The `proof` argument is the ERC-7857 hook and is ignored in v1 (spec §8.5);
+    // it is in the signature so that P7 verification is a behaviour change rather
+    // than an interface break.
+    type: "function",
+    name: "updateMetadata",
+    stateMutability: "nonpayable",
+    inputs: [{type: "uint256"}, {type: "bytes32"}, {type: "bytes"}],
+    outputs: [],
+  },
   {
     type: "function",
     name: "nameTaken",

@@ -303,6 +303,35 @@ export class DelphiZeroClient {
     return identity;
   }
 
+  /**
+   * The 0G Storage root of an agent's persona document, or the zero hash.
+   *
+   * Zero is the common case and means nothing has been published, NOT that the
+   * agent is invalid — `register` defaults the field, so an agent created
+   * without one reads as zero forever until this is set.
+   */
+  async metadataRootOf(agentId: bigint): Promise<`0x${string}`> {
+    const registry = await this.requireAgentRegistry();
+    return this.publicClient.readContract({
+      address: registry,
+      abi: AGENT_REGISTRY_ABI,
+      functionName: "metadataRootOf",
+      args: [agentId],
+    });
+  }
+
+  /**
+   * Point an agent at a persona document on 0G Storage.
+   *
+   * The root goes on chain VERBATIM — it is the content address, and hashing it
+   * again produces a bytes32 nothing can be fetched with. Caller must own the
+   * agent, not merely operate it.
+   */
+  async setAgentMetadata(agentId: bigint, metadataRoot: `0x${string}`): Promise<`0x${string}`> {
+    const registry = await this.requireAgentRegistry();
+    return this.send(registry, AGENT_REGISTRY_ABI, "updateMetadata", [agentId, metadataRoot, "0x"]);
+  }
+
   /** Rename an agent. Releases the old handle for someone else. */
   async setAgentName(agentId: bigint, name: string): Promise<`0x${string}`> {
     const registry = await this.requireAgentRegistry();
