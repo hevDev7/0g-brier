@@ -1,31 +1,42 @@
 /**
- * A whole agent: read the book, size a position, buy, and sell part of it back.
+ * A whole agent, end to end on 0G: read the market's own question out of 0G
+ * Storage, form a belief with a TEE-attested model on 0G Compute, size it
+ * against both the bankroll and the book, and trade on 0G Chain.
  *
- * Run it against the live Galileo deployment:
- *   DEPLOYER_KEY=... npx tsx examples/trade.ts
+ *   DEPLOYER_KEY=... ZG_PROVIDER=0x... npx tsx examples/trade.ts
  *
- * Nothing here is an oracle. The BELIEF is supplied by whoever runs it, because
- * an agent's edge comes from what it knows and this file knows nothing. What the
- * SDK contributes is everything after the belief: sizing that uses the right
- * variable, a quote that comes from the chain, and a bound on what may be paid.
+ * Three refusals are the point of the file, and each of them costs the run:
+ *
+ * - It will not trade on an answer whose TEE attestation did not come back true.
+ *   Attestation is the whole reason inference runs on 0G Compute rather than
+ *   behind someone's API key, and treating an unverified answer as verified
+ *   would throw that away while keeping the bill.
+ * - It will not guess at a reply it cannot parse. A belief defaulted to 0.5 is
+ *   not neutral on a DPM book; it is a position against whatever the market says.
+ * - It will not size on Kelly alone. See `sizeWithinImpact`.
  */
 import {WAD, toTokensCeil, toWad} from "@0g-delphi/protocol";
 import {loadDeployment} from "@0g-delphi/protocol/node";
-import {DelphiZeroClient, type Outcome} from "../src/index";
+import {ZgStore} from "@0g-delphi/zg-storage";
+import {DelphiZeroClient, ZgInference, type Outcome} from "../src/index";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
-const BELIEF_PCT = Number(process.env.BELIEF_PCT ?? 75); // P̂ for YES, in percent
+const ZG_INDEXER = process.env.ZG_INDEXER ?? "https://indexer-storage-testnet-turbo.0g.ai";
+// From `ZgInference.listServices()`. Never hardcoded in a real agent — the
+// catalogue shifts, and a dead address fails only at request time.
+const ZG_PROVIDER = (process.env.ZG_PROVIDER ?? "0xa48f01287233509FD694a22Bf840225062E67836") as `0x${string}`;
 const BANKROLL_FRACTION_CAP = 0.25; // never stake more than a quarter, whatever Kelly says
 const SLIPPAGE_BPS = 100n; // 1% over the quote
 const MAX_IMPACT_BPS = 500n; // never move the probability more than 5 points
 
 const key = process.env.DEPLOYER_KEY ?? process.env.AGENT_KEY;
 if (!key) throw new Error("set DEPLOYER_KEY (or AGENT_KEY) — the agent signs with its own key");
+const KEY = (key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`;
 
 const manifest = loadDeployment(CHAIN_ID, new URL("../../../deployments", import.meta.url).pathname);
 const client = new DelphiZeroClient({
   network: CHAIN_ID === 16602 ? "galileo" : "anvil",
-  privateKey: (key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`,
+  privateKey: KEY,
   factory: manifest.contracts.MarketFactory as `0x${string}`,
   outcomeShares: manifest.contracts.OutcomeShares as `0x${string}`,
 });
@@ -47,7 +58,43 @@ console.log(`  NOTE: those are different numbers. The price is not the probabili
 
 const OUTCOME: Outcome = 1;
 const P = market.impliedProbabilityWad[OUTCOME];
-const belief = (BigInt(Math.round(BELIEF_PCT * 100)) * WAD) / 10_000n;
+
+// The question comes from the market's OWN document, fetched by the root the
+// chain holds and verified against it. An agent told the question by its
+// operator is being told what to think about; this one reads what the market
+// actually promised its traders.
+const store = new ZgStore(ZG_INDEXER);
+const spec = (await store.get(market.specRoot)) as {
+  question?: string;
+  rules?: string;
+  settlementPrompt?: string;
+} | null;
+if (!spec?.question || !spec.rules) {
+  throw new Error(`market ${market.address} has no readable MarketSpec at ${market.specRoot}`);
+}
+console.log(`\nquestion  ${spec.question}`);
+
+const inference = await ZgInference.connect({network: "galileo", privateKey: KEY, provider: ZG_PROVIDER});
+console.log(`asking 0G Compute…`);
+const judgement = await inference.believe({
+  question: spec.question,
+  rules: spec.rules,
+  settlementPrompt: spec.settlementPrompt ?? null,
+});
+console.log(`  model     ${judgement.model}`);
+console.log(`  chatID    ${judgement.chatId}`);
+console.log(`  TEE       ${judgement.teeVerified ? "verified" : "NOT VERIFIED"}`);
+console.log(`  belief    ${pct(judgement.impliedProbabilityWad)} — ${judgement.rationale}`);
+
+// What TeeML attests is narrow: that this provider ran this model over this
+// input inside an enclave. It says nothing about whether the answer is right.
+// But without it there is no reason to prefer this over any API, so a run that
+// cannot get it stops here rather than quietly trading anyway.
+if (!judgement.teeVerified) {
+  console.log(`\n  refusing to trade: the answer carries no TEE attestation.`);
+  process.exit(1);
+}
+const belief = judgement.impliedProbabilityWad;
 
 /**
  * Kelly for DPM: f* = (P̂ − P) / (1 − P).
@@ -104,8 +151,16 @@ console.log(`  filled    ${bought.hash}`);
 console.log(`  paid      ${usd(-bought.tokensDelta, market.collateralDecimals)}  ·  now holding ${(Number(bought.sharesAfter) / 1e18).toFixed(2)} shares`);
 console.log(`  P(YES)    now ${pct(bought.impliedProbabilityAfterWad[1])}`);
 
-// Sell a third back, to prove the exit works and to show what the curve costs.
-const sellShares = bought.sharesAfter / 3n;
+/**
+ * Sell a third of WHAT THIS RUN BOUGHT, not a third of the position.
+ *
+ * `sharesAfter` is cumulative, so on a second run against the same market it
+ * includes shares bought at an earlier price. Selling a third of that and
+ * comparing the proceeds against a third of this run's cost printed
+ * "paid ~20.14, got back 32.22" — a profit that never happened, because the two
+ * numbers counted different shares.
+ */
+const sellShares = sharesOut / 3n;
 const {tokensOut} = await client.quoteSell(market.address, OUTCOME, sellShares);
 const minTokensOut = tokensOut - (tokensOut * SLIPPAGE_BPS) / 10_000n;
 console.log(`\nselling ${(Number(sellShares) / 1e18).toFixed(2)} back for at least ${usd(minTokensOut, market.collateralDecimals)}`);
@@ -115,10 +170,16 @@ console.log(`  filled    ${sold.hash}`);
 console.log(`  received  ${usd(sold.tokensDelta, market.collateralDecimals)}  ·  now holding ${(Number(sold.sharesAfter) / 1e18).toFixed(2)} shares`);
 console.log(`  P(YES)    now ${pct(sold.impliedProbabilityAfterWad[1])}`);
 
-// The round trip cost, which is the fee twice plus the walk down the curve.
-const buyCost = toWad(-bought.tokensDelta, market.collateralDecimals);
-const sellBack = toWad(sold.tokensDelta, market.collateralDecimals);
-const third = buyCost / 3n;
-console.log(`\nround trip on that third: paid ~${usd(toTokensCeil(third, market.collateralDecimals), market.collateralDecimals)}, got back ${usd(sold.tokensDelta, market.collateralDecimals)}`);
-console.log(`  selling walks BACK DOWN the curve, and the fee is charged both ways — see spec §4.`);
-void sellBack;
+/**
+ * Per share, so the comparison holds whatever the position size.
+ *
+ * Entry is this run's total cost over the shares it bought; exit is the proceeds
+ * over the shares just sold. The gap is the fee, charged both ways, plus the
+ * walk back down the curve — selling moves the price against the seller exactly
+ * as buying moved it against the buyer.
+ */
+const paidPerShare = (toWad(-bought.tokensDelta, market.collateralDecimals) * WAD) / sharesOut;
+const gotPerShare = (toWad(sold.tokensDelta, market.collateralDecimals) * WAD) / sellShares;
+console.log(`\nper share: paid ${x(paidPerShare)} on entry, received ${x(gotPerShare)} on exit`);
+console.log(`  the gap is the fee both ways plus the walk back down the curve — see spec §4.`);
+void toTokensCeil;

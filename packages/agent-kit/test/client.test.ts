@@ -3,6 +3,7 @@ import {custom, decodeFunctionData, encodeFunctionResult, type Transport} from "
 import {WAD, dpm} from "@0g-delphi/protocol";
 import {DelphiZeroClient} from "../src/client";
 import {ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "../src/abi";
+import {UnreadableBeliefError, parseBelief} from "../src/inference";
 
 const FACTORY = "0xfacadefacadefacadefacadefacadefacadefac0" as const;
 const SHARES = "0x5555555555555555555555555555555555555555" as const;
@@ -186,5 +187,43 @@ describe("sizing against the book, not just the bankroll", () => {
       maxImpactBps: 500n,
     });
     expect(sized).toBe(small);
+  });
+});
+
+/**
+ * The parser is strict because a lenient one is worse than useless here. An
+ * agent that fell back to 0.5 on an unreadable reply would trade on noise while
+ * looking exactly like one that had a view — and on a DPM book 0.5 is never
+ * neutral, it is a position against whatever the market currently says.
+ */
+describe("reading a belief out of a model's reply", () => {
+  it("reads a plain JSON answer", () => {
+    const b = parseBelief('{"probability": 0.72, "rationale": "because"}');
+    expect(b.impliedProbabilityWad).toBe((WAD * 72n) / 100n);
+    expect(b.rationale).toBe("because");
+  });
+
+  it("tolerates the markdown fence models add anyway", () => {
+    const b = parseBelief('```json\n{"probability": 0.5, "rationale": "x"}\n```');
+    expect(b.impliedProbabilityWad).toBe(WAD / 2n);
+  });
+
+  it.each([
+    ["prose", "I think about 72 percent."],
+    ["no probability", '{"rationale": "sure"}'],
+    ["a percentage, not a fraction", '{"probability": 72}'],
+    ["negative", '{"probability": -0.1}'],
+    ["not a number", '{"probability": "high"}'],
+    ["empty", ""],
+  ])("refuses %s rather than guessing", (_label, raw) => {
+    expect(() => parseBelief(raw)).toThrow(UnreadableBeliefError);
+  });
+
+  it("never silently yields one half", () => {
+    // The failure mode being ruled out: a reply it did not understand must not
+    // come back as a coin flip.
+    for (const raw of ["nonsense", "{}", '{"probability": null}']) {
+      expect(() => parseBelief(raw)).toThrow();
+    }
   });
 });
