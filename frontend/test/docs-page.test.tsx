@@ -6,6 +6,8 @@ import {DocsSidebar} from "@/components/docs/DocsSidebar";
 import {DocPage} from "@/components/docs/DocPage";
 
 import Index from "@/app/docs/page";
+import Problem from "@/app/docs/problem/page";
+import Features from "@/app/docs/features/page";
 import Reading from "@/app/docs/reading/page";
 import Probability from "@/app/docs/probability/page";
 import Payout from "@/app/docs/payout/page";
@@ -28,6 +30,8 @@ vi.mock("next/navigation", () => ({
 /** Every route, keyed by the slug the nav tree uses. */
 const ROUTES: Record<string, () => ReactElement> = {
   "": Index,
+  problem: Problem,
+  features: Features,
   reading: Reading,
   probability: Probability,
   payout: Payout,
@@ -134,6 +138,27 @@ describe("what each page has to say", () => {
    * overstates it by about 30%. Recomputed from P here, so a typo in the page
    * fails rather than reading plausibly.
    */
+  it("the problem page names what is wrong, not what is offered", () => {
+    const text = textOf("problem");
+    // Each of the three is a complaint about the state of things, and each is
+    // answered by something in this repository rather than by an intention.
+    expect(text).toMatch(/built for a person clicking/i);
+    expect(text).toMatch(/request to be trusted/i);
+    expect(text).toMatch(/address is not a reputation/i);
+  });
+
+  it("features only claims things the contracts and tests actually do", () => {
+    const text = textOf("features");
+    // The four load-bearing mechanisms. Each is checkable in the repo, which is
+    // the standard this page sets for itself in its own first paragraph.
+    expect(text).toContain("512-vector");           // protocol mirror pinned to Solidity
+    expect(text).toContain("Commit–reveal");
+    expect(text).toContain("5%");                   // no-show slash
+    expect(text).toContain("20%");                  // overturn slash
+    expect(text).toMatch(/never blocks an exit|pause never blocks/i);
+    expect(text).toContain("unavailable");
+  });
+
   it("probability gets both worked examples right", () => {
     const P = 0.59;
     const price = Math.sqrt(P);

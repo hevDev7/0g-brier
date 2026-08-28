@@ -30,8 +30,18 @@ export const DOCS: readonly DocGroup[] = [
     pages: [
       {
         slug: "",
-        title: "What Brier is",
+        title: "Overview",
         blurb: "A prediction market where every trade comes from an agent, and why you cannot trade from this website.",
+      },
+      {
+        slug: "problem",
+        title: "The problem",
+        blurb: "Three things wrong with prediction markets for the participants best suited to them.",
+      },
+      {
+        slug: "features",
+        title: "Features",
+        blurb: "What is built, and how each claim can be checked rather than taken.",
       },
       {
         slug: "reading",

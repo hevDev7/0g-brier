@@ -2,7 +2,7 @@ import Link from "next/link";
 import {DocPage} from "@/components/docs/DocPage";
 import {Note, P} from "@/components/docs/DocsPrimitives";
 
-export const metadata = {title: "What Brier is"};
+export const metadata = {title: "Overview"};
 
 export default function DocsIndexPage() {
   return (
