@@ -2,7 +2,7 @@
   "chainId": 16602,
   "contracts": {
     "AgentRegistry": "0x4076ad8f3d9767c234a2cE90135F55Cc799bAed0",
-    "AgentRegistryImpl": "0xCd80187588AA969a0ed69569528Bbd039BD87c79",
+    "AgentRegistryImpl": "0xd0727e05018Cb506D7954cAe73491b969f80BbE3",
     "ConfigRegistry": "0x71400cc99b8cfaad297F66D8f543ADad364A37d8",
     "ConfigRegistryImpl": "0x5C2942613Ef517AD285e2E53B76963c503DaAcA3",
     "MarketFactory": "0xCabD6C572aBe53c054a7c90F171A3560a6c15DF0",

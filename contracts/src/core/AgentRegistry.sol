@@ -9,6 +9,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ConfigRegistry} from "./ConfigRegistry.sol";
 import {ConfigKeys} from "./ConfigKeys.sol";
+import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {IAgentRegistry} from "../interfaces/IAgentRegistry.sol";
 
 /// @title AgentRegistry
@@ -315,4 +317,133 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {}
+
+    // ── ERC-721 metadata ─────────────────────────────────────────────────────
+    // Everything below is a VIEW over state that already exists. Not one storage
+    // slot is added, which is what makes this safe to ship as an upgrade to a
+    // contract already holding identities and stake.
+
+    /// @notice The token's metadata, as a self-contained data URI.
+    ///
+    /// @dev Built on chain rather than served from a gateway, for two reasons.
+    ///      A URL in here would pin the contract to one indexer deployment, and
+    ///      `metadataRoot` is a CONTENT address — the document it names is the same
+    ///      document wherever it is fetched from, so the contract has no business
+    ///      choosing the host. And an agent that has published nothing still has a
+    ///      name and a role on chain, so it can still render; before this existed
+    ///      `tokenURI` returned the empty string and every explorer showed a blank
+    ///      card for an identity that was perfectly well defined.
+    ///
+    ///      The persona itself is deliberately NOT inlined. It is configuration —
+    ///      prompts, model, thresholds — it changes without the identity changing,
+    ///      and it is far too large for a view that wallets call speculatively.
+    ///      Its root is published as an attribute so a reader can go and fetch it.
+    function tokenURI(uint256 agentId) public view override returns (string memory) {
+        _requireOwned(agentId);
+        Agent storage a = _agents[agentId];
+
+        string memory name_ = _readName(a.name);
+        string memory persona = a.metadataRoot == bytes32(0)
+            ? "none published"
+            : Strings.toHexString(uint256(a.metadataRoot), 32);
+
+        string memory json = string.concat(
+            '{"name":"',
+            _jsonEscape(name_),
+            '","description":"An agent identity on 0G-Delphi. The name and role are on chain; the persona, prompts and model configuration live in a 0G Storage document addressed by the Persona attribute.","image":"',
+            _image(name_, agentId),
+            '","attributes":[{"trait_type":"Role","value":"',
+            _roleName(a.role),
+            '"},{"trait_type":"Agent ID","value":',
+            Strings.toString(agentId),
+            '},{"trait_type":"Operator","value":"',
+            Strings.toHexString(a.operator),
+            '"},{"trait_type":"Persona","value":"',
+            persona,
+            '"}]}'
+        );
+        return string.concat("data:application/json;base64,", Base64.encode(bytes(json)));
+    }
+
+    /// @dev A plain card. Deterministic hue per agent so two identities are
+    ///      distinguishable at a glance without storing anything.
+    function _image(string memory name_, uint256 agentId) internal pure returns (string memory) {
+        string memory hue = Strings.toString(uint256(keccak256(abi.encode(agentId))) % 360);
+        string memory svg = string.concat(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">',
+            '<rect width="400" height="400" fill="hsl(',
+            hue,
+            ',35%,16%)"/>',
+            '<text x="200" y="196" font-family="ui-monospace,monospace" font-size="15" fill="hsl(',
+            hue,
+            ',45%,68%)" text-anchor="middle">0G-DELPHI AGENT</text>',
+            '<text x="200" y="228" font-family="ui-monospace,monospace" font-size="26" fill="#f2f2f0" text-anchor="middle">',
+            _xmlEscape(name_),
+            "</text></svg>"
+        );
+        return string.concat("data:image/svg+xml;base64,", Base64.encode(bytes(svg)));
+    }
+
+    /// @dev `name` is a right-padded bytes32 string; the padding is not part of it.
+    function _readName(bytes32 raw) internal pure returns (string memory) {
+        uint256 len;
+        while (len < 32 && raw[len] != 0) len++;
+        bytes memory out = new bytes(len);
+        for (uint256 i; i < len; i++) out[i] = raw[i];
+        return string(out);
+    }
+
+    function _roleName(Role r) internal pure returns (string memory) {
+        if (r == Role.Creator) return "Creator";
+        if (r == Role.Curator) return "Curator";
+        if (r == Role.Resolver) return "Resolver";
+        return "Trader";
+    }
+
+    /// @dev A name is 31 arbitrary bytes chosen by whoever registered it, so it can
+    ///      contain a quote and produce a document no parser will read. Escaped
+    ///      rather than filtered: the name shown must be the name registered.
+    function _jsonEscape(string memory input) internal pure returns (string memory) {
+        bytes memory b = bytes(input);
+        bytes memory out = new bytes(b.length * 2);
+        uint256 n;
+        for (uint256 i; i < b.length; i++) {
+            bytes1 c = b[i];
+            if (c == '"' || c == "\\") {
+                out[n++] = "\\";
+                out[n++] = c;
+            } else if (uint8(c) >= 0x20) {
+                out[n++] = c;
+            }
+            // Control bytes are dropped. JSON would need \u00XX for them, and a
+            // display name containing one is not a name anybody meant to register.
+        }
+        assembly {
+            mstore(out, n)
+        }
+        return string(out);
+    }
+
+    /// @dev The SVG is base64'd into the JSON, so it needs XML escaping only.
+    function _xmlEscape(string memory input) internal pure returns (string memory) {
+        bytes memory b = bytes(input);
+        bytes memory out = new bytes(b.length * 6);
+        uint256 n;
+        for (uint256 i; i < b.length; i++) {
+            bytes1 c = b[i];
+            if (c == "&") {
+                for (uint256 k; k < 5; k++) out[n++] = bytes("&amp;")[k];
+            } else if (c == "<") {
+                for (uint256 k; k < 4; k++) out[n++] = bytes("&lt;")[k];
+            } else if (c == ">") {
+                for (uint256 k; k < 4; k++) out[n++] = bytes("&gt;")[k];
+            } else if (uint8(c) >= 0x20) {
+                out[n++] = c;
+            }
+        }
+        assembly {
+            mstore(out, n)
+        }
+        return string(out);
+    }
 }
