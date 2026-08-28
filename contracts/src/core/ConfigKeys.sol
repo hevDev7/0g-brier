@@ -36,6 +36,11 @@ library ConfigKeys {
     bytes32 internal constant MIN_RESOLVER_STAKE = keccak256("MIN_RESOLVER_STAKE");
     bytes32 internal constant UNSTAKE_COOLDOWN = keccak256("UNSTAKE_COOLDOWN");
 
+    /// @dev 1 = only a registered Trader agent may buy or sell. Off by default so a
+    ///      deployment made before the registry existed is not bricked by an upgrade;
+    ///      turning it on is a deliberate governance act.
+    bytes32 internal constant REQUIRE_REGISTERED_TRADER = keccak256("REQUIRE_REGISTERED_TRADER");
+
     // ── addresses ────────────────────────────────────────────────────────────
     bytes32 internal constant MARKET_FACTORY = keccak256("MARKET_FACTORY");
     bytes32 internal constant OUTCOME_SHARES = keccak256("OUTCOME_SHARES");

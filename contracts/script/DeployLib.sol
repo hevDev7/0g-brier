@@ -94,6 +94,11 @@ library DeployLib {
         config.setBounds(ConfigKeys.DISPUTE_BOND, 0, UNBOUNDED);
         config.setBounds(ConfigKeys.MIN_RESOLVER_STAKE, 1, UNBOUNDED);
         config.setBounds(ConfigKeys.UNSTAKE_COOLDOWN, 1 hours, 30 days);
+        // A switch, so its bounds are a switch. Left OFF: markets already created are
+        // immutable clones that will never receive the check, so switching it on
+        // unconditionally would enforce identity on new markets and not on old ones
+        // while appearing to enforce it everywhere.
+        config.setBounds(ConfigKeys.REQUIRE_REGISTERED_TRADER, 0, 1);
 
         config.setParam(ConfigKeys.COMMIT_WINDOW, 1 hours);
         config.setParam(ConfigKeys.REVEAL_WINDOW, 1 hours);
@@ -114,6 +119,7 @@ library DeployLib {
         config.setParam(ConfigKeys.DISPUTE_BOND, 50e6);
         config.setParam(ConfigKeys.MIN_RESOLVER_STAKE, 100e6);
         config.setParam(ConfigKeys.UNSTAKE_COOLDOWN, 7 days);
+        config.setParam(ConfigKeys.REQUIRE_REGISTERED_TRADER, 0);
     }
 
     function resolveOperationalAddresses(uint256 chainId, address treasury, address curatorSigner, address deployer)

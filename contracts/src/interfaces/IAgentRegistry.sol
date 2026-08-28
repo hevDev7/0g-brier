@@ -26,6 +26,10 @@ interface IAgentRegistry {
     function resolvers(uint256 index) external view returns (uint256 agentId);
     function resolverCount() external view returns (uint256);
     function operatorOf(uint256 agentId) external view returns (address);
+    /// @notice Which agent an operator key acts for. Zero means none.
+    function agentOf(address operator) external view returns (uint256);
+    function nameOf(uint256 agentId) external view returns (bytes32);
+    function nameOfOperator(address operator) external view returns (bytes32);
     function roleOf(uint256 agentId) external view returns (Role);
     function stakeOf(uint256 agentId) external view returns (uint256);
     function reputationOf(uint256 agentId) external view returns (Reputation memory);

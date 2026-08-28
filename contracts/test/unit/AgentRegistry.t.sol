@@ -99,7 +99,7 @@ contract AgentRegistryTest is CommitteeFixtures {
 
     /// @dev Only resolvers stake, because only a resolver's vote is backed by it.
     function test_aTraderCannotStake() public {
-        uint256 id = registry_.register(IAgentRegistry.Role.Trader, alice, bytes32(0));
+        uint256 id = registry_.register(IAgentRegistry.Role.Trader, alice, "a-trader", bytes32(0));
         usdc.mintTo(address(this), 1e6);
         usdc.approve(address(registry_), 1e6);
         vm.expectRevert(abi.encodeWithSelector(AgentRegistry.NotAResolver.selector, id));

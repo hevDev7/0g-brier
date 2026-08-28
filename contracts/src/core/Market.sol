@@ -10,6 +10,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {DPMMath} from "../math/DPMMath.sol";
 import {ConfigRegistry} from "./ConfigRegistry.sol";
 import {ConfigKeys} from "./ConfigKeys.sol";
+import {IAgentRegistry} from "../interfaces/IAgentRegistry.sol";
 import {OutcomeShares} from "./OutcomeShares.sol";
 import {IMarket} from "../interfaces/IMarket.sol";
 
@@ -91,6 +92,11 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     error NotResolutionModule();
     error NotGuardian();
     error NotSettled();
+    /// @dev The key that signed this trade acts for no registered agent. Trading is an
+    ///      agent's job in this protocol (spec §1 F3) — the web UI holds no signer at
+    ///      all — so a trade with no identity behind it has nobody to attribute.
+    error UnregisteredTrader(address caller);
+    error NotATrader(address caller, uint256 agentId);
     error NotLiquidatable();
     error NothingToClaim();
     error TooEarly();
@@ -263,6 +269,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         returns (uint256 tokensIn)
     {
         _requireTradable();
+        _requireRegisteredTrader();
         if (outcome > 1) revert BadOutcome();
         if (sharesOut == 0) revert ZeroAmount();
 
@@ -324,6 +331,7 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         returns (uint256 tokensOut)
     {
         _requireExitable(); // deliberately no pause check
+        _requireRegisteredTrader();
         if (outcome > 1) revert BadOutcome();
         if (sharesIn == 0) revert ZeroAmount();
 
@@ -513,6 +521,35 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
         _setStatus(Status.Voided);
         _distributeFees(true);
         emit MarketVoided(reason);
+    }
+
+    /// @dev Every trade must come from a key that acts for a registered Trader agent,
+    ///      when governance has switched that on.
+    ///
+    ///      OFF BY DEFAULT, and the default is not laziness: markets already created
+    ///      are immutable clones that will never receive this code, so a deployment
+    ///      that flipped it on unconditionally would enforce identity on new markets
+    ///      and not on old ones while claiming to enforce it everywhere. Turning it on
+    ///      is a governance act, taken once the registry is populated.
+    ///
+    ///      Note the ROLE check. An agent registered to resolve is not thereby allowed
+    ///      to trade: a resolver with a position in a market it may be sampled to judge
+    ///      is the conflict the role separation exists to prevent.
+    ///
+    ///      `redeem`, `sell` and `liquidate` — the exits — are reachable while paused
+    ///      by design, and `sell` is gated here only because selling is a trade that
+    ///      moves the price. Redemption and liquidation are not, and stay open to
+    ///      anyone holding shares, including someone whose agent was later retired.
+    function _requireRegisteredTrader() internal view {
+        if (config.params(ConfigKeys.REQUIRE_REGISTERED_TRADER) == 0) return;
+        address registry = config.addresses(ConfigKeys.AGENT_REGISTRY);
+        if (registry == address(0)) return;
+
+        uint256 agentId = IAgentRegistry(registry).agentOf(msg.sender);
+        if (agentId == 0) revert UnregisteredTrader(msg.sender);
+        if (IAgentRegistry(registry).roleOf(agentId) != IAgentRegistry.Role.Trader) {
+            revert NotATrader(msg.sender, agentId);
+        }
     }
 
     function _snapshotLiquidation() internal {

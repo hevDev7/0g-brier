@@ -24,6 +24,12 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
     struct Agent {
         Role role;
         address operator;
+        /// @dev The display handle, ON CHAIN and not in the metadata document.
+        ///      Identity has to resolve every time — a leaderboard that fell back to a
+        ///      hex address whenever 0G Storage was slow would be showing two different
+        ///      things in one column. The rich persona, prompts and model config stay
+        ///      in `metadataRoot`, because those are configuration and may be fetched.
+        bytes32 name;
         bytes32 metadataRoot;
         uint256 staked;
         /// @dev Requested but not yet withdrawable. Excluded from `activeStake` the
@@ -40,6 +46,18 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
     mapping(uint256 => Agent) internal _agents;
     mapping(uint256 => Reputation) internal _reputation;
 
+    /// @notice Which agent an operator key acts for. Zero means none.
+    ///
+    /// @dev The whole point of this index. A `Trade` event carries `msg.sender` and
+    ///      nothing else, so attributing one to an agent means going backwards from
+    ///      the key that signed it. One operator maps to ONE agent: two would make the
+    ///      attribution ambiguous, and a leaderboard cannot show an ambiguous name.
+    mapping(address => uint256) public agentOf;
+
+    /// @dev Names are unique. Two agents called "Nostradamus" on a leaderboard is
+    ///      worse than two addresses — the reader believes they can tell them apart.
+    mapping(bytes32 => bool) public nameTaken;
+
     /// @notice Every resolver with any stake, for the module's sampling. Append-only:
     ///         an agent that unstakes to zero stays in the list and is filtered by
     ///         `activeStake` at sampling time. Compacting it would renumber the array
@@ -54,8 +72,13 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
     error StillCooling(uint64 until);
     error NothingCooling();
     error StakeTokenUnset();
+    error NameTaken(bytes32 name);
+    error NameEmpty();
+    error OperatorAlreadyActs(address operator, uint256 agentId);
 
-    event AgentRegistered(uint256 indexed agentId, Role indexed role, address indexed owner, address operator);
+    event AgentRegistered(
+        uint256 indexed agentId, Role indexed role, address indexed owner, address operator, bytes32 name
+    );
     event OperatorSet(uint256 indexed agentId, address indexed operator);
     event MetadataUpdated(uint256 indexed agentId, bytes32 newRoot);
     event Staked(uint256 indexed agentId, uint256 amount, uint256 total);
@@ -78,21 +101,50 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
 
     // ── identity ──────────────────────────────────────────────────────────────
 
-    function register(Role role, address operator, bytes32 metadataRoot) external returns (uint256 agentId) {
+    /// @param name A display handle, unique across the registry. Not decoration: it is
+    ///        what a leaderboard shows in place of a hex address, and what makes one
+    ///        agent's record legible as a record of that agent.
+    function register(Role role, address operator, bytes32 name, bytes32 metadataRoot)
+        external
+        returns (uint256 agentId)
+    {
+        if (name == bytes32(0)) revert NameEmpty();
+        if (nameTaken[name]) revert NameTaken(name);
+        uint256 acting = agentOf[operator];
+        if (acting != 0) revert OperatorAlreadyActs(operator, acting);
+
         agentId = nextAgentId++;
-        _agents[agentId] =
-            Agent({role: role, operator: operator, metadataRoot: metadataRoot, staked: 0, cooling: 0, cooldownEnds: 0});
+        _agents[agentId] = Agent({
+            role: role,
+            operator: operator,
+            name: name,
+            metadataRoot: metadataRoot,
+            staked: 0,
+            cooling: 0,
+            cooldownEnds: 0
+        });
+        nameTaken[name] = true;
+        if (operator != address(0)) agentOf[operator] = agentId;
         _safeMint(msg.sender, agentId);
         if (role == Role.Resolver && !_listed[agentId]) {
             _listed[agentId] = true;
             resolvers.push(agentId);
         }
-        emit AgentRegistered(agentId, role, msg.sender, operator);
+        emit AgentRegistered(agentId, role, msg.sender, operator, name);
     }
 
+    /// @dev Clears the OLD key's mapping before writing the new one. Leaving it would
+    ///      let a retired key go on being attributed to an agent that had rotated away
+    ///      from it, which is the one thing a rotation is for.
     function setOperator(uint256 agentId, address operator) external {
         _onlyAgentOwner(agentId);
+        uint256 acting = agentOf[operator];
+        if (acting != 0 && acting != agentId) revert OperatorAlreadyActs(operator, acting);
+
+        address previous = _agents[agentId].operator;
+        if (previous != address(0)) agentOf[previous] = 0;
         _agents[agentId].operator = operator;
+        if (operator != address(0)) agentOf[operator] = agentId;
         emit OperatorSet(agentId, operator);
     }
 
@@ -187,6 +239,15 @@ contract AgentRegistry is IAgentRegistry, Initializable, ERC721Upgradeable, Owna
     function activeStake(uint256 agentId) external view returns (uint256) {
         Agent storage a = _agents[agentId];
         return a.role == Role.Resolver ? a.staked : 0;
+    }
+
+    function nameOf(uint256 agentId) external view returns (bytes32) {
+        return _agents[agentId].name;
+    }
+
+    /// @notice The handle behind a key that signed something, or zero if it is nobody's.
+    function nameOfOperator(address operator) external view returns (bytes32) {
+        return _agents[agentOf[operator]].name;
     }
 
     function metadataRootOf(uint256 agentId) external view returns (bytes32) {

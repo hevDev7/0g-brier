@@ -52,7 +52,12 @@ abstract contract CommitteeFixtures is Fixtures, ERC721Holder {
         for (uint256 i = 0; i < resolverCount; i++) {
             address op = vm.addr(uint256(keccak256(abi.encode("operator", i))));
             operators.push(op);
-            uint256 id = registry_.register(IAgentRegistry.Role.Resolver, op, keccak256(abi.encode("meta", i)));
+            uint256 id = registry_.register(
+                IAgentRegistry.Role.Resolver,
+                op,
+                bytes32(abi.encodePacked("resolver-", bytes1(uint8(48 + i)))),
+                keccak256(abi.encode("meta", i))
+            );
             agentIds.push(id);
             usdc.mintTo(address(this), stakeEach);
             usdc.approve(address(registry_), stakeEach);
