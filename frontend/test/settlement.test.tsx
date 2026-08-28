@@ -98,7 +98,7 @@ describe("ResolutionEvidence", () => {
 
   it("shows the resolution criteria and the data sources", () => {
     render(<ResolutionEvidence receipt={receipt} />);
-    expect(screen.getByTestId("criteria")).toHaveTextContent(receipt.criteria);
+    expect(screen.getByTestId("criteria")).toHaveTextContent(receipt.criteria!);
     expect(screen.getByText(receipt.sources[0]!)).toBeInTheDocument();
   });
 
@@ -149,5 +149,44 @@ describe("ResolutionEvidence — an unresolved market", () => {
     render(<ResolutionEvidence receipt={pending} />);
     expect(screen.queryByTestId("criteria")).not.toBeInTheDocument();
     expect(screen.queryByTestId("reasoning")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * "Yet" promises something still to come. A resolved settlement that consulted no
+ * models will never have votes, and a resolved one that cited nothing will never
+ * have sources — saying otherwise is the same defect as rendering a zero for
+ * something unknown, one step further along.
+ */
+describe("ResolutionEvidence — resolved, but with nothing to show", () => {
+  const bare: SettlementReceipt = {
+    ...receipt,
+    votes: [],
+    judgeModel: null,
+    criteria: null,
+    sources: [],
+    reasoning: "No resolver committee ran, and no model was consulted.",
+  };
+
+  it("does not promise votes that will never arrive", () => {
+    render(<ResolutionEvidence receipt={bare} />);
+    expect(screen.getByText(/No models were consulted for this settlement/i)).toBeInTheDocument();
+    expect(screen.queryByText(/No resolver votes yet/i)).not.toBeInTheDocument();
+  });
+
+  it("still says 'yet' while the market is genuinely unresolved", () => {
+    render(<ResolutionEvidence receipt={{...bare, outcome: null}} />);
+    expect(screen.getByText(/No resolver votes yet/i)).toBeInTheDocument();
+  });
+
+  it("points a reader at the promised criteria rather than inventing the resolver's", () => {
+    render(<ResolutionEvidence receipt={bare} />);
+    expect(screen.getByText(/recorded no criteria of its own/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("criteria")).not.toBeInTheDocument();
+  });
+
+  it("says the resolver cited nothing rather than that sources are pending", () => {
+    render(<ResolutionEvidence receipt={bare} />);
+    expect(screen.getByText(/resolver cited no sources/i)).toBeInTheDocument();
   });
 });

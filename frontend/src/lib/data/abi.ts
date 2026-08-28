@@ -33,6 +33,10 @@ export const MARKET_ABI = [
   // 0G Storage document — it was simply never asked for.
   {type: "function", name: "winningOutcome", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
   {type: "function", name: "resolvedAt", stateMutability: "view", inputs: [], outputs: [{type: "uint64"}]},
+  // The registry this market obeys. Reading it lets a client find the resolution
+  // module the same way the contract does, rather than being told where to look
+  // by a configuration value that could disagree with the chain.
+  {type: "function", name: "config", stateMutability: "view", inputs: [], outputs: [{type: "address"}]},
   {type: "function", name: "tier", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
   {type: "function", name: "category", stateMutability: "view", inputs: [], outputs: [{type: "bytes32"}]},
   {type: "function", name: "tradingEnd", stateMutability: "view", inputs: [], outputs: [{type: "uint64"}]},
@@ -91,3 +95,29 @@ export const MARKET_CREATED_EVENT = {
     {name: "tier", type: "uint8", indexed: false},
   ],
 } as const;
+
+/** The one lookup a client needs from ConfigRegistry. */
+export const CONFIG_ABI = [
+  {
+    type: "function",
+    name: "addresses",
+    stateMutability: "view",
+    inputs: [{type: "bytes32"}],
+    outputs: [{type: "address"}],
+  },
+] as const;
+
+/**
+ * `ResolutionModule.resolutionOf` — the settlement receipt's 0G Storage root, and
+ * the key that anchored it. A zero root means no receipt was anchored for this
+ * market, which is a fact about the settlement rather than a gap in this client.
+ */
+export const RESOLUTION_ABI = [
+  {
+    type: "function",
+    name: "resolutionOf",
+    stateMutability: "view",
+    inputs: [{type: "address"}],
+    outputs: [{type: "bytes32"}, {type: "address"}],
+  },
+] as const;

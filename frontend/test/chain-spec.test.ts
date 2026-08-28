@@ -1,6 +1,7 @@
 import {afterEach, describe, expect, it, vi} from "vitest";
 import {custom, decodeFunctionData, encodeFunctionResult, type Transport} from "viem";
 import {ChainSource} from "@/lib/data/chain";
+import {CONFIG_ABI, RESOLUTION_ABI} from "@/lib/data/abi";
 import {ERC20_ABI, FACTORY_ABI, MARKET_ABI} from "@/lib/data/abi";
 import {SpecRootMismatchError} from "@/lib/data/zg-storage";
 
@@ -20,6 +21,9 @@ const INDEXER = "https://indexer-storage-testnet-turbo.0g.ai";
 
 const LIVE_SPEC = "{\n  \"version\": 1,\n  \"question\": \"Will the ETH/USD closing price on 2026-09-30 23:59 UTC be above $4,000?\",\n  \"rules\": \"Resolves YES if the Coinbase ETH-USD close at 2026-09-30 23:59:59 UTC is strictly greater than 4000.00 USD. Resolves NO otherwise. Deemed UNRESOLVABLE if Coinbase publishes no ETH-USD candle covering that minute and no listed fallback does either.\",\n  \"category\": \"crypto\",\n  \"sources\": [\n    {\n      \"kind\": \"http\",\n      \"url\": \"https://api.exchange.coinbase.com/products/ETH-USD/candles?granularity=60\",\n      \"selector\": \"$[0][4]\"\n    }\n  ],\n  \"settlementPrompt\": \"Read the close price from the source. Compare it to 4000.00 USD. Answer YES if strictly greater, NO if not.\",\n  \"tier\": \"VERIFIED\",\n  \"tradingEnd\": 1790000000,\n  \"settlementDeadline\": 1790086400,\n  \"creatorAgentId\": 0\n}";
 const LIVE_ROOT = "0x3f1cd7a175fcefa57fb06a4423e6bb251949f45e2ab7d01116c21b0250364dd8" as const;
+
+/** The receipt actually anchored on Galileo, byte for byte. */
+const LIVE_RECEIPT = "{\n  \"version\": 1,\n  \"market\": \"0xBA49bA43311c96bE3D5D48Ba57EfC21191E8f178\",\n  \"specRoot\": \"0x4df6b47a3f8176f4e3aadeafb2287b6bca45601dfecfca9796d1b1dffc5cf692\",\n  \"resolver\": {\n    \"agentId\": 0,\n    \"address\": \"0x71a89a7e692dAC4d6BD7c3f1cCa9155592d87BaE\"\n  },\n  \"inference\": {\n    \"route\": \"none\",\n    \"providerAddress\": \"0x0000000000000000000000000000000000000000\",\n    \"model\": null,\n    \"chatID\": null,\n    \"teeVerified\": false,\n    \"temperature\": 0,\n    \"simulated\": true\n  },\n  \"evidence\": [\n    {\n      \"kind\": \"chain\",\n      \"url\": \"https://chainscan-galileo.0g.ai/address/0xBA49bA43311c96bE3D5D48Ba57EfC21191E8f178\",\n      \"fetchedAt\": 1787877188,\n      \"note\": \"The market's own Settled event is the only record consulted.\"\n    }\n  ],\n  \"outcome\": \"YES\",\n  \"confidence\": null,\n  \"rationale\": \"No resolver committee ran, and no model was consulted. This market was settled by scripts/e2e-market.sh, which drives the full lifecycle against a live chain to prove the contracts behave \u2014 create, buy, sell, close, settle, redeem \u2014 and settles YES unconditionally so that the redeem path is exercised. The outcome recorded here is therefore a property of that test, not a judgement about the world. It is anchored on chain anyway, because a settlement whose evidence is missing and a settlement whose evidence says 'none was gathered' are different things, and only the second can be checked.\",\n  \"citations\": [\n    0\n  ],\n  \"rawResponse\": null\n}";
 
 function stubChain(specRoot: `0x${string}`): Transport {
   const answers: Record<string, unknown> = {
@@ -138,4 +142,99 @@ describe("a market's question, read from 0G Storage", () => {
     await s.getMarket(MARKET);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+});
+
+/**
+ * The settlement receipt, found the way the contract finds it: market → its own
+ * ConfigRegistry → RESOLUTION_MODULE → the root anchored for this market. The
+ * stub answers each hop, so a wrong hop is a stub miss rather than a silent zero.
+ */
+describe("a settlement's receipt, read from 0G Storage", () => {
+  const MODULE = "0x3333333333333333333333333333333333333333" as const;
+  const CONFIG = "0x4444444444444444444444444444444444444444" as const;
+  const RECEIPT_ROOT = "0x948db94252d136d6cc9cd5809de69039602b9889ec81fbe61f696a8cf6522c17" as const;
+
+  it("is unavailable, not absent, when no storage endpoint is configured", async () => {
+    const s = source();
+    expect(s.capabilities.has("SETTLEMENT_RECEIPT")).toBe(false);
+    await expect(s.getReceipt(MARKET)).rejects.toMatchObject({capability: "SETTLEMENT_RECEIPT"});
+  });
+
+  it("is null — looked, and nothing was anchored — when the root is zero", async () => {
+    stubStorage("{}");
+    const s = sourceWithModule({module: MODULE, root: `0x${"0".repeat(64)}`});
+    expect(s.capabilities.has("SETTLEMENT_RECEIPT")).toBe(true);
+    await expect(s.getReceipt(MARKET)).resolves.toBeNull();
+  });
+
+  it("is null when the deployment has no resolution module at all", async () => {
+    stubStorage("{}");
+    const s = sourceWithModule({module: "0x0000000000000000000000000000000000000000", root: RECEIPT_ROOT});
+    await expect(s.getReceipt(MARKET)).resolves.toBeNull();
+  });
+
+  it("reads the anchored document and keeps what the resolver did not claim empty", async () => {
+    stubStorage(LIVE_RECEIPT);
+    const receipt = await sourceWithModule({module: MODULE, root: RECEIPT_ROOT}).getReceipt(MARKET);
+    expect(receipt?.outcome).toBe(1);
+    expect(receipt?.simulated).toBe(true);
+    // `route: "none"` — no model was consulted, so the committee is EMPTY rather
+    // than one nameless member, and there is no judge.
+    expect(receipt?.votes).toEqual([]);
+    expect(receipt?.judgeModel).toBeNull();
+    // The resolver stated no criteria of its own. The market's promised criteria
+    // are in the MarketSpec and must not be copied in here.
+    expect(receipt?.criteria).toBeNull();
+    expect(receipt?.reasoning).toContain("No resolver committee ran");
+    expect(receipt?.sources[0]).toContain("chainscan-galileo");
+  });
+
+  /**
+   * The chain says a receipt exists and storage cannot produce it. Reporting that
+   * as "no receipt was anchored" would hide a broken record behind a sentence
+   * that happens to read true.
+   */
+  it("fails loudly when an anchored root has no readable document behind it", async () => {
+    stubStorage('{"code":101,"message":"File not found","data":null}');
+    const s = sourceWithModule({module: MODULE, root: RECEIPT_ROOT});
+    await expect(s.getReceipt(MARKET)).rejects.toThrow(/anchored receipt .*no readable document/);
+  });
+
+  function sourceWithModule(opts: {module: `0x${string}`; root: `0x${string}`}) {
+    return new ChainSource({
+      rpcUrl: "http://stub",
+      chainId: 16602,
+      factory: FACTORY,
+      transport: stubResolution(opts),
+      zgIndexerUrl: INDEXER,
+    });
+  }
+
+  function stubResolution({module, root}: {module: `0x${string}`; root: `0x${string}`}): Transport {
+    const base = stubChain(LIVE_ROOT);
+    return custom({
+      request: async (args) => {
+        const {method, params} = args as {method: string; params: unknown};
+        if (method === "eth_call") {
+          const {to, data} = (params as [{to: `0x${string}`; data: `0x${string}`}])[0];
+          if (to.toLowerCase() === CONFIG.toLowerCase()) {
+            return encodeFunctionResult({abi: CONFIG_ABI, functionName: "addresses", result: module});
+          }
+          if (to.toLowerCase() === module.toLowerCase()) {
+            return encodeFunctionResult({
+              abi: RESOLUTION_ABI,
+              functionName: "resolutionOf",
+              result: [root, "0xaaaaaaaa00000000000000000000000000000001"],
+            });
+          }
+          const {functionName} = decodeFunctionData({abi: MARKET_ABI, data});
+          if (functionName === "config") {
+            return encodeFunctionResult({abi: MARKET_ABI, functionName: "config", result: CONFIG});
+          }
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- delegating the untouched hops
+        return (base({} as any) as any).request(args);
+      },
+    });
+  }
 });

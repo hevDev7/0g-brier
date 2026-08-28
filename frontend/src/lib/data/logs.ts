@@ -3,7 +3,6 @@ import {MARKET_CREATED_EVENT, TRADE_EVENT} from "./abi";
 import {ChainSource, type ChainSourceConfig} from "./chain";
 import {candlesFrom, positionsFrom} from "./derive";
 import {
-  CapabilityUnavailableError,
   type Candle,
   type Capability,
   type DataMode,
@@ -179,7 +178,9 @@ export class LogSource implements DataSource {
    * unavailable until that integration exists rather than degrading into a
    * partial answer assembled from whatever the chain happens to hold.
    */
-  async getReceipt(): Promise<SettlementReceipt> {
-    throw new CapabilityUnavailableError("SETTLEMENT_RECEIPT", this.mode);
+  /** Delegated, like every other non-log read. The receipt is a 0G Storage
+   *  document reached from chain state, so nothing here can improve on it. */
+  getReceipt(address: `0x${string}`): Promise<SettlementReceipt | null> {
+    return this.chain.getReceipt(address);
   }
 }

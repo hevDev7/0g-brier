@@ -1,9 +1,13 @@
 import {concatHex, keccak256, type Hex} from "viem";
-import type {SpecSource} from "./types";
+import type {Outcome, ResolverVote, SettlementReceipt, SpecSource} from "./types";
 
 /**
- * Reading a MarketSpec out of 0G Storage, and PROVING it is the one the market
- * committed to.
+ * Reading a market's documents out of 0G Storage, and PROVING each is the one it
+ * was committed to.
+ *
+ * Two documents come through here — the MarketSpec behind `specRoot`, and the
+ * settlement receipt behind the root `ResolutionModule` anchors. The fetch and
+ * the verification are identical for both; only the parsing differs.
  *
  * The chain stores `specRoot` and nothing else. The question and the settlement
  * rules live in a JSON document on 0G Storage whose Merkle root that field is.
@@ -157,6 +161,66 @@ function parseSpec(json: unknown): MarketSpec | null {
 }
 
 /**
+ * A settlement receipt (spec §7.5) as the UI needs it.
+ *
+ * The document's own shape is the resolver's; this maps it onto the fields the
+ * report renders, and refuses to invent the ones it does not carry:
+ *
+ * - `votes` is EMPTY when no model was consulted. Not one entry with a blank
+ *   name — an empty committee and a committee whose member has no name are
+ *   different facts, and only the first is true of a receipt with `route:
+ *   "none"`.
+ * - `criteria` stays null unless the RESOLVER stated some. The market's promised
+ *   criteria are in its MarketSpec and are shown separately; copying them in
+ *   here would make the report agree with itself by construction.
+ * - `simulated` defaults to TRUE when the document does not say. A receipt that
+ *   forgot to declare itself real must not be read as real.
+ */
+function parseReceipt(json: unknown): SettlementReceipt | null {
+  if (typeof json !== "object" || json === null) return null;
+  const o = json as Record<string, unknown>;
+  const inference = (typeof o.inference === "object" && o.inference !== null ? o.inference : {}) as Record<
+    string,
+    unknown
+  >;
+
+  const outcome = o.outcome === "YES" ? 1 : o.outcome === "NO" ? 0 : null;
+  const reasoning = asString(o.rationale);
+  // A receipt with no rationale explains nothing, and the panel's whole promise
+  // is that the reasoning is there to read verbatim.
+  if (reasoning === null) return null;
+
+  const model = asString(inference.model);
+  const teeVerified = inference.teeVerified === true;
+  const simulated = inference.simulated !== false;
+  const votes: ResolverVote[] =
+    model === null ? [] : [{model, outcome: outcome as Outcome | null, teeVerified, simulated}];
+
+  const sources = Array.isArray(o.evidence)
+    ? o.evidence.flatMap((e): string[] => {
+        if (typeof e !== "object" || e === null) return [];
+        const url = asString((e as Record<string, unknown>).url);
+        return url === null ? [] : [url];
+      })
+    : [];
+
+  const provider = asString(inference.providerAddress);
+  return {
+    outcome: outcome as Outcome | null,
+    votes,
+    judgeModel: model,
+    reasoning,
+    criteria: asString(o.criteria),
+    sources,
+    provider: (provider !== null && /^0x[0-9a-fA-F]{40}$/.test(provider)
+      ? provider
+      : "0x0000000000000000000000000000000000000000") as `0x${string}`,
+    chatId: asString(inference.chatID),
+    simulated,
+  };
+}
+
+/**
  * The indexer's envelope for a root it has never seen: HTTP 200 with a JSON
  * body carrying a non-zero code. It is only ever consulted AFTER verification
  * has already failed, so a real document can never be mistaken for one of these
@@ -176,16 +240,16 @@ function isAbsentEnvelope(text: string): boolean {
 const REQUEST_TIMEOUT_MS = 10_000;
 
 /**
- * Fetches MarketSpec documents by root, and caches them.
+ * Fetches documents by root, verifies them, and caches them.
  *
  * Caching is unconditionally safe here in a way it almost never is: the key IS
  * the hash of the value. A root cannot come to mean different bytes later, so
  * there is no staleness to reason about and no invalidation to get wrong.
  */
-export class SpecStore {
+export class ZgStore {
   private readonly indexerUrl: string;
-  private readonly cache = new Map<Hex, MarketSpec | null>();
-  private readonly inflight = new Map<Hex, Promise<MarketSpec | null>>();
+  private readonly cache = new Map<Hex, unknown>();
+  private readonly inflight = new Map<Hex, Promise<unknown>>();
   private readonly fetchImpl: typeof fetch;
 
   constructor(indexerUrl: string, fetchImpl?: typeof fetch) {
@@ -199,17 +263,27 @@ export class SpecStore {
     this.fetchImpl = fetchImpl ?? ((...args) => globalThis.fetch(...args));
   }
 
+  /** The MarketSpec behind a `specRoot`, or `null` if there is nothing readable there. */
+  async getSpec(root: Hex): Promise<MarketSpec | null> {
+    return parseSpec(await this.get(root));
+  }
+
+  /** The settlement receipt behind an anchored root, or `null` if unreadable. */
+  async getReceipt(root: Hex): Promise<SettlementReceipt | null> {
+    return parseReceipt(await this.get(root));
+  }
+
   /**
-   * Returns the spec, or `null` when there is genuinely nothing to show — the
-   * root was never uploaded, or the document carries no question.
+   * The verified document at `root`, parsed as JSON, or `null` when there is
+   * genuinely nothing there — the root was never uploaded.
    *
    * THROWS on a root mismatch and on an unreachable indexer. Both are wrong
    * answers rather than absent ones, and the difference matters on screen: an
-   * absent spec is honestly reported as "not available", whereas silently
-   * showing that for a document that failed verification would turn a tampered
-   * or broken read into a shrug.
+   * absent document is honestly reported as "not available", whereas silently
+   * showing that for one that failed verification would turn a tampered or
+   * broken read into a shrug.
    */
-  async get(root: Hex): Promise<MarketSpec | null> {
+  async get(root: Hex): Promise<unknown> {
     // Keyed lowercase because the comparison in `load` is: two spellings of one
     // root are one document, and caching them apart would fetch it twice.
     const key = root.toLowerCase() as Hex;
@@ -218,16 +292,16 @@ export class SpecStore {
     if (running) return running;
 
     const task = this.load(root)
-      .then((spec) => {
-        this.cache.set(key, spec);
-        return spec;
+      .then((doc) => {
+        this.cache.set(key, doc);
+        return doc;
       })
       .finally(() => this.inflight.delete(key));
     this.inflight.set(key, task);
     return task;
   }
 
-  private async load(root: Hex): Promise<MarketSpec | null> {
+  private async load(root: Hex): Promise<unknown> {
     const url = `${this.indexerUrl.replace(/\/+$/, "")}/file?root=${root}`;
     const res = await this.fetchImpl(url, {signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)});
     if (!res.ok) {
@@ -241,8 +315,10 @@ export class SpecStore {
       throw new SpecRootMismatchError(root, actual);
     }
     try {
-      return parseSpec(JSON.parse(text));
+      return JSON.parse(text);
     } catch {
+      // Verified bytes that are not JSON. The creator stored something else at
+      // this root; there is nothing here to render, and nothing was tampered with.
       return null;
     }
   }

@@ -1,6 +1,16 @@
-import {createPublicClient, defineChain, hexToString, http, type PublicClient, type Transport} from "viem";
-import {ERC20_ABI, FACTORY_ABI, MARKET_ABI} from "./abi";
-import {SpecStore, type MarketSpec} from "./zg-storage";
+import {
+  createPublicClient,
+  defineChain,
+  hexToString,
+  http,
+  keccak256,
+  toBytes,
+  type Hex,
+  type PublicClient,
+  type Transport,
+} from "viem";
+import {CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, RESOLUTION_ABI} from "./abi";
+import {ZgStore, type MarketSpec} from "./zg-storage";
 import {
   CapabilityUnavailableError,
   type Candle,
@@ -59,6 +69,13 @@ const STATUSES: readonly MarketStatus[] = [
 /** `IMarket.Params.tier`: 0 = FAST, 1 = VERIFIED, 2 = DETERMINISTIC. */
 const TIERS: readonly Tier[] = ["FAST", "VERIFIED", "DETERMINISTIC"];
 
+/** `ConfigKeys.RESOLUTION_MODULE`, derived rather than pasted — a mistyped
+ *  bytes32 constant reads as "no module configured" and would be silent. */
+const RESOLUTION_MODULE_KEY = keccak256(toBytes("RESOLUTION_MODULE"));
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const ZERO_ROOT = `0x${"0".repeat(64)}`;
+
 export interface ChainSourceConfig {
   rpcUrl: string;
   chainId: number;
@@ -103,18 +120,20 @@ export class ChainSource implements DataSource {
   private readonly client: PublicClient;
   private readonly factory: `0x${string}`;
   /** Absent when no 0G Storage indexer is configured. */
-  private readonly specs: SpecStore | null;
+  private readonly specs: ZgStore | null;
   /** Token metadata never changes, and a market list would otherwise re-read it once per row. */
   private readonly tokens = new Map<string, CollateralInfo>();
 
   constructor(config: ChainSourceConfig) {
     this.factory = config.factory;
-    this.specs = config.zgIndexerUrl ? new SpecStore(config.zgIndexerUrl) : null;
+    this.specs = config.zgIndexerUrl ? new ZgStore(config.zgIndexerUrl) : null;
     this.capabilities = new Set<Capability>([
       "LIST_MARKETS",
       "MARKET_STATE",
       "AGENT_BALANCE",
-      ...(this.specs ? (["MARKET_SPEC_BLOB"] as const) : []),
+      // Both are 0G Storage documents reached by a root that is already on chain,
+      // so an indexer is not what either needs — a storage endpoint is.
+      ...(this.specs ? (["MARKET_SPEC_BLOB", "SETTLEMENT_RECEIPT"] as const) : []),
     ]);
     this.client = createPublicClient({
       chain: defineChain({
@@ -178,7 +197,7 @@ export class ChainSource implements DataSource {
 
     // Awaited after the enum checks so a market this UI cannot describe fails on
     // that, not on a storage fetch it was never going to be able to use.
-    const spec = this.specs ? await this.specs.get(specRoot) : null;
+    const spec = this.specs ? await this.specs.getSpec(specRoot) : null;
 
     return {
       specRoot,
@@ -290,7 +309,51 @@ export class ChainSource implements DataSource {
     this.unavailable("AGENT_POSITIONS");
   }
 
-  async getReceipt(): Promise<SettlementReceipt> {
-    this.unavailable("SETTLEMENT_RECEIPT");
+  /**
+   * The resolver's record for a settlement, found the way the contract itself
+   * would: market → its ConfigRegistry → RESOLUTION_MODULE → the root anchored
+   * for this market. Nothing is read from configuration that the chain could be
+   * asked for, so a client cannot be pointed at a module the market does not
+   * actually obey.
+   *
+   * `null` means the settlement anchored nothing — permanently true of every
+   * market resolved before `ResolutionModule` existed, and of any resolved by an
+   * EOA holding the role directly.
+   */
+  async getReceipt(address: `0x${string}`): Promise<SettlementReceipt | null> {
+    const specs = this.specs;
+    if (!specs) this.unavailable("SETTLEMENT_RECEIPT");
+
+    const configAddress = await this.client.readContract({
+      address,
+      abi: MARKET_ABI,
+      functionName: "config",
+    });
+    const moduleAddress = await this.client.readContract({
+      address: configAddress,
+      abi: CONFIG_ABI,
+      functionName: "addresses",
+      args: [RESOLUTION_MODULE_KEY],
+    });
+    // No module at all: nothing has ever been anchored on this deployment, and
+    // nothing about this market can be.
+    if (moduleAddress.toLowerCase() === ZERO_ADDRESS) return null;
+
+    const [receiptRoot] = await this.client.readContract({
+      address: moduleAddress,
+      abi: RESOLUTION_ABI,
+      functionName: "resolutionOf",
+      args: [address],
+    });
+    if (receiptRoot.toLowerCase() === ZERO_ROOT) return null;
+
+    const receipt = await specs.getReceipt(receiptRoot as Hex);
+    // The chain says a receipt exists and storage cannot produce it. That is an
+    // anomaly, not an absence, and reporting it as "no receipt was anchored"
+    // would hide a broken record behind a true-sounding sentence.
+    if (receipt === null) {
+      throw new Error(`Market ${address} anchored receipt ${receiptRoot}, but no readable document is stored there`);
+    }
+    return receipt;
   }
 }

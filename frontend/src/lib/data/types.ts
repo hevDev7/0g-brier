@@ -189,10 +189,20 @@ export interface SettlementReceipt {
   judgeModel: string | null;
   /** The resolver's reasoning verbatim. NOT summarized — see spec §4.2. */
   reasoning: string;
-  criteria: string;
+  /**
+   * The criteria the RESOLVER states it judged against, or `null` when it stated
+   * none of its own.
+   *
+   * Not the same thing as the market's promised criteria, which live in the
+   * MarketSpec and are shown beside these in the settlement report. A resolver
+   * that judged against different criteria is exactly what a reader is checking
+   * for, so the two must never be filled in from each other.
+   */
+  criteria: string | null;
   sources: string[];
   provider: `0x${string}`;
-  chatId: string;
+  /** The inference's id at the provider, or `null` when no model was consulted. */
+  chatId: string | null;
   /** true when the receipt came from stub mode. Must be conspicuous in the UI. */
   simulated: boolean;
 }
@@ -229,5 +239,15 @@ export interface DataSource {
    * the term.
    */
   getBalance(agent: `0x${string}`, collateral: `0x${string}`): Promise<bigint>;
-  getReceipt(address: `0x${string}`): Promise<SettlementReceipt>;
+  /**
+   * The resolver's record for a settlement, or `null` when the mode LOOKED and
+   * this settlement anchored none.
+   *
+   * `null` is not `unavailable`. Unavailable means this mode cannot know; null
+   * means it knows, and the answer is that no receipt exists — which is
+   * permanently true of every market settled before `ResolutionModule` did, and
+   * of any settled by an EOA holding the resolution role. Collapsing the two
+   * would report a fact about the settlement as a limitation of the reader.
+   */
+  getReceipt(address: `0x${string}`): Promise<SettlementReceipt | null>;
 }

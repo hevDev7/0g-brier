@@ -81,8 +81,8 @@ describe("the settlement report", () => {
    */
   it("keeps the promised criteria and the resolver's account of them apart", async () => {
     await open(settled);
-    expect(screen.getByTestId("report-criteria")).not.toHaveTextContent(RECEIPT.criteria);
-    expect(screen.getByTestId("resolution-evidence")).toHaveTextContent(RECEIPT.criteria);
+    expect(screen.getByTestId("report-criteria")).not.toHaveTextContent(RECEIPT.criteria!);
+    expect(screen.getByTestId("resolution-evidence")).toHaveTextContent(RECEIPT.criteria!);
   });
 
   /**

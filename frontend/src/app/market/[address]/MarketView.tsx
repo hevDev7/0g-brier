@@ -268,7 +268,7 @@ function renderPositions(
  * market on a live chain read as though nobody had decided anything.
  */
 function renderSettlement(
-  receipt: Query<SettlementReceipt>,
+  receipt: Query<SettlementReceipt | null>,
   market: MarketDetail,
   mode: DataMode,
 ): React.JSX.Element {

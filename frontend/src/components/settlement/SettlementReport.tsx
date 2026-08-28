@@ -87,10 +87,25 @@ function OutcomeLine({market}: {market: MarketDetail}) {
 }
 
 /** The resolver's half, in whichever of the four states the receipt is. */
-function ResolverRecord({receipt}: {receipt: Query<SettlementReceipt>}): React.JSX.Element {
+function ResolverRecord({receipt}: {receipt: Query<SettlementReceipt | null>}): React.JSX.Element {
   switch (receipt.status) {
     case "ready":
-      return <ResolutionEvidence receipt={receipt.data} />;
+      // Looked, and there is no record. Distinct from `unavailable` below, which
+      // says this mode cannot look at all — a reader needs to know whether the
+      // evidence is missing from the world or merely from here. Permanently true
+      // of every market settled before receipts were anchored on chain.
+      return receipt.data === null ? (
+        <p
+          data-testid="no-receipt-anchored"
+          className="px-4 py-3.5 text-[13px] leading-relaxed text-text-muted md:px-5"
+        >
+          This settlement anchored no receipt. The market was resolved directly, without a
+          resolution module to record which models judged it or on what evidence — so there is
+          no resolver record to show, and there never will be for this market.
+        </p>
+      ) : (
+        <ResolutionEvidence receipt={receipt.data} />
+      );
     case "unavailable":
       return (
         <div className="px-4 py-3.5 md:px-5">
@@ -118,7 +133,7 @@ export function SettlementReport({
   mode,
 }: {
   market: MarketDetail;
-  receipt: Query<SettlementReceipt>;
+  receipt: Query<SettlementReceipt | null>;
   mode: DataMode;
 }) {
   const [open, setOpen] = useState(false);

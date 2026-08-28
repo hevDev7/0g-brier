@@ -1,5 +1,5 @@
 import {describe, expect, it, vi} from "vitest";
-import {SpecRootMismatchError, SpecStore, zgMerkleRoot} from "@/lib/data/zg-storage";
+import {SpecRootMismatchError, ZgStore, zgMerkleRoot} from "@/lib/data/zg-storage";
 
 /**
  * Byte i is `(i * 37 + 11) mod 256`. A one-line pattern rather than a blob, so
@@ -75,10 +75,10 @@ describe("zgMerkleRoot", () => {
   });
 });
 
-describe("SpecStore", () => {
+describe("ZgStore", () => {
   it("returns the document when its bytes hash to the root asked for", async () => {
     const fetchImpl = responding(LIVE_SPEC);
-    const spec = await new SpecStore(INDEXER, fetchImpl).get(LIVE_ROOT);
+    const spec = await new ZgStore(INDEXER, fetchImpl).getSpec(LIVE_ROOT);
     expect(spec?.question).toContain("ETH/USD");
     expect(spec?.rules).toContain("Resolves YES");
     expect(spec?.sources[0]?.url).toContain("coinbase");
@@ -86,8 +86,8 @@ describe("SpecStore", () => {
   });
 
   it("reports a root the indexer has never seen as absent, not as an error", async () => {
-    const store = new SpecStore(INDEXER, responding('{"code":101,"message":"File not found","data":null}'));
-    await expect(store.get(LIVE_ROOT)).resolves.toBeNull();
+    const store = new ZgStore(INDEXER, responding('{"code":101,"message":"File not found","data":null}'));
+    await expect(store.getSpec(LIVE_ROOT)).resolves.toBeNull();
   });
 
   /**
@@ -97,20 +97,20 @@ describe("SpecStore", () => {
    */
   it("refuses a document that does not hash to the root asked for", async () => {
     const tampered = LIVE_SPEC.replace("above $4,000", "above $9,000");
-    const store = new SpecStore(INDEXER, responding(tampered));
-    await expect(store.get(LIVE_ROOT)).rejects.toThrow(SpecRootMismatchError);
+    const store = new ZgStore(INDEXER, responding(tampered));
+    await expect(store.getSpec(LIVE_ROOT)).rejects.toThrow(SpecRootMismatchError);
   });
 
   it("does not mistake an absent-file envelope for a document", async () => {
     // Valid JSON with a question in it — but it is not the committed bytes, so
     // the hash decides and the envelope check never gets to matter.
-    const store = new SpecStore(INDEXER, responding('{"question":"Am I real?","rules":"No."}'));
-    await expect(store.get(LIVE_ROOT)).rejects.toThrow(SpecRootMismatchError);
+    const store = new ZgStore(INDEXER, responding('{"question":"Am I real?","rules":"No."}'));
+    await expect(store.getSpec(LIVE_ROOT)).rejects.toThrow(SpecRootMismatchError);
   });
 
   it("treats an unreachable indexer as an error rather than as an absent spec", async () => {
-    const store = new SpecStore(INDEXER, responding("nope", 503));
-    await expect(store.get(LIVE_ROOT)).rejects.toThrow(/503/);
+    const store = new ZgStore(INDEXER, responding("nope", 503));
+    await expect(store.getSpec(LIVE_ROOT)).rejects.toThrow(/503/);
   });
 
   /**
@@ -128,28 +128,28 @@ describe("SpecStore", () => {
       return Promise.resolve(new Response(LIVE_SPEC));
     });
     try {
-      await new SpecStore(INDEXER).get(LIVE_ROOT);
+      await new ZgStore(INDEXER).getSpec(LIVE_ROOT);
     } finally {
       vi.unstubAllGlobals();
     }
     expect(receivers).toHaveLength(1);
-    expect(receivers[0]).not.toBeInstanceOf(SpecStore);
+    expect(receivers[0]).not.toBeInstanceOf(ZgStore);
   });
 
   it("fetches a root once however often it is asked for", async () => {
     const fetchImpl = responding(LIVE_SPEC);
-    const store = new SpecStore(INDEXER, fetchImpl);
-    const [a, b, c] = await Promise.all([store.get(LIVE_ROOT), store.get(LIVE_ROOT), store.get(LIVE_ROOT)]);
-    expect(await store.get(LIVE_ROOT)).toEqual(a);
+    const store = new ZgStore(INDEXER, fetchImpl);
+    const [a, b, c] = await Promise.all([store.getSpec(LIVE_ROOT), store.getSpec(LIVE_ROOT), store.getSpec(LIVE_ROOT)]);
+    expect(await store.getSpec(LIVE_ROOT)).toEqual(a);
     expect(b).toEqual(c);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("caches an absent root too, so a market with no spec is not re-fetched per render", async () => {
     const fetchImpl = responding('{"code":101,"message":"File not found","data":null}');
-    const store = new SpecStore(INDEXER, fetchImpl);
-    expect(await store.get(LIVE_ROOT)).toBeNull();
-    expect(await store.get(LIVE_ROOT)).toBeNull();
+    const store = new ZgStore(INDEXER, fetchImpl);
+    expect(await store.getSpec(LIVE_ROOT)).toBeNull();
+    expect(await store.getSpec(LIVE_ROOT)).toBeNull();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });

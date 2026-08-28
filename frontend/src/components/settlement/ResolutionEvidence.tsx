@@ -82,7 +82,15 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
 
       <Section title="Resolver votes">
         {receipt.votes.length === 0 ? (
-          <p className="text-[13px] text-text-muted">No resolver votes yet.</p>
+          // "Yet" is only true before a decision. Once the market is resolved with
+          // no models named, none were consulted and none ever will be for this
+          // settlement — promising a list that cannot arrive is the same defect as
+          // rendering a zero for something unknown.
+          <p className="text-[13px] text-text-muted">
+            {receipt.outcome === null
+              ? "No resolver votes yet."
+              : "No models were consulted for this settlement."}
+          </p>
         ) : (
           <ul className="divide-y divide-border">
             {receipt.votes.map((v) => (
@@ -106,6 +114,14 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
         {receipt.outcome === null ? (
           <p className="text-[13px] text-text-muted">
             No criteria yet — this market is not resolved.
+          </p>
+        ) : receipt.criteria === null ? (
+          // Resolved, but the resolver stated no criteria of its own. Filling this
+          // in from the MarketSpec would be the report answering its own question:
+          // whether the resolver judged against what was promised is the thing the
+          // reader came to check, and it cannot be checked against a copy.
+          <p className="text-[13px] text-text-muted">
+            The resolver recorded no criteria of its own — compare what the market promised.
           </p>
         ) : (
           <p data-testid="criteria" className="text-[13px] leading-relaxed text-text">
@@ -151,7 +167,11 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
 
       <Section title="Sources">
         {receipt.sources.length === 0 ? (
-          <p className="text-[13px] text-text-muted">No sources recorded yet.</p>
+          <p className="text-[13px] text-text-muted">
+            {receipt.outcome === null
+              ? "No sources recorded yet."
+              : "The resolver cited no sources."}
+          </p>
         ) : (
           <ul className="flex flex-col gap-1">
             {receipt.sources.map((s) => (
