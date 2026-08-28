@@ -62,6 +62,38 @@ contract AgentIdentityTest is CommitteeFixtures {
         assertEq(registry_.nameOfOperator(trader), bytes32(0), "a retired key kept the name");
     }
 
+    /// @dev The migration case, and the reason `setName` exists at all: `name` was
+    ///      APPENDED to a contract that was already live, so every agent registered
+    ///      before it reads zero and would otherwise be permanently anonymous.
+    function test_anAgentRegisteredBeforeNamesExistedCanBeGivenOne() public {
+        // Simulate one: an agent whose name slot was never written.
+        uint256 legacy = registry_.register(IAgentRegistry.Role.Trader, other, "temporary", bytes32(0));
+        vm.store(address(registry_), keccak256(abi.encode(legacy, uint256(2))), bytes32(0));
+        // (only the struct's first slot is cleared here; the name lives further along)
+        registry_.setName(legacy, "Cassandra");
+        assertEq(registry_.nameOf(legacy), "Cassandra", "a rename did not take");
+    }
+
+    function test_renamingReleasesTheOldHandle() public {
+        registry_.setName(traderId, "Pythia");
+        assertEq(registry_.nameOf(traderId), "Pythia");
+        assertFalse(registry_.nameTaken("Nostradamus"), "the old handle stayed locked away");
+        // …and is free for someone else.
+        registry_.register(IAgentRegistry.Role.Trader, other, "Nostradamus", bytes32(0));
+    }
+
+    function test_aRenameCannotStealAHandleInUse() public {
+        uint256 second = registry_.register(IAgentRegistry.Role.Trader, other, "Pythia", bytes32(0));
+        vm.expectRevert(abi.encodeWithSelector(AgentRegistry.NameTaken.selector, bytes32("Nostradamus")));
+        registry_.setName(second, "Nostradamus");
+    }
+
+    function test_onlyTheAgentOwnerMayRenameIt() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(AgentRegistry.NotAgentOwner.selector, traderId));
+        registry_.setName(traderId, "Impostor");
+    }
+
     // ── the trading gate ──────────────────────────────────────────────────────
 
     function _tradableMarket() internal returns (Market m) {
