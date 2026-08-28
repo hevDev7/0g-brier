@@ -3,7 +3,7 @@ import {custom, decodeFunctionData, encodeFunctionResult, type Transport} from "
 import {WAD, dpm} from "@0g-delphi/protocol";
 import {DelphiZeroClient} from "../src/client";
 import {ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "../src/abi";
-import {UnreadableBeliefError, parseBelief} from "../src/inference";
+import {UnreadableBeliefError, parseBelief, parseJudgement} from "../src/inference";
 
 const FACTORY = "0xfacadefacadefacadefacadefacadefacadefac0" as const;
 const SHARES = "0x5555555555555555555555555555555555555555" as const;
@@ -294,5 +294,32 @@ describe("what a claim says it burned", () => {
 
   it("refuses to claim a market that has not resolved", async () => {
     await expect(client().redeem(MARKET)).rejects.toThrow(/not been resolved/);
+  });
+});
+
+/**
+ * A resolver that defaulted an unreadable reply to some outcome would settle a market
+ * on noise. The default people reach for — UNRESOLVABLE — is not an abstention
+ * either: it liquidates every position, which is a decision.
+ */
+describe("reading a settlement out of a model's reply", () => {
+  it("reads the three outcomes", () => {
+    expect(parseJudgement('{"outcome":"YES","confidence":0.9,"rationale":"x"}').outcome).toBe(1);
+    expect(parseJudgement('{"outcome":"NO","confidence":0.9,"rationale":"x"}').outcome).toBe(0);
+    expect(parseJudgement('{"outcome":"UNRESOLVABLE","rationale":"x"}').outcome).toBe(2);
+  });
+
+  it("keeps confidence null rather than inventing one", () => {
+    expect(parseJudgement('{"outcome":"YES","rationale":"x"}').confidence).toBeNull();
+    expect(parseJudgement('{"outcome":"YES","confidence":7,"rationale":"x"}').confidence).toBeNull();
+  });
+
+  it.each([
+    ["prose", "I think YES."],
+    ["a probability instead of an outcome", '{"probability":0.7}'],
+    ["an outcome it was not offered", '{"outcome":"MAYBE"}'],
+    ["empty", ""],
+  ])("refuses %s rather than settling on it", (_l, raw) => {
+    expect(() => parseJudgement(raw)).toThrow(UnreadableBeliefError);
   });
 });

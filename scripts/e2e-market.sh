@@ -163,7 +163,10 @@ echo "   mUSDC balance: $(cast call --rpc-url "$RPC" "$USDC" "balanceOf(address)
 step "2/8 sign a curator approval (EIP-712) and create the market"
 TRADING_END=$(( $(now) + WINDOW ))
 SETTLEMENT_DEADLINE=$(( TRADING_END + WINDOW ))
-TIER=1
+# 0 = FAST, 1 = VERIFIED, 2 = DETERMINISTIC. The tier decides the committee's shape
+# and its dispute window, so a run with three staked resolvers wants tier 2 (n=3, k=2)
+# rather than the default VERIFIED (n=5, k=3), which would revert NotEnoughResolvers.
+TIER="${TIER:-1}"
 AGENT_ID=1
 CATEGORY="$(cast format-bytes32-string crypto)"
 

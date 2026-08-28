@@ -31,6 +31,16 @@ export interface Belief extends Attestation {
   raw: string;
 }
 
+/** NO, YES, or "this question cannot be answered". */
+export type SettlementOutcome = 0 | 1 | 2;
+
+export interface Judgement extends Attestation {
+  outcome: SettlementOutcome;
+  confidence: number | null;
+  rationale: string;
+  raw: string;
+}
+
 /** Thrown when a reply cannot be read as a probability. Never defaulted. */
 export class UnreadableBeliefError extends Error {
   constructor(readonly raw: string) {
@@ -116,6 +126,44 @@ export class ZgInference {
   }
 
   /**
+   * Judge a market against its own promised rules (spec §7.4).
+   *
+   * A resolver answers one of three things, and the third is not a third answer to
+   * the question: UNRESOLVABLE says the question cannot be answered, which routes
+   * to `Market.fail()` and liquidates every side rather than paying one. A model
+   * that is unsure must be able to say so, or it will guess.
+   *
+   * Unlike `believe`, this DOES show the model the settlement prompt the creator
+   * committed to — that prompt is the instruction it is being held to, and judging
+   * without it would be judging a different question than the one traders were sold.
+   */
+  async settle(spec: {
+    question: string;
+    rules: string;
+    settlementPrompt?: string | null;
+    evidence?: readonly {url: string; note?: string}[];
+  }): Promise<Judgement> {
+    const evidence = (spec.evidence ?? []).map((e, i) => `[${i}] ${e.url}${e.note ? ` — ${e.note}` : ""}`);
+    const prompt = [
+      "You are a settlement resolver. Answer ONLY with a JSON object of the form",
+      '{"outcome": "YES"|"NO"|"UNRESOLVABLE", "confidence": <0..1>, "rationale": "<one or two sentences>"}',
+      "and nothing else — no markdown fence, no preamble.",
+      "",
+      `QUESTION: ${spec.question}`,
+      "",
+      `RESOLUTION RULES: ${spec.rules}`,
+      ...(spec.settlementPrompt ? ["", `SETTLEMENT INSTRUCTIONS: ${spec.settlementPrompt}`] : []),
+      ...(evidence.length > 0 ? ["", "EVIDENCE:", ...evidence] : []),
+      "",
+      "Answer UNRESOLVABLE if the rules cannot be applied to the evidence available.",
+      "That is not a failure — a resolver that guesses is worse than one that abstains.",
+    ].join("\n");
+
+    const answer = await this.ask(prompt);
+    return {...answer, ...parseJudgement(answer.content), raw: answer.content};
+  }
+
+  /**
    * A probability for YES, from the market's own promised rules.
    *
    * The market's CURRENT probability is deliberately not shown to the model. An
@@ -167,6 +215,36 @@ export function parseBelief(raw: string): {impliedProbabilityWad: bigint; ration
   if (typeof p !== "number" || !Number.isFinite(p) || p < 0 || p > 1) throw new UnreadableBeliefError(raw);
   return {
     impliedProbabilityWad: BigInt(Math.round(p * 1e6)) * (WAD / 1_000_000n),
+    rationale: typeof o.rationale === "string" ? o.rationale : "",
+  };
+}
+
+/**
+ * Strict, for the same reason `parseBelief` is: a resolver that defaulted an
+ * unreadable reply to any outcome would be settling a market on noise. The safe
+ * default people reach for — UNRESOLVABLE — is not safe either: it liquidates every
+ * position, which is a decision, not an abstention from one.
+ */
+export function parseJudgement(raw: string): {
+  outcome: SettlementOutcome;
+  confidence: number | null;
+  rationale: string;
+} {
+  const text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new UnreadableBeliefError(raw);
+  }
+  if (typeof json !== "object" || json === null) throw new UnreadableBeliefError(raw);
+  const o = json as Record<string, unknown>;
+  const outcome = o.outcome === "YES" ? 1 : o.outcome === "NO" ? 0 : o.outcome === "UNRESOLVABLE" ? 2 : null;
+  if (outcome === null) throw new UnreadableBeliefError(raw);
+  const c = o.confidence;
+  return {
+    outcome: outcome as SettlementOutcome,
+    confidence: typeof c === "number" && Number.isFinite(c) && c >= 0 && c <= 1 ? c : null,
     rationale: typeof o.rationale === "string" ? o.rationale : "",
   };
 }
