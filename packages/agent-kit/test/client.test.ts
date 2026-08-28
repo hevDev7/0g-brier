@@ -227,3 +227,44 @@ describe("reading a belief out of a model's reply", () => {
     }
   });
 });
+
+/**
+ * A fixed impact cap is blind to how much edge is left. In run 3 of the live
+ * convergence the agent believed 70.00% against a market at 69.30% and bought
+ * through to 74.26% — every share past its own belief being one its own model
+ * calls overpriced. The cap has to be the SMALLER of the standing limit and the
+ * distance to the belief.
+ */
+describe("not buying past your own belief", () => {
+  const AT_69: readonly [bigint, bigint] = [1000n * WAD, 1502n * WAD];
+  const at69 = () => client({qArray: AT_69, poolWad: dpm.costUp(AT_69)});
+
+  it("the book at this q really is near 69%", () => {
+    const p = dpm.probability(AT_69, 1);
+    expect(p).toBeGreaterThan((WAD * 68n) / 100n);
+    expect(p).toBeLessThan((WAD * 70n) / 100n);
+  });
+
+  it("a thin edge buys far less than a wide one", async () => {
+    const budget = 149_739_766_779n;
+    const wide = await at69().sizeWithinImpact({
+      market: MARKET, outcome: 1, budgetTokens: budget, maxImpactBps: 500n,
+    });
+    // Seven tenths of a point of edge, as run 3 actually had.
+    const thin = await at69().sizeWithinImpact({
+      market: MARKET, outcome: 1, budgetTokens: budget, maxImpactBps: 70n,
+    });
+    expect(thin).toBeLessThan(wide);
+    expect(thin).toBeGreaterThan(0n);
+  });
+
+  it("keeps the move inside the thin bound, so the market cannot be pushed past the belief", async () => {
+    const sized = await at69().sizeWithinImpact({
+      market: MARKET, outcome: 1, budgetTokens: 149_739_766_779n, maxImpactBps: 70n,
+    });
+    const before = dpm.probability(AT_69, 1);
+    const shares = dpm.sharesForSpend(AT_69, 1, sized * 10n ** 12n);
+    const after = dpm.probability([AT_69[0], AT_69[1] + shares] as const, 1);
+    expect(after - before).toBeLessThanOrEqual((WAD * 70n) / 10_000n);
+  });
+});

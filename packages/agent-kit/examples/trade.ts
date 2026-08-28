@@ -126,14 +126,31 @@ const kellyTokens = BigInt(Math.floor(Number(free) * fraction));
  * depth, and on a DPM curve an order that big destroys the edge it was computed
  * from in the act of taking it.
  */
+/**
+ * …and then the belief again, as a ceiling on the move itself.
+ *
+ * A fixed impact cap is blind to how much edge is left. Run 3 of the
+ * convergence had a belief of 70.00% against a market at 69.30% — seven tenths
+ * of a point of edge — and the 5pp cap happily bought through it to 74.26%.
+ * Every share past 70% is one the agent's OWN model says is overpriced, so the
+ * last part of that order was a bet against itself.
+ *
+ * The move is therefore bounded by whichever is smaller: the standing impact
+ * limit, or the distance to the belief.
+ */
+const edgeBps = ((belief - P) * 10_000n) / WAD;
+const impactCapBps = edgeBps < MAX_IMPACT_BPS ? edgeBps : MAX_IMPACT_BPS;
+if (impactCapBps < MAX_IMPACT_BPS) {
+  console.log(`  only ${Number(edgeBps) / 100}pp of edge left, so the move is capped there rather than at ${Number(MAX_IMPACT_BPS) / 100}pp`);
+}
 const stakeTokens = await client.sizeWithinImpact({
   market: market.address,
   outcome: OUTCOME,
   budgetTokens: kellyTokens,
-  maxImpactBps: MAX_IMPACT_BPS,
+  maxImpactBps: impactCapBps,
 });
 console.log(`  free ${usd(free, market.collateralDecimals)} ${market.collateralSymbol}`);
-console.log(`  Kelly wants ${usd(kellyTokens, market.collateralDecimals)}; the book allows ${usd(stakeTokens, market.collateralDecimals)} within ${Number(MAX_IMPACT_BPS) / 100}pp of impact`);
+console.log(`  Kelly wants ${usd(kellyTokens, market.collateralDecimals)}; the book allows ${usd(stakeTokens, market.collateralDecimals)} within ${Number(impactCapBps) / 100}pp of impact`);
 
 // How many shares that budget buys, inverted BY THE CONTRACT rather than locally.
 const {sharesOut} = await client.quoteBuySpend(market.address, OUTCOME, stakeTokens);
