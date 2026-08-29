@@ -126,7 +126,7 @@ All DPM math is wad (1e18). Collateral is 6 decimals. **No `Number()`, no `parse
 Double precision cannot represent a wad value, and a silent rounding on money is not acceptable.
 
 - Convert only at the token boundary, only with `toWad` / `toTokensFloor` / `toTokensCeil` from
-  `@brier/protocol`. Never write a `1e12` or `10n ** 12n` of your own.
+  `@hevdev7/protocol`. Never write a `1e12` or `10n ** 12n` of your own.
 - Money **in** rounds up (`toTokensCeil`), money **out** rounds down (`toTokensFloor`). A pool
   depth reading is money out — it must never overstate what backs the market.
 - Every displayed number goes through `lib/format.ts`. If you need a format that does not exist
@@ -500,7 +500,7 @@ detail page's title should name the market.
   with `--bg`/`--text`/`--accent`), no Recharts or visx (they take `number`, and wad values must not
   become floats), no framer-motion, no icon package unless you inline the handful of SVGs you need.
   Charts are hand-rolled SVG built from `lib/chart.ts`, which is pure arithmetic and unit-tested.
-- **`@brier/protocol` is the single copy of the DPM math**, pinned to `DPMMath.sol` by a
+- **`@hevdev7/protocol` is the single copy of the DPM math**, pinned to `DPMMath.sol` by a
   512-vector differential test and shared with the agent SDK. Import it. Adding modules to it is
   fine; **changing its arithmetic or reimplementing any of it in the frontend is not.** Two copies
   of the payout formula is the easiest way to make the screen and the agents disagree.
@@ -592,7 +592,7 @@ another market.
 
 ## 10. Self-check — numbers you must reproduce
 
-Computed from the live fixtures via `@brier/protocol`. If your UI disagrees with any of these,
+Computed from the live fixtures via `@hevdev7/protocol`. If your UI disagrees with any of these,
 you have the probability/payout confusion described in L1.
 
 **Market 1 — `0x1111…1111`, Open, `q = [1000, 1200]` (NO, YES)**
@@ -635,7 +635,7 @@ your tape and your panel disagree, the bug is in your rendering, not in the data
 | Add a buy/sell/redeem/approve/connect control, even disabled | Violates the product's core separation; fails tests |
 | Add a signer, `wagmi`, or a `viem` write path | Same |
 | `Number()` / `parseFloat` / `.toFixed()` on money | wad is not representable in double |
-| Write your own `1e12` or decimal conversion | `@brier/protocol` has the correct rounding directions |
+| Write your own `1e12` or decimal conversion | `@hevdev7/protocol` has the correct rounding directions |
 | Format a number inside a component | Formatting must be identical across screens |
 | Reimplement DPM math in the frontend | Two copies make the screen and the agents disagree |
 | Create `tailwind.config.js` | Tailwind v4 is CSS-first here |

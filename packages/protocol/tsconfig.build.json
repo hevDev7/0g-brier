@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // NodeNext, not "bundler": the emitted files have to run in Node with no
+    // bundler in front of them, and only NodeNext resolution matches what Node
+    // itself does with ESM. The source carries explicit `.js` extensions on its
+    // relative imports for exactly this reason — `bundler` tolerates their
+    // absence, Node does not, and the difference only shows up after publishing.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "noEmit": false
+  },
+  // Only `src`. The typecheck config also covers `test` and `scripts`, which a
+  // consumer has no use for and which would drag vitest into the published tree.
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

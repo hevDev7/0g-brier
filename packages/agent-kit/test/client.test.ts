@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
 import {custom, decodeFunctionData, encodeFunctionResult, type Transport} from "viem";
-import {WAD, dpm} from "@brier/protocol";
+import {WAD, dpm} from "@hevdev7/protocol";
 import {BrierClient} from "../src/client";
 import {ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "../src/abi";
 import {UnreadableBeliefError, parseBelief, parseJudgement} from "../src/inference";

@@ -1,4 +1,4 @@
-import { WAD } from './units';
+import { WAD } from './units.js';
 
 /** Exact mirror of contracts/src/math/DPMMath.sol. Any change on one side
  *  must be followed on the other — the differential test in contracts/test/differential enforces it. */

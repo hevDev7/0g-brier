@@ -1,5 +1,5 @@
 import type {PublicClient} from "viem";
-import {dpm} from "@brier/protocol";
+import {dpm} from "@hevdev7/protocol";
 import {MARKET_CREATED_EVENT, TRADE_EVENT} from "./abi";
 import type {GetLogsReturnType} from "viem";
 import {ChainSource, type ChainSourceConfig} from "./chain";

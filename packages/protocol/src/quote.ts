@@ -1,10 +1,10 @@
-import { WAD } from './units';
-import { price, probability, sharesForSpend, type Outcome, type Q } from './dpm';
+import { WAD } from './units.js';
+import { price, probability, sharesForSpend, type Outcome, type Q } from './dpm.js';
 
 /**
  * Quote engine: what a budget gets, and what it does to the market. Pure —
  * no React, no RPC, no state — so the same implementation serves the human
- * UI and `@brier/agent-kit`.
+ * UI and `@hevdev7/agent-kit`.
  *
  * This is a REFERENCE implementation, not the authority: before sending a
  * transaction, the caller calls `quoteBuySpend`/`quoteBuy` on-chain, and that

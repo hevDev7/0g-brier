@@ -1,4 +1,4 @@
-import {dpm, toTokensFloor} from "@brier/protocol";
+import {dpm, toTokensFloor} from "@hevdev7/protocol";
 import type {MarketStatus, MarketSummary, Outcome, Position} from "@/lib/data/types";
 
 const WAD = 10n ** 18n;

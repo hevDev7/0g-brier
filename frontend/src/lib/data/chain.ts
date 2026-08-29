@@ -12,7 +12,7 @@ import {
 } from "viem";
 import {AGENT_REGISTRY_ABI, CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, RESOLUTION_ABI} from "./abi";
 import {ZgStore, type MarketSpec} from "./zg-storage";
-import type {DocumentStore} from "@brier/zg-storage";
+import type {DocumentStore} from "@hevdev7/zg-storage";
 import {
   CapabilityUnavailableError,
   type Candle,

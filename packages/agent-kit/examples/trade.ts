@@ -15,9 +15,9 @@
  *   not neutral on a DPM book; it is a position against whatever the market says.
  * - It will not size on Kelly alone. See `sizeWithinImpact`.
  */
-import {WAD, toTokensCeil, toWad} from "@brier/protocol";
-import {loadDeployment} from "@brier/protocol/node";
-import {ZgStore} from "@brier/zg-storage";
+import {WAD, toTokensCeil, toWad} from "@hevdev7/protocol";
+import {loadDeployment} from "@hevdev7/protocol/node";
+import {ZgStore} from "@hevdev7/zg-storage";
 import {BrierClient, ZgInference, type Outcome} from "../src/index";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);

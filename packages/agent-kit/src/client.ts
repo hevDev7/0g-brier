@@ -11,10 +11,10 @@ import {
 } from "viem";
 import {privateKeyToAccount} from "viem/accounts";
 import {keccak256, stringToHex, toBytes, pad} from "viem";
-import {WAD, dpm, quote, toWad, networkFor, type ChainMode} from "@brier/protocol";
-import {AGENT_REGISTRY_ABI, CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "./abi";
-import {suggestFees} from "./fees";
-import type {Claim, Fill, MarketView, Outcome, Preview, Tier, MarketStatus} from "./types";
+import {WAD, dpm, quote, toWad, networkFor, type ChainMode} from "@hevdev7/protocol";
+import {AGENT_REGISTRY_ABI, CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "./abi.js";
+import {suggestFees} from "./fees.js";
+import type {Claim, Fill, MarketView, Outcome, Preview, Tier, MarketStatus} from "./types.js";
 
 /** The order in `IMarket.Status`. */
 const STATUSES: readonly MarketStatus[] = [
@@ -92,7 +92,7 @@ export interface ClientConfig {
  *
  * 1. **The chain's quote is what gets signed.** `preview()` reads
  *    `Market.quoteBuy` on chain and returns that number; the DPM mirror in
- *    `@brier/protocol` only supplies the things a view cannot — what the
+ *    `@hevdev7/protocol` only supplies the things a view cannot — what the
  *    trade does to the probability and to the payout. An agent that sized from
  *    a local model and signed against it would be trading a copy.
  *

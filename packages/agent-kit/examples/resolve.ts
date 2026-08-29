@@ -29,9 +29,9 @@
  */
 import {createPublicClient, createWalletClient, defineChain, http, keccak256, encodeAbiParameters} from "viem";
 import {privateKeyToAccount} from "viem/accounts";
-import {loadDeployment} from "@brier/protocol/node";
-import {networkFor} from "@brier/protocol";
-import {ZgStore} from "@brier/zg-storage";
+import {loadDeployment} from "@hevdev7/protocol/node";
+import {networkFor} from "@hevdev7/protocol";
+import {ZgStore} from "@hevdev7/zg-storage";
 import {
   ZgInference,
   gatherEvidence,

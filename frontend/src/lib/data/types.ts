@@ -251,7 +251,7 @@ export interface SettlementReceipt {
  * The read contract. Note there is no method here for buying, selling, claiming
  * a settled position, or unwinding one, and that is not an oversight: the human
  * UI only observes (spec §1 F3). All execution lives in
- * `@brier/agent-kit`. This boundary is enforced by a test, not merely by
+ * `@hevdev7/agent-kit`. This boundary is enforced by a test, not merely by
  * convention — see test/write-boundary.test.ts. (The two exit verbs are
  * deliberately paraphrased rather than named: that test greps every file in
  * this directory, comments included, for the literal chain-write terms.)

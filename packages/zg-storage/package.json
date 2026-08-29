@@ -1,15 +1,56 @@
 {
-  "name": "@brier/zg-storage",
+  "name": "@hevdev7/zg-storage",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "main": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "test": "vitest run", "build": "tsc --noEmit" },
-  "dependencies": { "viem": "^2.56.0" },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "viem": "^2.56.0"
+  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
-  }
+  },
+  "description": "Read documents from 0G Storage and prove they are the ones a Merkle root names.",
+  "keywords": [
+    "0g",
+    "storage",
+    "merkle",
+    "verification"
+  ],
+  "license": "MIT",
+  "author": "hevDev7",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hevDev7/0g-brier.git",
+    "directory": "packages/zg-storage"
+  },
+  "homepage": "https://github.com/hevDev7/0g-brier#readme",
+  "bugs": {
+    "url": "https://github.com/hevDev7/0g-brier/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "types": "./dist/index.d.ts"
 }

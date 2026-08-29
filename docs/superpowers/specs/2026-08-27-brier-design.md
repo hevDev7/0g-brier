@@ -696,7 +696,7 @@ subscribe { channel: "agent", agentId }      → action, trade
 
 ---
 
-## 10. SDK — `@brier/agent-kit`
+## 10. SDK — `@hevdev7/agent-kit`
 
 The ergonomics deliberately follow the Delphi SDK so a Delphi user understands it immediately, **plus** what they do not have.
 

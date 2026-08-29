@@ -262,14 +262,14 @@ describe("where the judgement ran", () => {
   };
 
   it("shows what backs the badge, not only the badge", () => {
-    render(<ResolutionEvidence market={m} receipt={attested} mode="chain" />);
+    render(<ResolutionEvidence receipt={attested} />);
     expect(screen.getByText("0xa48f01287233509FD694a22Bf840225062E67836")).toBeInTheDocument();
     expect(screen.getByText("532aaa97-7852-47ed-b353-9c52f8eb6333")).toBeInTheDocument();
   });
 
   /** What TeeML attests is narrow, and the page must not widen it. */
   it("does not claim the attestation makes the answer correct", () => {
-    const {container} = render(<ResolutionEvidence market={m} receipt={attested} mode="chain" />);
+    const {container} = render(<ResolutionEvidence receipt={attested} />);
     expect(container.textContent).toContain("not that the answer is right");
   });
 
@@ -280,16 +280,13 @@ describe("where the judgement ran", () => {
    */
   it("says so when nothing attested the judgement", () => {
     render(
-      <ResolutionEvidence
-        market={m}
-        receipt={{
+      <ResolutionEvidence receipt={{
           ...receipt,
           route: "anthropic",
           provider: "0x0000000000000000000000000000000000000000",
           chatId: null,
           votes: [{model: "claude-sonnet-4-6", outcome: 1, teeVerified: false, simulated: false}],
         }}
-        mode="chain"
       />,
     );
     const note = screen.getByTestId("no-attestation");
@@ -307,10 +304,7 @@ describe("where the judgement ran", () => {
    */
   it("distinguishes an unattested 0G Compute run from a verified one", () => {
     const {container} = render(
-      <ResolutionEvidence
-        market={m}
-        receipt={{...attested, votes: [{model: "qwen/qwen2.5-omni-7b", outcome: 1, teeVerified: false, simulated: false}]}}
-        mode="chain"
+      <ResolutionEvidence receipt={{...attested, votes: [{model: "qwen/qwen2.5-omni-7b", outcome: 1, teeVerified: false, simulated: false}]}}
       />,
     );
     expect(container.textContent).toContain("no attestation could be established");

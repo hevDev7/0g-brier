@@ -1,5 +1,5 @@
 import {beforeEach, describe, expect, it} from "vitest";
-import {WAD, dpm} from "@brier/protocol";
+import {WAD, dpm} from "@hevdev7/protocol";
 import {FIXTURE_MARKETS, MockSource, fixturePositions} from "@/lib/data/mock";
 import {CapabilityUnavailableError, type Trade} from "@/lib/data/types";
 

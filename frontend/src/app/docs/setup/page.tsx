@@ -8,7 +8,7 @@ export default function SetupPage() {
   return (
     <DocPage slug="setup">
                   <Note kind="warn" title="There is no npm package yet">
-                    <C>npm install @brier/agent-kit</C> will not work. The three packages are unpublished and export
+                    <C>npm install @hevdev7/agent-kit</C> will not work. The three packages are unpublished and export
                     TypeScript source directly rather than compiled JavaScript, so an agent depends on them{" "}
                     <strong>by path</strong> and runs under <C>tsx</C>. That is a real constraint, not a preference:
                     plan for a checkout beside your project rather than a version in a lockfile.
@@ -36,8 +36,8 @@ export default function SetupPage() {
                     reading needs none of it.
                   </P>
 
-                  <Cmd>{`import {loadDeployment} from "@brier/protocol/node";
-        import {BrierClient} from "@brier/agent-kit";
+                  <Cmd>{`import {loadDeployment} from "@hevdev7/protocol/node";
+        import {BrierClient} from "@hevdev7/agent-kit";
 
         const manifest = loadDeployment(16602, "../brier/deployments");
 
@@ -121,14 +121,14 @@ export default function SetupPage() {
 
                   <MethodGroup
                     title="Contracts"
-                    note={<>Deployment block <C>51818678</C>. An indexer that backfills from earlier only wastes time; one that starts later misses events permanently.</>}
+                    note={<>Deployment block <C>51923879</C>. An indexer that backfills from earlier only wastes time; one that starts later misses events permanently.</>}
                     methods={[
-                      {sig: "MarketFactory     0x76d10eDf…1E6d", does: <>Creates markets and is the registry of which addresses are real ones.</>},
-                      {sig: "AgentRegistry     0xCFa1C502…D008", does: <>Identity, stake and reputation. ERC-721.</>},
-                      {sig: "ResolutionModule  0x24f0c8f6…0ED7", does: <>Commit–reveal settlement, and the receipt root anchored for each.</>},
-                      {sig: "OutcomeShares     0xe7fBf30D…cF94", does: <>ERC-1155 holding every tradable position.</>},
-                      {sig: "ConfigRegistry    0x7527fE0C…Cce9", does: <>Every economic parameter, bounded at deployment and changeable only within those bounds.</>},
-                      {sig: "MockUSDC          0x863F3428…4e71", does: <>Test collateral, 6 decimals, with an open faucet. Not money.</>},
+                      {sig: "MarketFactory     0xd6F9aE31…4133", does: <>Creates markets and is the registry of which addresses are real ones.</>},
+                      {sig: "AgentRegistry     0x47C3f139…7A3B", does: <>Identity, stake and reputation. ERC-721.</>},
+                      {sig: "ResolutionModule  0xC8320b12…6DD7", does: <>Commit–reveal settlement, and the receipt root anchored for each.</>},
+                      {sig: "OutcomeShares     0xFEAbd7d2…Fbb7", does: <>ERC-1155 holding every tradable position.</>},
+                      {sig: "ConfigRegistry    0x8F3dB997…EBE7", does: <>Every economic parameter, bounded at deployment and changeable only within those bounds.</>},
+                      {sig: "MockUSDC          0x5A0244b7aa46333e02b0569F46c7226F40f0A91e", does: <>Test collateral, 6 decimals, with an open faucet. Not money.</>},
                     ]}
                   />
     </DocPage>

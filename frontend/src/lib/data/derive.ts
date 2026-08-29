@@ -1,4 +1,4 @@
-import {WAD, toWad} from "@brier/protocol";
+import {WAD, toWad} from "@hevdev7/protocol";
 import type {Candle, Interval, Outcome, Position, Trade} from "./types";
 
 /**

@@ -1,7 +1,7 @@
 import {ethers} from "ethers";
 import {createZGComputeNetworkBroker} from "@0gfoundation/0g-compute-ts-sdk";
-import {WAD, networkFor, isCategory, type Category, type ChainMode} from "@brier/protocol";
-import {renderObservation, type Observation} from "./evidence";
+import {WAD, networkFor, isCategory, type Category, type ChainMode} from "@hevdev7/protocol";
+import {renderObservation, type Observation} from "./evidence.js";
 
 /**
  * What an agent knows about where an answer came from.
@@ -145,6 +145,12 @@ export interface InferenceConfig {
  * settlement transaction per request. `listServices` is free and is the only
  * call here that is.
  */
+/**
+ * The same `Wallet`, told twice — see the note on `connect`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- two module formats of one class
+const brokerWallet = (w: ethers.Wallet): any => w;
+
 export class ZgInference {
   private constructor(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the SDK exports no broker type
@@ -152,11 +158,32 @@ export class ZgInference {
     private readonly provider: `0x${string}`,
   ) {}
 
+  /**
+   * The same `Wallet`, told twice.
+   *
+   * `@0gfoundation/0g-compute-ts-sdk` declares its types under a CONDITION-LESS
+   * `exports.types`, so TypeScript reads one declaration file however the module
+   * was loaded — and that file was compiled against ethers' CommonJS build. This
+   * package is ESM and gets ethers' ESM build, so `Wallet` arrives as a
+   * structurally identical class from a different module instance and the two
+   * types refuse to unify on their `#private` fields.
+   *
+   * Cast at the boundary rather than papered over the whole call: it is the one
+   * place the two module formats meet, and the alternative is `any` spreading
+   * outward from it. Empirically fine — this path has run real attested inference
+   * on Galileo against provider 0xa48f0128… — but it IS a hazard rather than a
+   * non-issue: two ethers instances in one process means an `instanceof` check
+   * inside the SDK would fail, and nothing here can prevent that.
+   *
+   * It only shows up when building for publication. `moduleResolution: "bundler"`,
+   * which the monorepo uses to typecheck, resolves both to the same file and
+   * reports nothing.
+   */
   static async connect(config: InferenceConfig): Promise<ZgInference> {
     const net = networkFor(config.network ?? "galileo");
     const rpc = new ethers.JsonRpcProvider(config.rpcUrl ?? net.rpcUrl);
     const wallet = new ethers.Wallet(config.privateKey, rpc);
-    return new ZgInference(await createZGComputeNetworkBroker(wallet), config.provider);
+    return new ZgInference(await createZGComputeNetworkBroker(brokerWallet(wallet)), config.provider);
   }
 
   /** The live catalogue. Free, and the only way to learn a provider address. */
@@ -165,7 +192,7 @@ export class ZgInference {
     const net = networkFor(config.network ?? "galileo");
     const rpc = new ethers.JsonRpcProvider(config.rpcUrl ?? net.rpcUrl);
     const wallet = new ethers.Wallet(config.privateKey, rpc);
-    const broker = await createZGComputeNetworkBroker(wallet);
+    const broker = await createZGComputeNetworkBroker(brokerWallet(wallet));
     return broker.inference.listService();
   }
 

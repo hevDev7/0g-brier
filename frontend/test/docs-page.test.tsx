@@ -189,7 +189,7 @@ describe("what each page has to say", () => {
   });
 
   /**
-   * The dilution table is computed at render from `@brier/protocol`, so this
+   * The dilution table is computed at render from `@hevdev7/protocol`, so this
    * checks the CLAIM the page makes about it rather than the digits: that profit
    * keeps rising while the return on each unit staked collapses. Those two moving
    * in opposite directions is the entire point, and a table that lost it would

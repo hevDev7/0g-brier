@@ -1,6 +1,6 @@
-export * from "./client";
-export * from "./types";
-export * from "./inference";
-export * from "./evidence";
-export * from "./fees";
-export {MARKET_ABI, FACTORY_ABI, ERC20_ABI, SHARES_ABI} from "./abi";
+export * from "./client.js";
+export * from "./types.js";
+export * from "./inference.js";
+export * from "./evidence.js";
+export * from "./fees.js";
+export {MARKET_ABI, FACTORY_ABI, ERC20_ABI, SHARES_ABI} from "./abi.js";

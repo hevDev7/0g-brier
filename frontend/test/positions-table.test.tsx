@@ -2,7 +2,7 @@ import {describe, expect, it} from "vitest";
 import {render, screen, within} from "@testing-library/react";
 import {PositionsTable} from "@/components/market/PositionsTable";
 import {FIXTURE_MARKETS} from "@/lib/data/mock";
-import {toTokensFloor} from "@brier/protocol";
+import {toTokensFloor} from "@hevdev7/protocol";
 import type {Position} from "@/lib/data/types";
 
 const WAD = 10n ** 18n;

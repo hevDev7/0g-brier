@@ -37,7 +37,7 @@ describe("MarketView", () => {
 
   /**
    * A product decision (spec §1 F3), not a layout preference: execution lives in
-   * `@brier/agent-kit`, so the human page must have no execution control at
+   * `@hevdev7/agent-kit`, so the human page must have no execution control at
    * all — not hidden, not disabled, ABSENT. A disabled button still promises
    * something that will never exist here.
    */

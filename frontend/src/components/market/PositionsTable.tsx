@@ -1,5 +1,5 @@
 import {Layers} from "lucide-react";
-import {dpm, toTokensFloor} from "@brier/protocol";
+import {dpm, toTokensFloor} from "@hevdev7/protocol";
 import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {Unavailable} from "@/components/primitives/Unavailable";
 import {formatCollateral, formatPricePerShare, formatShares, shortAddress} from "@/lib/format";

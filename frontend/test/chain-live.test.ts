@@ -2,7 +2,7 @@ import {describe, expect, it} from "vitest";
 import {ChainSource} from "@/lib/data/chain";
 import {LogSource} from "@/lib/data/logs";
 import {CapabilityUnavailableError} from "@/lib/data/types";
-import {dpm, quote} from "@brier/protocol";
+import {dpm, quote} from "@hevdev7/protocol";
 
 /**
  * The only test here that touches a network, and therefore opt-in:

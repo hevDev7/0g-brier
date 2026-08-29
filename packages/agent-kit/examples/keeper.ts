@@ -31,7 +31,7 @@
  */
 import {createPublicClient, createWalletClient, defineChain, http} from "viem";
 import {privateKeyToAccount} from "viem/accounts";
-import {loadDeployment} from "@brier/protocol/node";
+import {loadDeployment} from "@hevdev7/protocol/node";
 import {BrierClient, MARKET_ABI} from "../src/index";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);

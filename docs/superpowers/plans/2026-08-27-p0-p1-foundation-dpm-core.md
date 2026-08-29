@@ -270,7 +270,7 @@ Expected: PASS — 2 lulus.
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "gen:vectors": "npm run gen:vectors -w @brier/protocol"
+    "gen:vectors": "npm run gen:vectors -w @hevdev7/protocol"
   }
 }
 ```
@@ -430,7 +430,7 @@ Expected: FAIL — the `../src/units.js` module is not found.
 
 ```json
 {
-  "name": "@brier/protocol",
+  "name": "@hevdev7/protocol",
   "version": "0.1.0",
   "private": true,
   "type": "module",

@@ -35,7 +35,7 @@ an identity the contract's invariant suite holds it to.
 flowchart LR
     subgraph agents["Agents — the only things that trade"]
         direction TB
-        A1["nostradamus-0g<br/>reference agent"] --> A2["@brier/agent-kit<br/>SDK"]
+        A1["nostradamus-0g<br/>reference agent"] --> A2["@hevdev7/agent-kit<br/>SDK"]
     end
 
     subgraph chain["0G Chain — what binds"]

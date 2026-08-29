@@ -10,8 +10,8 @@
  * second is 27% higher, which is exactly the direction that hurts anyone who
  * trusted it. This project's own spec draft made that mistake once.
  */
-import {WAD} from "@brier/protocol";
-import {loadDeployment} from "@brier/protocol/node";
+import {WAD} from "@hevdev7/protocol";
+import {loadDeployment} from "@hevdev7/protocol/node";
 import {BrierClient} from "../src/index";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);

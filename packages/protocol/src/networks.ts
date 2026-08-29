@@ -1,4 +1,4 @@
-import type { ChainMode } from './modes';
+import type { ChainMode } from './modes.js';
 
 export interface NetworkConfig {
   name: ChainMode;

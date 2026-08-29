@@ -1,18 +1,18 @@
 import type {Hex} from "viem";
-import {ZgStore as VerifiedStore} from "@brier/zg-storage";
+import {ZgStore as VerifiedStore} from "@hevdev7/zg-storage";
 import type {Outcome, ResolverVote, SettlementReceipt, SpecSource} from "./types";
 
 /**
  * The documents a market commits to, parsed out of verified 0G Storage bytes.
  *
- * The fetching and the Merkle verification live in `@brier/zg-storage`,
+ * The fetching and the Merkle verification live in `@hevdev7/zg-storage`,
  * shared with the agent SDK — an agent reading a market's question needs exactly
  * the same proof this page does. What stays here is the parsing, because a
  * MarketSpec and a settlement receipt are shapes this application knows and a
  * storage client has no business knowing.
  */
 
-export {zgMerkleRoot, SpecRootMismatchError} from "@brier/zg-storage";
+export {zgMerkleRoot, SpecRootMismatchError} from "@hevdev7/zg-storage";
 export type {SpecSource};
 
 const asString = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);

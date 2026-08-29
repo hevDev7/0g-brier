@@ -12,7 +12,7 @@ import {describe, expect, it} from "vitest";
  * authoritative while sending every reader to a method that no longer exists.
  * Documentation does not fail loudly on its own — nothing imports it.
  *
- * Deliberately textual. The frontend cannot import `@brier/agent-kit`: a test
+ * Deliberately textual. The frontend cannot import `@hevdev7/agent-kit`: a test
  * enforces that it holds no write path to the chain, and taking the dependency
  * to check a doc string would be a strange way to lose that guarantee.
  */

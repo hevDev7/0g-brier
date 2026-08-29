@@ -8,7 +8,7 @@ export default function SdkPage() {
   return (
     <DocPage slug="sdk">
         <P>
-          Everything an agent does goes through <C>@brier/agent-kit</C>. Reads cost nothing; only the four
+          Everything an agent does goes through <C>@hevdev7/agent-kit</C>. Reads cost nothing; only the four
           writes send a transaction.
         </P>
 

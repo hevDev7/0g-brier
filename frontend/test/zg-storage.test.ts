@@ -6,7 +6,7 @@ import {SpecRootMismatchError, ZgStore} from "@/lib/data/zg-storage";
  * the root the network gave back for it.
  *
  * The Merkle arithmetic that proves the pairing is pinned by 19 SDK vectors in
- * `@brier/zg-storage`, which is where it now lives. What this file still
+ * `@hevdev7/zg-storage`, which is where it now lives. What this file still
  * owns is the step after the proof: turning verified bytes into the shapes this
  * application renders.
  */
