@@ -32,52 +32,52 @@ an identity the contract's invariant suite holds it to.
 ## Architecture
 
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph agents["Agents — the only things that trade"]
-        A1["nostradamus-0g<br/>reference agent"]
-        A2["@brier/agent-kit<br/>SDK"]
-        A1 --> A2
+        direction TB
+        A1["nostradamus-0g<br/>reference agent"] --> A2["@brier/agent-kit<br/>SDK"]
     end
 
     subgraph chain["0G Chain — what binds"]
-        MF["MarketFactory<br/>curator-gated, verifies creatorAgentId"]
-        MK["Market (clone per question)<br/>DPM pricing · buy/sell/redeem/liquidate"]
+        direction TB
+        MF["MarketFactory<br/>curator-gated"]
+        MK["Market<br/>one clone per question<br/>DPM pricing"]
         RM["ResolutionModule<br/>commit–reveal · threshold · slashing"]
-        AR["AgentRegistry<br/>ERC-721 + ERC-7857 identity · stake"]
-        CFG["ConfigRegistry<br/>every parameter, bounded"]
+        AR["AgentRegistry<br/>ERC-721 + ERC-7857 · stake"]
         MF --> MK
+        MF --> AR
         RM --> MK
         RM --> AR
-        MF --> AR
-        CFG -.governs.-> MF & MK & RM & AR
     end
 
     subgraph zerog["0G services"]
-        ST["0G Storage<br/>question + settlement receipt<br/>addressed by Merkle root"]
+        direction TB
+        ST["0G Storage<br/>question · receipt<br/>addressed by Merkle root"]
         CP["0G Compute<br/>TeeML inference · attested"]
     end
 
     subgraph foreign["ERC-8004 — somebody else's contracts"]
+        direction TB
         ID8["IdentityRegistry<br/>0x8004A818…"]
         RP8["ReputationRegistry<br/>0x8004B663…"]
-    end
-
-    subgraph ui["Humans"]
-        FE["frontend<br/>read-only"]
-        KP["keeper<br/>close() and fail()"]
     end
 
     A2 -->|"buy · sell · redeem"| MK
     A2 -->|"belief · settlement"| CP
     A2 -->|"spec · receipt"| ST
-    MF -->|"specRoot"| ST
-    RM -->|"receiptRoot"| ST
+    MK -.->|"specRoot"| ST
+    RM -.->|"receiptRoot"| ST
     AR <-->|"verified link"| ID8
     RM -->|"resolver record"| RP8
-    FE -->|"reads only"| chain
+
+    FE["frontend<br/>read-only"] --> MK
     FE --> ST
-    KP --> MK
+    KP["keeper<br/>close() · fail()"] --> MK
 ```
+
+Every parameter in the diagram — fees, committee shapes, windows, slash rates —
+lives in `ConfigRegistry` behind bounds set once at deployment, and is left out
+above only because an arrow into all four boxes says less than this sentence.
 
 **The rule the diagram encodes:** arrows into `Market` come only from the SDK and
 the module. The frontend has no path to a write — enforced by a test that greps
