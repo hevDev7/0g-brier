@@ -32,6 +32,11 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# …except the template, which is the point of having one. Next's generated
+# .gitignore excludes every `.env*`, and the root repo already tracks its own
+# `.env.example` — so this one was silently absent while the README told readers
+# to copy it. A template holds no secrets; the file it is copied to does.
+!.env.example
 
 # vercel
 .vercel
