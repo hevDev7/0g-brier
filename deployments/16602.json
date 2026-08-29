@@ -1,21 +1,21 @@
 {
   "chainId": 16602,
   "contracts": {
-    "AgentRegistry": "0xCFa1C50236cDc584aFf24830d337D51345AeD008",
-    "AgentRegistryImpl": "0x1011EcD29D8d4C03c7E52772Fbf3F9c36E65407c",
-    "ConfigRegistry": "0x7527fE0C4Fa43518Dcb7179a55E520265725Cce9",
-    "ConfigRegistryImpl": "0xf680B7fD81d4EC834219100839fE90090D36a284",
-    "MarketFactory": "0x76d10eDf6d0A4E022689a8F079E100e790AB1E6d",
-    "MarketFactoryImpl": "0x91d18DE572e79082fDd0f0d55391dc1923e129F2",
-    "MarketImplementation": "0x6dD77E89A2Ce37c2b31a91f58f9673F34a22181f",
-    "MockUSDC": "0x863F34286ec407C8DeBb968C405285AbB16E4e71",
-    "OutcomeShares": "0xe7fBf30DAcdF493faa3028EB37211F9B43c8cF94",
-    "ResolutionModule": "0x24f0c8f68Db218E21807f44d25Ff44B4F84C0ED7",
-    "ResolutionModuleImpl": "0x2EF79c905766e11695e29327d33d3e849967690c",
-    "Timelock": "0x4Bdcdd1d35cC21656Cc5Bcb61b47f0FcF805E831",
-    "ZgDataVerifier": "0xcb2C55952778AB95a4D4C75d975F0d2f22A10FcD",
-    "AgentCard": "0x30e31d765e88EaF5e351d79AcA3557FdF1cD431e"
+    "AgentCard": "0x51e06fCCC0b5c66A41856b620C826e4f83512911",
+    "AgentRegistry": "0x47C3f13935d28749E13c97246c12B33a45A37A3B",
+    "AgentRegistryImpl": "0x5427E136C60A7d7e59A7C16ffcde35E086815A7F",
+    "ConfigRegistry": "0x8F3dB997a4247DF089B6FdB8C43E14d9A245EBE7",
+    "ConfigRegistryImpl": "0x5109d0064AEeAE1A637af499409a78E8665ABEC3",
+    "MarketFactory": "0xd6F9aE316ef729C6c79fbC8684a2b0e4B76D4133",
+    "MarketFactoryImpl": "0xf9b34Cf3CE9cF025BcaA3b7835e241C948A05692",
+    "MarketImplementation": "0x1eA48B2adE1cf82523c5D4d154ff5c4B36EC702e",
+    "MockUSDC": "0x5A0244b7aa46333e02b0569F46c7226F40f0A91e",
+    "OutcomeShares": "0xFEAbd7d2f4e9A390d0Ca1d3A8C47C3a0557CFbb7",
+    "ResolutionModule": "0xC8320b12796de4387742dAFf71eaF013E2fB6DD7",
+    "ResolutionModuleImpl": "0xCd0825b40b9Aecf15ef401D3Be757282A9e0b5c1",
+    "Timelock": "0xEa448432A56B0a447a4b84a1fDD932aAaDfF135f",
+    "ZgDataVerifier": "0x4f86e3DA3412F37C19D8F6aBdfcb02eC28397Edc"
   },
-  "deployedAt": 1787910383,
-  "deploymentBlock": 51818678
+  "deployedAt": 1787962337,
+  "deploymentBlock": 51923879
 }
