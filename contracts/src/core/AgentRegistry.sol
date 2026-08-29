@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {ERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import {IERC7857} from "../interfaces/IERC7857.sol";
 import {IAgentCard} from "../interfaces/IAgentCard.sol";
+import {IErc8004Identity} from "../interfaces/IErc8004.sol";
 import {
     IERC7857DataVerifier,
     PreimageProofOutput,
@@ -107,6 +108,8 @@ contract AgentRegistry is
     ///         rendered here any more.
     IAgentCard public card;
 
+
+
     /// @dev ERC-7857 lets a token carry SEVERAL pieces of data. Agents registered
     ///      before this existed carry one, in `Agent.metadataRoot`; `metadataRootOf`
     ///      reads whichever of the two a given agent actually has, so no migration is
@@ -120,6 +123,29 @@ contract AgentRegistry is
     ///      revoked once and still appear.
     mapping(uint256 => address[]) internal _authorizedUsers;
     mapping(uint256 => mapping(address => bool)) internal _usageGranted;
+
+    /**
+     * @notice The ERC-8004 IdentityRegistry token this agent is also registered as,
+     *         or zero for an agent that is only known here.
+     *
+     * @dev Brier's identity carries what ERC-8004's does not — a role, an operator key,
+     *      stake, and ERC-7857 data — so this is a LINK rather than a migration. What it
+     *      buys is reach: an 8004-aware indexer discovers agents across 57 networks and
+     *      has never heard of this registry, and a resolver's record is worth more if it
+     *      can be read somewhere its owner does not control.
+     *
+     *      APPENDED, and it has to be. This first went in between `card` and
+     *      `_dataHashes`, which is where it reads best and which shifted every slot
+     *      after it by one — so `metadataRootOf` for the live agent came back as
+     *      whatever the next mapping held. The upgrade script's own check caught it
+     *      before it landed, which is the only reason that check is written.
+     *
+     *      PROVEN, not claimed. Anyone can type a number; `linkErc8004` refuses unless
+     *      the same address owns both tokens, which is checkable because both registries
+     *      live on this chain. An unverified link would be a claim of reputation
+     *      belonging to somebody else.
+     */
+    mapping(uint256 => uint256) public erc8004Of;
 
     error NotAgentOwner(uint256 agentId);
     error NotResolutionModule();
@@ -139,8 +165,11 @@ contract AgentRegistry is
     error ProofCountMismatch(uint256 expected, uint256 got);
     error NoData();
     error AlreadyAuthorized(address user);
+    error Erc8004RegistryUnset();
+    error Erc8004OwnerMismatch(uint256 foreignId, address theirs, address ours);
 
     event VerifierSet(address indexed verifier);
+    event Erc8004Linked(uint256 indexed agentId, uint256 indexed foreignId);
     event CardSet(address indexed card);
 
     event AgentRegistered(
@@ -449,6 +478,31 @@ contract AgentRegistry is
     function setVerifier(address verifier_) external onlyOwner {
         verifier = IERC7857DataVerifier(verifier_);
         emit VerifierSet(verifier_);
+    }
+
+    /**
+     * @notice Record that this agent is the same identity as an ERC-8004 one.
+     *
+     * @dev Callable by the agent's owner, and only after the claim is CHECKED: the
+     *      8004 token must be held by the same address. Both registries are on this
+     *      chain, so the check costs one external view and turns a claim into a fact.
+     *
+     *      Re-linkable on purpose. An 8004 token can be transferred, and an agent whose
+     *      link pointed at a token somebody else now owns would be publishing its record
+     *      to a stranger. Overwriting is how that gets corrected; the same ownership
+     *      check applies every time.
+     */
+    function linkErc8004(uint256 agentId, uint256 foreignId) external {
+        _onlyAgentOwner(agentId);
+        address identity = config.addresses(ConfigKeys.ERC8004_IDENTITY);
+        if (identity == address(0)) revert Erc8004RegistryUnset();
+
+        address theirs = IErc8004Identity(identity).ownerOf(foreignId);
+        address ours = _ownerOf(agentId);
+        if (theirs != ours) revert Erc8004OwnerMismatch(foreignId, theirs, ours);
+
+        erc8004Of[agentId] = foreignId;
+        emit Erc8004Linked(agentId, foreignId);
     }
 
     /// @notice Point this registry at the contract that renders its tokens.

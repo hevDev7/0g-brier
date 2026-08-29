@@ -48,6 +48,13 @@ library ConfigKeys {
     bytes32 internal constant RESOLUTION_MODULE = keccak256("RESOLUTION_MODULE");
     bytes32 internal constant CURATOR_SIGNER = keccak256("CURATOR_SIGNER");
     bytes32 internal constant AGENT_REGISTRY = keccak256("AGENT_REGISTRY");
+
+    /// @dev ERC-8004's registries, which this protocol READS and PUBLISHES TO but does
+    ///      not own. They are deployed at the same two addresses on 57 networks
+    ///      including 0G, so pointing at them is configuration rather than deployment.
+    ///      Unset means the integration is simply off — never a reason to fail.
+    bytes32 internal constant ERC8004_IDENTITY = keccak256("ERC8004_IDENTITY");
+    bytes32 internal constant ERC8004_REPUTATION = keccak256("ERC8004_REPUTATION");
     /// @dev What resolvers stake, and what slashing takes. Separate from a
     ///      market's collateral on purpose: a market can settle in any allowlisted
     ///      token, while the security of resolution must not vary with which one.

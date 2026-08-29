@@ -110,8 +110,7 @@ contract Deploy is Script {
         // After MARKET_FACTORY, not before: the module checks every market it records
         // against the factory, and initialising it into a registry that cannot answer
         // `isMarket` would leave it unable to anchor anything.
-        (m.agentRegistry, m.agentRegistryImpl, m.zgDataVerifier, m.agentCard) =
-            _deployAgentRegistry(config, deployer);
+        (m.agentRegistry, m.agentRegistryImpl, m.zgDataVerifier, m.agentCard) = _deployAgentRegistry(config, deployer);
         (m.resolutionModule, m.resolutionModuleImpl) = _deployResolutionModule(config, deployer);
         m.timelock = _handOver(config, deployer, roles.governance, m.agentRegistry, m.resolutionModule);
 

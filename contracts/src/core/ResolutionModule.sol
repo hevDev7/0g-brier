@@ -9,6 +9,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ConfigRegistry} from "./ConfigRegistry.sol";
 import {ConfigKeys} from "./ConfigKeys.sol";
 import {IAgentRegistry} from "../interfaces/IAgentRegistry.sol";
+import {IErc8004Reputation} from "../interfaces/IErc8004.sol";
+import {AgentRegistry} from "./AgentRegistry.sol";
 import {IMarketRegistry} from "../interfaces/IMarketRegistry.sol";
 import {IMarketResolution} from "../interfaces/IMarketResolution.sol";
 import {IResolutionModule, Outcomes} from "../interfaces/IResolutionModule.sol";
@@ -93,6 +95,8 @@ contract ResolutionModule is Initializable, Ownable2StepUpgradeable, UUPSUpgrade
     event Proposed(address indexed market, uint8 outcome, uint64 disputeDeadline);
     event Disputed(address indexed market, address indexed challenger, bytes32 evidenceRoot);
     event Finalized(address indexed market, uint8 outcome, bool viaCommittee);
+    event FeedbackPublished(uint256 indexed agentId, uint256 indexed erc8004Id, bool agreed);
+    event FeedbackFailed(uint256 indexed agentId, uint256 indexed erc8004Id);
     event ResolverSet(address indexed resolver, bool allowed);
     event Resolved(address indexed market, uint8 indexed outcome, bytes32 receiptRoot, address indexed resolver);
     event Abandoned(address indexed market, bytes32 receiptRoot, address indexed resolver);
@@ -286,6 +290,51 @@ contract ResolutionModule is Initializable, Ownable2StepUpgradeable, UUPSUpgrade
         emit Finalized(market, Outcomes.UNRESOLVABLE, r.n != 0);
     }
 
+    /**
+     * @dev Publish a resolver's record to ERC-8004, where it can be read outside Brier.
+     *
+     *      `recordResolution` above keeps the same fact in this protocol's own registry,
+     *      and that copy is the one this protocol trusts. This one is for everybody
+     *      else: 8004's ReputationRegistry sits at one address on 57 networks, so a
+     *      resolver who has judged well here carries something legible to a venue that
+     *      has never heard of Brier. That is the whole argument for publishing at all.
+     *
+     *      NOTHING HERE MAY BLOCK A SETTLEMENT. Every step can decline and every failure
+     *      is swallowed: an unset registry, an agent that never linked, an 8004 contract
+     *      that reverts or is upgraded into something else. A market whose outcome is
+     *      already decided must not become unsettleable because a foreign contract had a
+     *      bad day — the money in it is real and the reputation signal is a courtesy.
+     *
+     *      Self-feedback is refused by 8004 itself, which is why the MODULE publishes
+     *      and never the resolver: a resolver rating its own settlement is exactly what
+     *      that check exists to stop.
+     */
+    function _publish(uint256 agentId, bool agreed, bytes32 receiptRoot) private {
+        address reputation = config.addresses(ConfigKeys.ERC8004_REPUTATION);
+        if (reputation == address(0)) return;
+
+        address identity = config.addresses(ConfigKeys.AGENT_REGISTRY);
+        if (identity == address(0)) return;
+
+        uint256 foreignId = AgentRegistry(identity).erc8004Of(agentId);
+        if (foreignId == 0) return;
+
+        // +1 agreed, -1 outvoted, whole numbers. A richer scale would invite a
+        // precision nobody has: the committee's verdict is binary, and dressing it as
+        // 0.87 would be inventing confidence the vote never expressed.
+        try IErc8004Reputation(reputation)
+            .giveFeedback(
+                foreignId, agreed ? int128(1) : int128(-1), 0, "brier", "resolution", "0g-storage", "", receiptRoot
+            ) {
+            emit FeedbackPublished(agentId, foreignId, agreed);
+        } catch {
+            // Named, not hidden. A settlement that stands with its signal unpublished is
+            // a smaller problem than one that cannot be settled at all — but it is still
+            // something an operator should be able to see having happened.
+            emit FeedbackFailed(agentId, foreignId);
+        }
+    }
+
     // ── slashing and reward ───────────────────────────────────────────────────
 
     /// @dev Three ways to lose stake, and they are different failures:
@@ -311,8 +360,10 @@ contract ResolutionModule is Initializable, Ownable2StepUpgradeable, UUPSUpgrade
             } else if (vote - 1 != outcome) {
                 _slashBps(registry, id, disagreeBps, "DISAGREE");
                 registry.recordResolution(id, false, false);
+                _publish(id, false, receiptRootOf[market][id]);
             } else {
                 registry.recordResolution(id, true, false);
+                _publish(id, true, receiptRootOf[market][id]);
             }
         }
 

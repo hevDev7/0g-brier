@@ -1,12 +1,44 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+import {Vm} from "forge-std/Vm.sol";
 import {CommitteeFixtures} from "../helpers/CommitteeFixtures.sol";
+import {ConfigKeys} from "../../src/core/ConfigKeys.sol";
+import {StubIdentity} from "./Erc8004.t.sol";
 import {ConfigKeys} from "../../src/core/ConfigKeys.sol";
 import {Market} from "../../src/core/Market.sol";
 import {IMarket} from "../../src/interfaces/IMarket.sol";
 import {ResolutionModule} from "../../src/core/ResolutionModule.sol";
 import {Outcomes} from "../../src/interfaces/IResolutionModule.sol";
+
+/// @dev An ERC-8004 ReputationRegistry that can be told to fail, so the property that
+///      matters — a foreign contract cannot block a settlement — is tested against a
+///      contract that actually reverts rather than against a comment saying it would.
+contract HostileReputation {
+    bool public broken;
+    uint256 public calls;
+
+    function setBroken(bool b) external {
+        broken = b;
+    }
+
+    function giveFeedback(
+        uint256,
+        int128,
+        uint8,
+        string calldata,
+        string calldata,
+        string calldata,
+        string calldata,
+        bytes32
+    ) external {
+        // The counter is only meaningful on the path that does NOT revert: a reverting
+        // call rolls its own increment back, which is what made the first version of
+        // this test claim the module had never tried.
+        require(!broken, "no");
+        calls++;
+    }
+}
 
 contract ResolutionCommitteeTest is CommitteeFixtures {
     uint256 internal constant STAKE = 1_000e6;
@@ -170,5 +202,105 @@ contract ResolutionCommitteeTest is CommitteeFixtures {
             if (!onIt) return agentIds[i];
         }
         revert("every agent was sampled");
+    }
+
+    // ── publishing a resolver's record to ERC-8004 ────────────────────────────
+
+    /**
+     * THE PROPERTY THAT MATTERS. A market whose outcome is already decided must never
+     * become unsettleable because a foreign contract reverted. The money in it is real;
+     * the reputation signal is a courtesy, and a courtesy that can freeze a settlement
+     * is a liability dressed as a feature.
+     *
+     * Tested against a registry that genuinely reverts rather than a comment claiming
+     * the try/catch works.
+     */
+    function test_aBrokenForeignRegistryCannotBlockASettlement() public {
+        HostileReputation hostile = new HostileReputation();
+        hostile.setBroken(true);
+        config.setAddress(ConfigKeys.ERC8004_REPUTATION, address(hostile));
+
+        // Link every committee member, so the module genuinely tries to publish.
+        Market m = _open();
+        uint256[] memory members = module.committeeOf(address(m));
+        _linkAll(members);
+
+        // The link is what makes the module reach for the foreign registry at all.
+        assertGt(registry_.erc8004Of(members[0]), 0, "fixture failed to link a committee member");
+
+        _committeeAgrees(address(m), Outcomes.YES);
+        vm.warp(module.roundOf(address(m)).disputeDeadline + 1);
+
+        // What proves the attempt is OUR event, not the stub's counter: a reverting call
+        // undoes anything it wrote, so a counter can only ever report the successes.
+        vm.recordLogs();
+        module.finalize(address(m));
+
+        assertEq(uint8(m.status()), uint8(IMarket.Status.Settled), "a reverting registry stopped the settlement");
+        assertEq(m.winningOutcome(), Outcomes.YES, "wrong winner");
+
+        uint256 failures;
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] == keccak256("FeedbackFailed(uint256,uint256)")) failures++;
+        }
+        assertEq(failures, members.length, "the module did not try, or did not say that it failed");
+    }
+
+    /// @dev Unset is not an error, it is the integration being off. Nothing about a
+    ///      settlement should depend on whether an optional signal has a home.
+    function test_settlementIsUnaffectedWhenNoForeignRegistryIsConfigured() public {
+        config.setAddress(ConfigKeys.ERC8004_REPUTATION, address(0));
+        Market m = _open();
+        _committeeAgrees(address(m), Outcomes.YES);
+        vm.warp(module.roundOf(address(m)).disputeDeadline + 1);
+        module.finalize(address(m));
+        assertEq(uint8(m.status()), uint8(IMarket.Status.Settled), "settlement needed a registry it should not need");
+    }
+
+    /// @dev An agent that never linked publishes nothing. Guessing an 8004 id would be
+    ///      writing somebody else's reputation.
+    function test_anUnlinkedResolverPublishesNothing() public {
+        HostileReputation quiet = new HostileReputation();
+        config.setAddress(ConfigKeys.ERC8004_REPUTATION, address(quiet));
+
+        Market m = _open();
+        _committeeAgrees(address(m), Outcomes.YES);
+        vm.warp(module.roundOf(address(m)).disputeDeadline + 1);
+        module.finalize(address(m));
+
+        assertEq(quiet.calls(), 0, "published a record for an agent with no 8004 identity");
+        assertEq(uint8(m.status()), uint8(IMarket.Status.Settled), "market not settled");
+    }
+
+    /// @dev The ordinary path: every member of a unanimous committee gets a +1
+    ///      published under its own 8004 identity, addressed by the receipt it revealed.
+    function test_aUnanimousCommitteePublishesOneRecordPerResolver() public {
+        HostileReputation working = new HostileReputation();
+        config.setAddress(ConfigKeys.ERC8004_REPUTATION, address(working));
+
+        Market m = _open();
+        uint256[] memory members = module.committeeOf(address(m));
+        _linkAll(members);
+        _committeeAgrees(address(m), Outcomes.YES);
+        vm.warp(module.roundOf(address(m)).disputeDeadline + 1);
+        module.finalize(address(m));
+
+        assertEq(working.calls(), members.length, "one record per resolver, and no more");
+        assertEq(uint8(m.status()), uint8(IMarket.Status.Settled), "market not settled");
+    }
+
+    /// @dev Links every committee member to a freshly minted 8004 token held by the same
+    ///      owner, which is the only shape `linkErc8004` accepts.
+    function _linkAll(uint256[] memory members) internal {
+        StubIdentity id = new StubIdentity();
+        config.setAddress(ConfigKeys.ERC8004_IDENTITY, address(id));
+        for (uint256 i = 0; i < members.length; i++) {
+            address owner = registry_.ownerOf(members[i]);
+            vm.prank(owner);
+            uint256 foreign = id.register();
+            vm.prank(owner);
+            registry_.linkErc8004(members[i], foreign);
+        }
     }
 }
