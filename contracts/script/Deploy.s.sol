@@ -12,6 +12,8 @@ import {Market} from "../src/core/Market.sol";
 import {MarketFactory} from "../src/core/MarketFactory.sol";
 import {ResolutionModule} from "../src/core/ResolutionModule.sol";
 import {AgentRegistry} from "../src/core/AgentRegistry.sol";
+import {ZgDataVerifier} from "../src/core/ZgDataVerifier.sol";
+import {AgentCard} from "../src/core/AgentCard.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {DeployLib} from "./DeployLib.sol";
 
@@ -45,6 +47,8 @@ contract Deploy is Script {
         address resolutionModuleImpl;
         address agentRegistry;
         address agentRegistryImpl;
+        address zgDataVerifier;
+        address agentCard;
         address timelock;
         uint256 fromBlock;
     }
@@ -106,7 +110,8 @@ contract Deploy is Script {
         // After MARKET_FACTORY, not before: the module checks every market it records
         // against the factory, and initialising it into a registry that cannot answer
         // `isMarket` would leave it unable to anchor anything.
-        (m.agentRegistry, m.agentRegistryImpl) = _deployAgentRegistry(config, deployer);
+        (m.agentRegistry, m.agentRegistryImpl, m.zgDataVerifier, m.agentCard) =
+            _deployAgentRegistry(config, deployer);
         (m.resolutionModule, m.resolutionModuleImpl) = _deployResolutionModule(config, deployer);
         m.timelock = _handOver(config, deployer, roles.governance, m.agentRegistry, m.resolutionModule);
 
@@ -141,6 +146,8 @@ contract Deploy is Script {
         console2.log("OutcomeShares:         ", m.outcomeShares);
         console2.log("MarketFactory (proxy): ", m.marketFactory);
         console2.log("AgentRegistry:         ", m.agentRegistry);
+        console2.log("ZgDataVerifier:        ", m.zgDataVerifier);
+        console2.log("AgentCard:             ", m.agentCard);
         console2.log("ResolutionModule:      ", m.resolutionModule);
         console2.log("Collateral:            ", m.usdc);
         console2.log("Timelock:              ", m.timelock);
@@ -205,9 +212,18 @@ contract Deploy is Script {
         return address(new MockUSDC());
     }
 
+    /**
+     * @dev The registry is not usable the moment it is minted: it defers `tokenURI` to
+     *      a renderer and every ERC-7857 proof to a verifier, and BOTH revert while
+     *      unset. That is the right behaviour — an unset renderer returning "" is the
+     *      blank card the renderer exists to fix, and a missing verifier waving proofs
+     *      through would make the standard's guarantee worthless. It also means a
+     *      deployment that forgot either would look complete and answer nothing, so
+     *      they are wired here rather than left to a follow-up transaction.
+     */
     function _deployAgentRegistry(ConfigRegistry config, address deployer)
         internal
-        returns (address registry, address implementation)
+        returns (address registry, address implementation, address verifier, address card)
     {
         AgentRegistry impl = new AgentRegistry();
         AgentRegistry deployed = AgentRegistry(
@@ -216,7 +232,13 @@ contract Deploy is Script {
             )
         );
         config.setAddress(ConfigKeys.AGENT_REGISTRY, address(deployed));
-        return (address(deployed), address(impl));
+
+        ZgDataVerifier v = new ZgDataVerifier();
+        AgentCard c = new AgentCard();
+        deployed.setVerifier(address(v));
+        deployed.setCard(address(c));
+
+        return (address(deployed), address(impl), address(v), address(c));
     }
 
     /// @notice Put the upgradeable contracts under a timelock and start handing them over.
@@ -311,6 +333,8 @@ contract Deploy is Script {
         vm.serializeAddress(contractsKey, "ResolutionModule", m.resolutionModule);
         vm.serializeAddress(contractsKey, "AgentRegistryImpl", m.agentRegistryImpl);
         vm.serializeAddress(contractsKey, "AgentRegistry", m.agentRegistry);
+        vm.serializeAddress(contractsKey, "ZgDataVerifier", m.zgDataVerifier);
+        vm.serializeAddress(contractsKey, "AgentCard", m.agentCard);
         string memory contractsJson = vm.serializeAddress(contractsKey, "Timelock", m.timelock);
 
         string memory root = "manifest";

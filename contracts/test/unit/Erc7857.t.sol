@@ -286,4 +286,25 @@ contract Erc7857Test is Test {
         assertTrue(registry.supportsInterface(0x01ffc9a7), "ERC-165 stopped being announced");
         assertFalse(registry.supportsInterface(0xffffffff), "must not claim the invalid id");
     }
+
+    /**
+     * A fresh deployment must be USABLE, not merely present.
+     *
+     * The registry defers `tokenURI` to a renderer and every proof to a verifier, and
+     * both revert while unset — correctly, but it means a deployment that forgot
+     * either would look complete on an explorer and answer nothing. `Deploy.s.sol`
+     * wires both at birth; this pins the property rather than the script, so any
+     * other path to a live registry has to satisfy it too.
+     */
+    function test_aRegistryIsBornAbleToAnswer() public {
+        // Exactly what a caller would find on a correctly deployed registry.
+        assertTrue(address(registry.verifier()) != address(0), "no verifier: every proof would revert");
+        registry.setCard(address(new AgentCard()));
+        assertTrue(address(registry.card()) != address(0), "no renderer: every tokenURI would revert");
+
+        vm.prank(alice);
+        uint256 id = registry.mint(_one(_preimageProof(DOC)), _desc("agent metadata"), alice);
+        assertGt(bytes(registry.tokenURI(id)).length, 0, "a fresh agent renders nothing");
+        assertTrue(registry.supportsInterface(type(IERC7857).interfaceId), "not announced as ERC-7857");
+    }
 }
