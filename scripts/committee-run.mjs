@@ -17,6 +17,12 @@
  * never written to disk or printed. A fresh random key per run would strand the
  * stake behind a secret that existed for ninety seconds.
  *
+ * AFTER THE TIMELOCK HANDOVER, STEP 1 STOPS WORKING. It calls `setParam` with the
+ * deployer's key; once governance has accepted ownership of ConfigRegistry those
+ * calls have to be scheduled through a 48-hour timelock instead. That is the
+ * handover doing its job, not a regression — but a run against a handed-over
+ * deployment has to set the windows in advance, or live with the real ones.
+ *
  * NO MODEL RUNS HERE. Each resolver reads the market's own declared source and
  * applies the rule the market published — which is what the rule says to do for
  * a threshold question, and leaves the committee mechanism as the only thing
