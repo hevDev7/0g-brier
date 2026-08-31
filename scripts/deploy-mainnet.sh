@@ -27,13 +27,19 @@ BROADCAST=""
 # with or without the 0x, from the file or from the environment.
 COMPROMISED="0x71a89a7e692dac4d6bd7c3f1cca9155592d87bae"
 
-if [[ -f "$ROOT/.env" ]]; then
-  perms="$(stat -c '%a' "$ROOT/.env" 2>/dev/null || echo '')"
+# `.env.mainnet` wins over `.env`, and that separation is deliberate: the Galileo
+# `.env` holds a deployer key that was burned into a transcript, and a mainnet key
+# has no business sitting in the same file as one that must never touch this chain.
+# Keeping them apart also means the testnet tooling keeps working untouched.
+ENV_FILE="$ROOT/.env"
+[[ -f "$ROOT/.env.mainnet" ]] && ENV_FILE="$ROOT/.env.mainnet"
+if [[ -f "$ENV_FILE" ]]; then
+  perms="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || echo '')"
   if [[ -n "$perms" && "${perms:1}" != "00" ]]; then
-    echo "⚠  $ROOT/.env is mode $perms — it holds a private key. chmod 600 it."
+    echo "⚠  $ENV_FILE is mode $perms — it holds a private key. chmod 600 it."
   fi
   _pre_env="$(export -p)"
-  set -a; . "$ROOT/.env"; set +a
+  set -a; . "$ENV_FILE"; set +a
   eval "$_pre_env" 2>/dev/null || true
   unset _pre_env
 fi
@@ -65,6 +71,22 @@ for v in GOVERNANCE GUARDIAN TREASURY CURATOR_SIGNER; do
 done
 [[ "${GOVERNANCE,,}" == "${GUARDIAN,,}" ]] \
   && die "GOVERNANCE and GUARDIAN are the same address. A guardian that is also governance can pause the protocol AND rewrite the rules under it, which is the concentration the split exists to prevent."
+
+# THE ONE PAIR THAT MUST AGREE. CURATOR_SIGNER is the address the contract checks
+# a signature against; CURATOR_KEY is what produces that signature. Nothing
+# reconciles them at deploy time — a mismatch surfaces at createMarket as
+# BadCuratorSignature, after the curator has already signed and the creator has
+# already paid for the attempt. Checked here, where it costs one derivation.
+if [[ -n "${CURATOR_KEY:-}" ]]; then
+  CK="$CURATOR_KEY"
+  [[ "$CK" =~ ^[0-9a-fA-F]{64}$ ]] && CK="0x$CK"
+  [[ "$CK" =~ ^0x[0-9a-fA-F]{64}$ ]] || die "CURATOR_KEY is set but is not a 32-byte hex key."
+  CURATOR_FROM_KEY="$(cast wallet address --private-key "$CK")"
+  [[ "${CURATOR_FROM_KEY,,}" == "${CURATOR_SIGNER,,}" ]] \
+    || die "CURATOR_SIGNER is $CURATOR_SIGNER but CURATOR_KEY derives $CURATOR_FROM_KEY. No market could ever be created: the contract checks the signature against CURATOR_SIGNER."
+else
+  echo "⚠  CURATOR_KEY is not set. The deploy does not need it, but no market can be created until whoever holds CURATOR_SIGNER signs an approval."
+fi
 
 # ── the collateral ───────────────────────────────────────────────────────────
 # There is no fallback here on purpose. On anvil the deploy script mints a
@@ -129,6 +151,7 @@ cat <<EOF
 
 ▶ chain        $CHAIN_ID via $RPC
 ▶ commit       $(git -C "$ROOT" rev-parse --short HEAD)  ($(git -C "$ROOT" describe --tags --always 2>/dev/null || echo 'no tag'))
+▶ env file     $ENV_FILE
 ▶ deployer     $DEPLOYER ($(cast from-wei "$BALANCE") 0G)
 ▶ collateral   $COLLATERAL  $SYM, $DEC decimals
 ▶ governance   $GOVERNANCE

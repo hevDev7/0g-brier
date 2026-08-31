@@ -1,6 +1,13 @@
 node_modules/
 .env
 .env.local
+# Every .env variant, not just the two that existed when this line was written.
+# `.env.mainnet` holds a key that signs on a chain with real money on it, and a
+# gitignore that lists files by name rather than by shape is one `git add -A`
+# away from publishing it.
+.env.*
+!.env.example
+!.env*.example
 contracts/out/
 contracts/cache/
 contracts/broadcast/
