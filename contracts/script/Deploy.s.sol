@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Script} from "forge-std/Script.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 import {console2} from "forge-std/console2.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {ConfigRegistry} from "../src/core/ConfigRegistry.sol";
@@ -439,6 +440,20 @@ contract Deploy is Script {
     }
 
     function _writeManifest(Manifest memory m) internal {
+        // A DRY RUN MUST NOT WRITE THE MANIFEST. `vm.writeJson` runs in a simulation
+        // exactly as it does in a broadcast, so every `forge script` without
+        // --broadcast used to overwrite deployments/<chainid>.json with addresses that
+        // were never deployed. deployments/16661.json was committed that way and sat in
+        // the repo pointing at 0xC4627f87…, which has no code on 16661 — and the
+        // frontend, the keeper and every script resolve addresses out of these files by
+        // chain id. It also left the tree dirty, so the next simulation refused to run.
+        if (vm.isContext(VmSafe.ForgeContext.ScriptDryRun)) {
+            console2.log("");
+            console2.log("Dry run: deployments/%s.json was NOT written.", vm.toString(block.chainid));
+            console2.log("The addresses above are predictions. Nothing exists on chain until --broadcast.");
+            return;
+        }
+
         string memory contractsKey = "contracts";
         vm.serializeAddress(contractsKey, "ConfigRegistry", m.configProxy);
         vm.serializeAddress(contractsKey, "ConfigRegistryImpl", m.configImpl);
