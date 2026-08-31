@@ -49,8 +49,15 @@ contract UpgradeErc8004 is Script {
         }
 
         vm.startBroadcast(pk);
-        registry.upgradeToAndCall(address(new AgentRegistry()), "");
-        module.upgradeToAndCall(address(new ResolutionModule()), "");
+        // Held, because the manifest has to name them afterwards. An earlier version of
+        // this script upgraded both and wrote nothing, which left `deployments/*.json`
+        // pointing at the implementations these replaced. Nothing broke — the proxies are
+        // what callers use — so it stayed wrong quietly until somebody tried to verify the
+        // listed implementation on the explorer and found source that no longer runs.
+        address newRegistryImpl = address(new AgentRegistry());
+        address newModuleImpl = address(new ResolutionModule());
+        registry.upgradeToAndCall(newRegistryImpl, "");
+        module.upgradeToAndCall(newModuleImpl, "");
         config.setAddress(ConfigKeys.ERC8004_IDENTITY, identity);
         config.setAddress(ConfigKeys.ERC8004_REPUTATION, reputation);
         vm.stopBroadcast();
@@ -64,6 +71,11 @@ contract UpgradeErc8004 is Script {
             require(registry.erc8004Of(id) == 0, "a link appeared from nowhere");
         }
 
+        vm.writeJson(vm.toString(newRegistryImpl), path, ".contracts.AgentRegistryImpl");
+        vm.writeJson(vm.toString(newModuleImpl), path, ".contracts.ResolutionModuleImpl");
+
+        console2.log("AgentRegistry impl:   ", newRegistryImpl);
+        console2.log("ResolutionModule impl:", newModuleImpl);
         console2.log("ERC8004_IDENTITY:  ", identity);
         console2.log("ERC8004_REPUTATION:", reputation);
         console2.log("agents checked:    ", agents - 1);

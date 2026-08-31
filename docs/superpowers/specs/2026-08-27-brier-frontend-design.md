@@ -6,7 +6,7 @@
 
 ## 1. Summary
 
-A web interface for **humans who observe** the Brier binary prediction markets. Humans read prices, history, resolution evidence, and the agent position book — **humans execute nothing from these pages**. Every buy, sell, redeem, and liquidate runs through the `@hevdev7/agent-kit` SDK outside the dApp, following the separation Delphi (Gensyn) uses.
+A web interface for **humans who observe** the Brier binary prediction markets. Humans read prices, history, resolution evidence, and the agent position book — **humans execute nothing from these pages**. Every buy, sell, redeem, and liquidate runs through the `@0g-brier/agent-kit` SDK outside the dApp, following the observe-only separation the closest prior art uses.
 
 The consequence is not merely "one component was deleted": the market detail page stops being a place to transact and becomes a place to **inspect** — what the price is, where its history came from, who holds what, and on what evidence it was resolved.
 
@@ -18,11 +18,11 @@ Three routes in v1: market list, market detail, portfolio. The agent routes (`/a
 |---|---|---|
 | F1 | Data layer with modes `mock \| chain \| indexer`, composed as a **decorator** | `indexer` = `chain` + history, not a replacement for it; composition makes that property structural |
 | F2 | `unavailable` is a first-class status, on a par with loading/error | `chain` mode cannot answer history questions at all; the UI must not disguise that as zero |
-| F3 | **The human UI only observes; all execution goes through the agent SDK** | A literal Delphi-style separation, chosen by the product owner. The human pages have no write path to the chain at all — not hidden behind a flag, simply absent |
+| F3 | **The human UI only observes; all execution goes through the agent SDK** | A literal observe-only separation, chosen by the product owner. The human pages have no write path to the chain at all — not hidden behind a flag, simply absent |
 | F4 | Data-dense, calm, precise visuals | The substance of this product is numbers and evidence, not narrative |
-| F5 | The quoting engine (quotes, price impact, dilution) moves to **`@hevdev7/agent-kit`**, not into the pages | The party that needs it is the party that executes. Keeping it in the UI means putting sizing logic where nothing ever uses it |
-| F7 | The resolution-evidence panel must show the **model, reasoning, criteria, and data sources** | "Resolved by AI" without evidence is a request to be trusted. Delphi publishes it; we have commit-reveal + 0G Storage, which ought to let us do it better |
-| F6 | Decimal conversion imports `@hevdev7/protocol` rather than being rewritten | That package already has the correct rounding directions and is differentially tested |
+| F5 | The quoting engine (quotes, price impact, dilution) moves to **`@0g-brier/agent-kit`**, not into the pages | The party that needs it is the party that executes. Keeping it in the UI means putting sizing logic where nothing ever uses it |
+| F7 | The resolution-evidence panel must show the **model, reasoning, criteria, and data sources** | "Resolved by AI" without evidence is a request to be trusted. Comparable venues publish it; we have commit-reveal + 0G Storage, which ought to let us do it better |
+| F6 | Decimal conversion imports `@0g-brier/protocol` rather than being rewritten | That package already has the correct rounding directions and is differentially tested |
 
 ---
 
@@ -62,7 +62,7 @@ storage still reports it honestly as unavailable rather than claiming a question
 
 **There is no `MARKET_STATS` capability, and that is deliberate.** The stats panel combines fields whose sources differ in availability: fee, depth, and the timeline come from `MARKET_STATE` (always present), while volume comes from `TRADE_TAPE` (empty in `chain` mode). Making it a single capability would turn the whole panel `unavailable` merely because volume is unknown — throwing away six facts we have for the sake of one we do not. Availability is evaluated **per row**, not per panel.
 
-`QUOTE` and `EXECUTE` **are no longer in this table.** Both belong to `@hevdev7/agent-kit`; the frontend data layer never calls `Market.buy`, `sell`, `redeem`, or `liquidate`, and holds no signer. That boundary is structural, not conventional — `DataSource` has no writing method at all.
+`QUOTE` and `EXECUTE` **are no longer in this table.** Both belong to `@0g-brier/agent-kit`; the frontend data layer never calls `Market.buy`, `sell`, `redeem`, or `liquidate`, and holds no signer. That boundary is structural, not conventional — `DataSource` has no writing method at all.
 
 **Why `chain` cannot answer history.** Cost basis demands knowing what was paid, and that exists only in events. `eth_getLogs` from genesis on Galileo is not an honest way out for a UI. So PnL in `chain` mode is not zero — it is **unavailable**, and it is shown that way.
 
@@ -134,10 +134,10 @@ The `<Unavailable capability mode />` component renders one calm line: the capab
 
 ### 3.4 Math on the client
 
-`@hevdev7/protocol` exports `dpm` — the TypeScript mirror of `DPMMath.sol`, already pinned to the Solidity by a 512-vector differential test. The frontend uses it for **preview**, not for truth:
+`@0g-brier/protocol` exports `dpm` — the TypeScript mirror of `DPMMath.sol`, already pinned to the Solidity by a 512-vector differential test. The frontend uses it for **preview**, not for truth:
 
 ```ts
-import { dpm, toWad, toTokensCeil } from '@hevdev7/protocol';
+import { dpm, toWad, toTokensCeil } from '@0g-brier/protocol';
 
 // as the user types — instant, no RPC
 const shares  = dpm.sharesForSpend(q, outcome, spendWad);
@@ -313,7 +313,7 @@ The sum of the two probabilities can come up 1 last unit short (two independent 
 
 ### 5.3 Decimals
 
-Collateral has 6 decimals; shares 18; all math is wad. Conversion happens only at the token boundary, via `toWad`/`toTokensFloor`/`toTokensCeil` from `@hevdev7/protocol`. The frontend must not have a `1e12` constant of its own.
+Collateral has 6 decimals; shares 18; all math is wad. Conversion happens only at the token boundary, via `toWad`/`toTokensFloor`/`toTokensCeil` from `@0g-brier/protocol`. The frontend must not have a `1e12` constant of its own.
 
 ### 5.4 Never render the unknown
 
@@ -323,11 +323,11 @@ Already enforced by the types (§3.3). Stated here because it is a product rule,
 
 ## 6. The quoting engine belongs to the SDK, not to the pages
 
-Humans do not execute, so the order ticket leaves the market page. What must **not** leave with it is the logic — quoting, price impact, slippage bounds, and dilution disclosure remain mandatory; they simply move to the party that actually uses them: `@hevdev7/agent-kit`.
+Humans do not execute, so the order ticket leaves the market page. What must **not** leave with it is the logic — quoting, price impact, slippage bounds, and dilution disclosure remain mandatory; they simply move to the party that actually uses them: `@0g-brier/agent-kit`.
 
-### 6.1 The surface mirrored from Delphi
+### 6.1 The surface mirrored from prior art
 
-The shapes below are taken from the Delphi SDK because agent authors already know them, and that familiarity reduces mistakes:
+The shapes below are taken from existing agent-trading SDKs because agent authors already know them, and that familiarity reduces mistakes:
 
 ```ts
 quoteBuy ({ market, outcome, sharesOut })          -> { tokensIn }
@@ -345,9 +345,9 @@ Two details from that SDK we adopt as-is, because both are right:
 
 ### 6.2 The porting trap: LMSR is not Pennock's DPM
 
-**For an agent author this is the most important section in the whole document.** Delphi uses LMSR. We use Pennock's DPM, `C(q) = √(Σqᵢ²)`. The difference is not an implementation detail:
+**For an agent author this is the most important section in the whole document.** The prior art uses LMSR. We use Pennock's DPM, `C(q) = √(Σqᵢ²)`. The difference is not an implementation detail:
 
-| | Delphi (LMSR) | Brier (DPM Pennock) |
+| | LMSR venue | Brier (DPM Pennock) |
 |---|---|---|
 | Normalization | `Σpᵢ = 1` | `Σpᵢ² = 1` |
 | Implied probability | `Pᵢ = pᵢ` | `Pᵢ = pᵢ²` |
@@ -356,7 +356,7 @@ Two details from that SDK we adopt as-is, because both are right:
 
 At `P = 59%`: our market pays **1.30×**, an LMSR market pays **1.69×**. An agent ported without adjustment will **overstate payout by around 30%** — and it will still "work", it will just bleed slowly.
 
-Note the form of the Kelly criterion: the formula is the same, but **the variable is probability, not price**. The derivation: net odds `b = payout/cost − 1 = (1/p)/p − 1 = (1−P)/P`, hence `f* = (P̂ − P)/(1 − P)`. An agent that feeds our `price` (which is worth `√P`) into a Delphi-style formula sizes wrong systematically, not occasionally.
+Note the form of the Kelly criterion: the formula is the same, but **the variable is probability, not price**. The derivation: net odds `b = payout/cost − 1 = (1/p)/p − 1 = (1−P)/P`, hence `f* = (P̂ − P)/(1 − P)`. An agent that feeds our `price` (which is worth `√P`) into an LMSR-style formula sizes wrong systematically, not occasionally.
 
 API consequence: **`agent-kit` must not expose a field named `price` that could be taken for a probability.** Name them `marginalPrice` and `impliedProbability`, and let the types refuse the swap.
 
@@ -546,7 +546,7 @@ frontend/src/
    └─ portfolio/                     AgentBook, AgentPicker
 ```
 
-Dependencies: `next`, `react`, `@tanstack/react-query`, `@hevdev7/protocol`, and
+Dependencies: `next`, `react`, `@tanstack/react-query`, `@0g-brier/protocol`, and
 `lucide-react` for icons. No component library and no charting library — a chart library takes
 `number`, and wad values must not become floats.
 
@@ -576,11 +576,11 @@ One test that is required and easy to forget: **render every component in `chain
 | Phase | Content | Prerequisite | Done when |
 |---|---|---|---|
 | **F0** | workspace, tokens, `lib/format`, `types.ts`, `MockSource`, primitives | — | vitest green; a storybook-less token demo page |
-| **F1** | The market page enriched in mock mode: probability chart, market statistics, positions table, final outcome, resolution evidence. `OrderTicket` removed. | F0 | the detail page matches the Delphi reference, entirely from `MockSource` |
+| **F1** | The market page enriched in mock mode: probability chart, market statistics, positions table, final outcome, resolution evidence. `OrderTicket` removed. | F0 | the detail page matches the design reference, entirely from `MockSource` |
 | **F2** | `ChainSource` + the `/` market list | Task 17 (factory) | the list populates from factory enumeration; history columns are honestly `unavailable` |
 | **F3** | `/portfolio`, read-only | Task 16 | the agent's book reads from the chain |
 | **F4** | `IndexerSource` | P3 | chart, tape, and entry price populate; `unavailable` disappears |
-| **F5** | `@hevdev7/agent-kit` — quoting, dilution, execution (§6) | Task 13, 16, 17 | an agent really buys and sells on anvil through the SDK |
+| **F5** | `@0g-brier/agent-kit` — quoting, dilution, execution (§6) | Task 13, 16, 17 | an agent really buys and sells on anvil through the SDK |
 
 Note that the ordering changed: F1 used to be "buy & sell from the browser". Now **no** phase makes the browser buy anything. The moment where "you watch the DPM curve move" shifts to F5, and what moves it is an agent, not a human typing.
 

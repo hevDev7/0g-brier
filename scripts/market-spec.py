@@ -18,11 +18,20 @@ it usable for a lifecycle demo.
 """
 import datetime as _dt
 import json
+import os
 import sys
 
 
 def _iso(ts: int) -> str:
+    """For people to read. NOT for a URL — it contains spaces."""
     return _dt.datetime.fromtimestamp(ts, _dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _isoz(ts: int) -> str:
+    """For a query string. The two formats are separate functions rather than one
+    with a flag, because mixing them up produces a source URL that no resolver can
+    fetch — and that failure surfaces at settlement, after the money is in."""
+    return _dt.datetime.fromtimestamp(ts, _dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
 TIERS = ["FAST", "VERIFIED", "DETERMINISTIC"]
 
@@ -183,7 +192,13 @@ def _live_spec(trading_end: int, settlement_deadline: int) -> dict:
     def iso(ts: int) -> str:
         return _dt.datetime.fromtimestamp(ts, _dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
-    base = "https://api.exchange.coinbase.com/products/ETH-USD/candles?granularity=60"
+    # The instrument is a parameter, not a constant. The design of this question
+    # — a minute inside the window, a threshold about a percent away — holds for
+    # any liquid pair; only the name changes. `LIVE_PRODUCT=BTC-USD` asks about
+    # Bitcoin. The 1% gap is calibrated for a seven-minute horizon, so a pair
+    # materially more volatile than ETH or BTC would want a wider one.
+    product = os.environ.get("LIVE_PRODUCT", "ETH-USD")
+    base = f"https://api.exchange.coinbase.com/products/{product}/candles?granularity=60"
     url = f"{base}&start={iso(minute)}&end={iso(minute)}"
 
     # The threshold has to come from a price, and a price has to be fetched. If
@@ -199,9 +214,9 @@ def _live_spec(trading_end: int, settlement_deadline: int) -> dict:
     when = _dt.datetime.fromtimestamp(minute, _dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     return {
         "resolvesBy": minute + 120,
-        "question": f"Will the Coinbase ETH-USD close for the minute ending {when} be above ${threshold:,.2f}?",
+        "question": f"Will the Coinbase {product} close for the minute ending {when} be above ${threshold:,.2f}?",
         "rules": (
-            f"Resolves YES if the Coinbase ETH-USD candle for the minute beginning {minute} "
+            f"Resolves YES if the Coinbase {product} candle for the minute beginning {minute} "
             f"(unix seconds) has a close strictly greater than {threshold:.2f} USD. Resolves NO if "
             f"it is {threshold:.2f} or below. Deemed UNRESOLVABLE only if Coinbase publishes no "
             "candle for that exact minute. The source URL pins that minute at both ends, so it "
@@ -222,12 +237,188 @@ def _live_spec(trading_end: int, settlement_deadline: int) -> dict:
     }
 
 
+def _http_json(url: str):
+    """One fetch, or stop. A spec built on a guessed API shape is a market nobody
+    can settle, and the failure would surface only after money was in it."""
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "brier-spec/1.0"})
+    return json.loads(urllib.request.urlopen(req, timeout=20).read())
+
+
+def _minute_before(trading_end: int) -> int:
+    """The minute the question asks about: three before trading ends, so the
+    observation exists by the time the market can be settled."""
+    return (trading_end - 180) // 60 * 60
+
+
+def _candle_spec(product: str, trading_end: int, settlement_deadline: int, dp: int, gap: float, subject: str) -> dict:
+    """A threshold question on one pinned Coinbase minute.
+
+    The minute is pinned with `start == end`, which is what makes the answer
+    permanent: the range is inclusive at both ends, so the request returns exactly
+    one candle and the SAME one on every later request, forever. `end = t + 60`
+    would return two and Coinbase orders them newest-first, so `$[0]` would be the
+    minute AFTER the one the question names.
+    """
+    minute = _minute_before(trading_end)
+    if minute + 120 > settlement_deadline:
+        sys.exit("market-spec: needs the settlement deadline at least 5 minutes past tradingEnd")
+    base = f"https://api.exchange.coinbase.com/products/{product}/candles?granularity=60"
+    spot = float(_http_json(f"{base}&limit=1")[0][4])
+    threshold = round(spot * (1 - gap), dp)
+    when = _dt.datetime.fromtimestamp(minute, _dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    fmt = f"{{:.{dp}f}}"
+    t = fmt.format(threshold)
+    return {
+        "resolvesBy": minute + 120,
+        "question": f"Will the Coinbase {product} close for the minute ending {when} be above ${t}?",
+        "rules": (
+            f"Resolves YES if the Coinbase {product} candle for the minute beginning {minute} "
+            f"(unix seconds) has a close strictly greater than {t} USD. Resolves NO if it is {t} USD or "
+            "below. Deemed UNRESOLVABLE only if Coinbase publishes no candle for that exact "
+            "minute. The source URL pins that minute at both ends, so it returns one candle and "
+            "the same one on every later request."
+        ),
+        "settlementPrompt": (
+            f"Source 0 is the Coinbase {product} candle for the minute beginning {minute}, as "
+            "[time, low, high, open, close, volume]. Read the close — the fifth element, which "
+            f"the selector has already extracted. Answer YES if it is strictly greater than {t} USD, "
+            "NO otherwise. Do not substitute a neighbouring minute or the current price."
+        ),
+        "sources": [{"kind": "http", "url": f"{base}&start={_isoz(minute)}&end={_isoz(minute)}", "selector": "$[0][4]"}],
+        "context": [{"kind": "http", "url": f"{base}&limit=1", "selector": "$[0][4]"}],
+        "_subject": subject,
+    }
+
+
+def _live_crypto(trading_end: int, settlement_deadline: int) -> dict:
+    # 1% below spot: ETH essentially never travels that far in seven minutes, so a
+    # forecaster can defensibly say "very likely" without saying "certain".
+    product = os.environ.get("LIVE_PRODUCT", "ETH-USD")
+    return _candle_spec(product, trading_end, settlement_deadline, 2, 0.01, "a crypto price")
+
+
+def _live_economics(trading_end: int, settlement_deadline: int) -> dict:
+    """The dollar peg, which is an economics question and not a crypto one.
+
+    No gap below spot here, unlike ETH. USDT-USD sits within a few hundredths of a
+    cent of 1.0000 and wanders across it minute to minute, so the threshold IS the
+    current price: a genuine coin flip rather than a formality. The same 1% gap
+    that makes an ETH question answerable would make this one certain.
+    """
+    return _candle_spec("USDT-USD", trading_end, settlement_deadline, 5, 0.0, "the dollar peg")
+
+
+def _live_science(trading_end: int, settlement_deadline: int) -> dict:
+    """How many earthquakes the USGS records in a pinned five-minute window.
+
+    Seismicity is close to a Poisson process, so the count in a short window is
+    genuinely unknown in advance — which is what a market needs and what a weather
+    forecast at this horizon cannot give, its value being published before the
+    market opens.
+
+    The threshold is CALIBRATED, not guessed: the rate over the preceding hour sets
+    it, so the question lands near a coin flip instead of near a formality.
+    """
+    t2 = trading_end - 60
+    t1 = t2 - 300
+    if t2 + 60 > settlement_deadline:
+        sys.exit("market-spec: 'science' needs the settlement deadline at least 2 minutes past tradingEnd")
+    api = "https://earthquake.usgs.gov/fdsnws/event/1/count?format=geojson&minmagnitude=1.0"
+    hour = _http_json(f"{api}&starttime={_isoz(t1 - 3600)}&endtime={_isoz(t1)}")["count"]
+    expected = hour * 300 / 3600
+    threshold = max(0, int(round(expected)) - 1)
+    url = f"{api}&starttime={_isoz(t1)}&endtime={_isoz(t2)}"
+    return {
+        "resolvesBy": t2 + 60,
+        "question": (
+            f"Will the USGS record more than {threshold} earthquakes of magnitude 1.0 or greater "
+            f"worldwide between {_iso(t1)} and {_iso(t2)}?"
+        ),
+        "rules": (
+            f"Resolves YES if the USGS event count for magnitude >= 1.0 with starttime {_isoz(t1)} "
+            f"and endtime {_isoz(t2)} is strictly greater than {threshold} events. Resolves NO otherwise. "
+            "The window is pinned at both ends, so the query is the same one on every later "
+            "request. Note that the USGS catalogue is REVISED: events are sometimes added hours "
+            "after the fact, so a count read later may exceed the count read at settlement. The "
+            "count at settlement decides, and this rule says so rather than pretending the "
+            "catalogue is frozen."
+        ),
+        "settlementPrompt": (
+            "Source 0 is the USGS event count for the pinned window, already extracted by the "
+            f"selector. Answer YES if it is strictly greater than {threshold} events, NO otherwise."
+        ),
+        "sources": [{"kind": "http", "url": url, "selector": "$.count"}],
+        "context": [{"kind": "http", "url": f"{api}&starttime={_isoz(t1 - 3600)}&endtime={_isoz(t1)}", "selector": "$.count"}],
+        "_subject": "seismic activity",
+    }
+
+
+def _live_culture(trading_end: int, settlement_deadline: int) -> dict:
+    """Whether Hacker News reaches a given item id by a pinned second.
+
+    Item ids are handed out in order and an item's `time` NEVER changes, so this is
+    permanently checkable: fetch the item, read its timestamp, compare. An item that
+    does not exist yet returns `null`, and the rule says what that means rather than
+    leaving a resolver to guess.
+
+    The target id is set from the site's measured posting rate over the preceding
+    ~600 items, so it sits near the boundary instead of far on one side of it.
+    """
+    deadline = trading_end - 120
+    if deadline + 60 > settlement_deadline:
+        sys.exit("market-spec: 'culture' needs a longer settlement window")
+    api = "https://hacker-news.firebaseio.com/v0/"
+    top = int(_http_json(f"{api}maxitem.json"))
+    now_t = int(_http_json(f"{api}item/{top}.json")["time"])
+    old_t = int(_http_json(f"{api}item/{top - 600}.json")["time"])
+    per_second = 600 / max(1, now_t - old_t)
+    target = top + max(1, int(per_second * (deadline - now_t)))
+    when = _dt.datetime.fromtimestamp(deadline, _dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return {
+        "resolvesBy": deadline + 60,
+        "question": f"Will Hacker News item #{target} have been posted before {when}?",
+        "rules": (
+            f"Resolves YES if https://hacker-news.firebaseio.com/v0/item/{target}.json returns an "
+            f"item whose `time` is less than or equal to {deadline} (unix seconds). Resolves NO if "
+            "the endpoint returns null — the id has not been reached — or if the item's `time` is "
+            "greater than that. Item ids are issued in order and an item's timestamp never "
+            "changes, so this answer is the same for anyone who checks it later. Deemed "
+            "UNRESOLVABLE only if the endpoint cannot be reached at all."
+        ),
+        "settlementPrompt": (
+            f"Source 0 is the `time` field of Hacker News item {target}, or null if no such item "
+            f"exists yet. Answer YES if it is a number less than or equal to {deadline}. Answer NO "
+            "if it is null or greater. Do not substitute a neighbouring item id."
+        ),
+        "sources": [{"kind": "http", "url": f"{api}item/{target}.json", "selector": "$.time"}],
+        "context": [{"kind": "http", "url": f"{api}maxitem.json", "selector": "$"}],
+        "_subject": "how fast a community is posting",
+    }
+
+
+LIVE = {
+    "crypto": _live_crypto,
+    "economics": _live_economics,
+    "science": _live_science,
+    "culture": _live_culture,
+}
+
+
 trading_end, settlement_deadline, tier, agent_id = (int(a) for a in sys.argv[1:5])
 category = sys.argv[5] if len(sys.argv) > 5 else "crypto"
-if category != "live" and category not in SPECS:
-    sys.exit(f"market-spec: unknown category {category!r}. Known: live, {', '.join(SPECS)}")
+_live_of = category[5:] if category.startswith("live-") else None
+if _live_of is not None and _live_of not in LIVE:
+    sys.exit(f"market-spec: no short-horizon question for {_live_of!r}. Have: {', '.join(LIVE)}")
+if _live_of is None and category != "live" and category not in SPECS:
+    sys.exit(f"market-spec: unknown category {category!r}. Known: live, live-<{'|'.join(LIVE)}>, {', '.join(SPECS)}")
 
-spec = _live_spec(trading_end, settlement_deadline) if category == "live" else SPECS[category]
+if _live_of is not None:
+    spec = LIVE[_live_of](trading_end, settlement_deadline)
+elif category == "live":
+    spec = _live_spec(trading_end, settlement_deadline)
+else:
+    spec = SPECS[category]
 
 # ── the check that has to happen here, because nothing downstream can do it ──
 #
@@ -258,7 +449,7 @@ if resolves_by and resolves_by > settlement_deadline:
 # `selftest` is a demo scaffold; on chain it is filed under crypto, which the
 # registry knows. Inventing a category the registry has never heard of would make
 # `createMarket` revert with UnknownCategory, which is exactly right of it.
-on_chain_category = "crypto" if category in ("selftest", "live") else category
+on_chain_category = _live_of if _live_of is not None else ("crypto" if category in ("selftest", "live") else category)
 
 print(json.dumps({
     "version": 1,

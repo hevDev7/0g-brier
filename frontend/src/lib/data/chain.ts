@@ -12,7 +12,7 @@ import {
 } from "viem";
 import {AGENT_REGISTRY_ABI, CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, RESOLUTION_ABI} from "./abi";
 import {ZgStore, type MarketSpec} from "./zg-storage";
-import type {DocumentStore} from "@hevdev7/zg-storage";
+import type {DocumentStore} from "@0g-brier/zg-storage";
 import {
   CapabilityUnavailableError,
   type Candle,
@@ -25,6 +25,7 @@ import {
   type Outcome,
   type MarketSummary,
   type Position,
+  type ResolverVote,
   type SettlementReceipt,
   type Tier,
   type Trade,
@@ -647,7 +648,14 @@ export class ChainSource implements DataSource {
       functionName: "resolutionOf",
       args: [address],
     });
-    if (receiptRoot.toLowerCase() === ZERO_ROOT) return null;
+    if (receiptRoot.toLowerCase() === ZERO_ROOT) {
+      // Not "no receipt" — possibly the opposite. `resolutionOf` is written only
+      // by the direct settle path; a committee records one root per member in
+      // `receiptRootOf` and leaves this mapping empty. Reporting that as an
+      // unanchored settlement told the reader the strongest evidence on the
+      // deployment was the weakest, which is the wrong way round to be wrong.
+      return await this.committeeReceipt(address, moduleAddress);
+    }
     // Read beside the root rather than inferred from it: a receipt says what the
     // resolver claims, and this says what the protocol recorded.
     const viaCommittee = await this.client.readContract({
@@ -666,5 +674,89 @@ export class ChainSource implements DataSource {
       throw new Error(`Market ${address} anchored receipt ${receiptRoot}, but no readable document is stored there`);
     }
     return receipt;
+  }
+
+  /**
+   * A committee's settlement, assembled from one receipt per member.
+   *
+   * Each resolver writes and anchors its own document, so there is no single
+   * "the receipt" to fetch. The narrative fields come from the first readable
+   * one; `votes` carries every member, because what a reader is checking is
+   * whether independent judges agreed — and that is invisible if only one of
+   * them is shown.
+   */
+  private async committeeReceipt(
+    market: `0x${string}`,
+    moduleAddress: `0x${string}`,
+  ): Promise<SettlementReceipt | null> {
+    const specs = this.specs;
+    if (!specs) this.unavailable("SETTLEMENT_RECEIPT");
+
+    const members = await this.client.readContract({
+      address: moduleAddress,
+      abi: RESOLUTION_ABI,
+      functionName: "committeeOf",
+      args: [market],
+    });
+    if (members.length === 0) return null;
+
+    const roots = await Promise.all(
+      members.map((agentId) =>
+        this.client.readContract({
+          address: moduleAddress,
+          abi: RESOLUTION_ABI,
+          functionName: "receiptRootOf",
+          args: [market, agentId],
+        }),
+      ),
+    );
+    // What each member VOTED, read from the chain rather than inferred from the
+    // documents. This is the fix for a settlement that had three reveals on chain
+    // and rendered "no votes": the list used to be built out of MODEL NAMES, so a
+    // committee that consulted no model produced no rows — deleting three real,
+    // staked, blind-committed votes from the record because of a field that was
+    // never what identified them.
+    const reveals = await Promise.all(
+      members.map((agentId) =>
+        this.client.readContract({
+          address: moduleAddress,
+          abi: RESOLUTION_ABI,
+          functionName: "revealOf",
+          args: [market, agentId],
+        }),
+      ),
+    );
+
+    const anchoredMembers = members
+      .map((agentId, i) => ({agentId, root: roots[i]!, reveal: reveals[i]!}))
+      .filter((m) => m.root.toLowerCase() !== ZERO_ROOT);
+    if (anchoredMembers.length === 0) return null;
+
+    const withDocs = await Promise.all(
+      anchoredMembers.map(async (m) => ({...m, doc: await specs.getReceipt(m.root as Hex)})),
+    );
+    const docs = withDocs.map((m) => m.doc).filter((d): d is SettlementReceipt => d !== null);
+    // Roots on chain and nothing behind them is an anomaly, not an absence —
+    // the same distinction the single-receipt path makes above.
+    if (docs.length === 0) {
+      throw new Error(
+        `Market ${market} anchored ${anchoredMembers.length} committee receipt(s), but none has a readable document`,
+      );
+    }
+
+    const votes: ResolverVote[] = withDocs.map((m) => ({
+      agentId: Number(m.agentId),
+      receiptRoot: m.root,
+      // What the resolver consulted. `null` is a real answer — nothing — and it no
+      // longer decides whether the vote exists.
+      model: m.doc?.judgeModel ?? null,
+      // Outcomes: 0 NO, 1 YES, 2 UNRESOLVABLE, 3 NONE. Three is the ABSENCE of a
+      // vote, which the contract stores as reveal-plus-one precisely so it can
+      // never be read as a NO.
+      outcome: m.reveal === 3 ? null : m.reveal === 2 ? "unresolvable" : ((m.reveal as 0 | 1)),
+      teeVerified: m.doc?.votes.some((v) => v.teeVerified) ?? false,
+      simulated: m.doc?.votes[0]?.simulated ?? false,
+    }));
+    return {...docs[0]!, votes, viaCommittee: true};
   }
 }

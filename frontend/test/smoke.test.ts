@@ -1,8 +1,8 @@
 import {describe, expect, it} from "vitest";
-import {WAD, dpm} from "@hevdev7/protocol";
+import {WAD, dpm} from "@0g-brier/protocol";
 
 describe("workspace integration", () => {
-  it("imports WAD from @hevdev7/protocol", () => {
+  it("imports WAD from @0g-brier/protocol", () => {
     expect(WAD).toBe(1_000_000_000_000_000_000n);
   });
 

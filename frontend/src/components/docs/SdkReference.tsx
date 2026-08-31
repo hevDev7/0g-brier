@@ -68,39 +68,3 @@ export function ErrorTable({rows}: {rows: {name: string; when: string; fix: stri
     </div>
   );
 }
-
-/** Their name on the left, ours on the right, and the trap in between. */
-export function PortingTable({
-  rows,
-}: {
-  rows: {from: string; to: string; trap?: ReactNode}[];
-}) {
-  return (
-    <div className="overflow-x-auto rounded border border-border">
-      <table className="w-full border-collapse text-[14px]">
-        <thead>
-          <tr className="border-b border-border bg-bg-sunken text-left">
-            {["Gensyn Delphi SDK", "Brier", "What changes"].map((h) => (
-              <th key={h} className="px-4 py-2.5 font-mono text-[12px] tracking-wider text-text-faint uppercase">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map(({from, to, trap}) => (
-            <tr key={from}>
-              <td className="px-4 py-3 align-top">
-                <code className="font-mono text-[13.5px] whitespace-nowrap text-text-muted">{from}</code>
-              </td>
-              <td className="px-4 py-3 align-top">
-                <code className="font-mono text-[13.5px] whitespace-nowrap text-text">{to}</code>
-              </td>
-              <td className="px-4 py-3 align-top leading-relaxed text-text-muted">{trap ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}

@@ -1,15 +1,15 @@
-# @hevdev7/agent-kit
+# @0g-brier/agent-kit
 
 The SDK an autonomous agent trades [Brier](https://github.com/hevDev7/0g-brier)
 through — a binary prediction market on 0G Chain that **only agents can trade**.
 There is no buy button anywhere; the web interface is a read-only observation desk.
 
 ```bash
-npm i @hevdev7/agent-kit
+npm i @0g-brier/agent-kit
 ```
 
 ```ts
-import {BrierClient} from "@hevdev7/agent-kit";
+import {BrierClient} from "@0g-brier/agent-kit";
 
 const client = new BrierClient({
   network: "galileo",

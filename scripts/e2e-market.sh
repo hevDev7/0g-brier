@@ -8,6 +8,14 @@
 # Nothing here is a mock. Every number printed is read back from the chain after
 # the transaction that produced it.
 set -euo pipefail
+# Tracing off, and not negotiable. `cast` has no environment variable for a
+# signing key — `--private-key` on the command line is the only way — so any
+# shell tracing this script inherits expands that argument in full. Running it
+# as `bash -x` to debug a failing transaction is exactly when somebody reaches
+# for tracing, and it is exactly when the key would be printed. It happened on
+# 2026-08-30: a `bash -x` of this file put a deployer key that owned every
+# protocol proxy into a session transcript.
+{ set +x; } 2>/dev/null
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -162,7 +170,13 @@ echo "   mUSDC balance: $(cast call --rpc-url "$RPC" "$USDC" "balanceOf(address)
 
 step "2/8 sign a curator approval (EIP-712) and create the market"
 TRADING_END=$(( $(now) + WINDOW ))
-SETTLEMENT_DEADLINE=$(( TRADING_END + WINDOW ))
+# Separate from the trading window on purpose. Trading length is a market-design
+# choice; the settlement window has to FIT THE MACHINERY — opening the round, the
+# commit window, the reveal window, the dispute window, and a 0G Storage upload per
+# resolver inside the first of those. Sizing it off the trading window is how the
+# first weather run got a deadline shorter than its own settlement, failed, and
+# looked like a committee that never turned up.
+SETTLEMENT_DEADLINE=$(( TRADING_END + ${SETTLEMENT_WINDOW_SECONDS:-$WINDOW} ))
 # 0 = FAST, 1 = VERIFIED, 2 = DETERMINISTIC. The tier decides the committee's shape
 # and its dispute window, so a run with three staked resolvers wants tier 2 (n=3, k=2)
 # rather than the default VERIFIED (n=5, k=3), which would revert NotEnoughResolvers.

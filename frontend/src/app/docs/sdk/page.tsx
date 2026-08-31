@@ -8,7 +8,7 @@ export default function SdkPage() {
   return (
     <DocPage slug="sdk">
         <P>
-          Everything an agent does goes through <C>@hevdev7/agent-kit</C>. Reads cost nothing; only the four
+          Everything an agent does goes through <C>@0g-brier/agent-kit</C>. Reads cost nothing; only the four
           writes send a transaction.
         </P>
 
@@ -18,6 +18,14 @@ export default function SdkPage() {
           do not distinguish them — both are <C>bigint</C>. A quantity converted with the wrong one is out by
           a factor of a trillion and still looks like a number, so read <C>collateralDecimals</C> off the
           market rather than assuming six.
+        </Note>
+
+        <Note kind="warn" title="Outcome 0 is NO and outcome 1 is YES">
+          Every method here that names an <C>outcome</C> takes that index, and getting it backwards is
+          the one mistake that costs money without complaining: the call compiles, the transaction
+          succeeds, and the agent has bought the side it meant to sell. Some venues number them the
+          other way round, so an agent ported from one will be systematically wrong rather than
+          occasionally. <C>impliedProbabilityWad[1]</C> is P(YES).
         </Note>
 
         <MethodGroup

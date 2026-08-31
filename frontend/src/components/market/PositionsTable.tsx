@@ -1,5 +1,5 @@
 import {Layers} from "lucide-react";
-import {dpm, toTokensFloor} from "@hevdev7/protocol";
+import {dpm, toTokensFloor} from "@0g-brier/protocol";
 import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import {Unavailable} from "@/components/primitives/Unavailable";
 import {formatCollateral, formatPricePerShare, formatShares, shortAddress} from "@/lib/format";
@@ -31,19 +31,40 @@ import type {DataMode, MarketDetail, Position} from "@/lib/data/types";
  * runs in the direction that understates. On the losing side the same column
  * quotes a price for shares that are worth nothing at all.
  */
-export function PositionsTable({
+export function PositionsTable(props: {positions: Position[]; market: MarketDetail; mode: DataMode}) {
+  return (
+    <Panel testId="positions-table" className="overflow-hidden">
+      <PanelHeader eyebrow="Observed exposure" title="Agent positions" icon={Layers} />
+      <PositionsBody {...props} />
+    </Panel>
+  );
+}
+
+/**
+ * The same table without a Panel around it, so it can sit inside one that already
+ * exists. `MarketActivity` puts this and the trade tape in a single panel behind
+ * two tabs, and nesting a Panel in a Panel would draw two borders and two headers
+ * for one thing.
+ *
+ * `onSelectAgent` is what makes the pairing worth more than shelf space. These two
+ * tables share an Agent column and nothing else — one is a balance, the other a
+ * sequence of changes — so the only useful link between them is "show me how this
+ * holding was built", which is the tape narrowed to one address.
+ */
+export function PositionsBody({
   positions,
   market,
   mode,
+  onSelectAgent,
 }: {
   positions: Position[];
   market: MarketDetail;
   mode: DataMode;
+  onSelectAgent?: (agent: string) => void;
 }) {
   const winner = market.winningOutcome;
   return (
-    <Panel testId="positions-table" className="overflow-hidden">
-      <PanelHeader eyebrow="Observed exposure" title="Agent positions" icon={Layers} />
+    <>
       {positions.length === 0 ? (
         <p className="px-4 py-8 text-center text-[14px] text-text-muted md:px-5">
           {/* Deliberately one text node — getByText joins only an element's
@@ -101,7 +122,21 @@ export function PositionsTable({
                     className="border-t border-border"
                   >
                     <td className="px-4 py-2.5 font-mono text-[12px] text-text-muted">
-                      {shortAddress(position.agent)}
+                      {onSelectAgent === undefined ? (
+                        shortAddress(position.agent)
+                      ) : (
+                        // A control only where a handler exists. A button that does
+                        // nothing is worse than plain text: it advertises an action
+                        // the page cannot perform.
+                        <button
+                          type="button"
+                          onClick={() => onSelectAgent(position.agent)}
+                          title="Show this agent's trades"
+                          className="cursor-pointer underline decoration-border decoration-dotted underline-offset-4 hover:text-text hover:decoration-accent"
+                        >
+                          {shortAddress(position.agent)}
+                        </button>
+                      )}
                     </td>
                     <td
                       className={`px-3 py-2.5 font-mono text-[12px] font-medium ${
@@ -142,6 +177,6 @@ export function PositionsTable({
           ? `Prices are per share in ${market.collateral.symbol}, not probabilities.`
           : `${winner === 1 ? "YES" : "NO"} won. Losing shares redeem for nothing; the amounts above are what the winning side can claim, not a price.`}
       </p>
-    </Panel>
+    </>
   );
 }

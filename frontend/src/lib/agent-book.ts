@@ -1,4 +1,6 @@
-import {dpm, toTokensFloor} from "@hevdev7/protocol";
+import {tradingHasEnded} from "@/lib/market-phase";
+import {dpm, toTokensFloor} from "@0g-brier/protocol";
+import {payoutPerShareWad} from "@/lib/dpm-view";
 import type {MarketStatus, MarketSummary, Outcome, Position} from "@/lib/data/types";
 
 const WAD = 10n ** 18n;
@@ -9,7 +11,18 @@ export interface BookRow {
   shares: bigint;
   /** null when the current mode cannot know what was paid (COST_BASIS). */
   entryPriceWad: bigint | null;
+  /** The marginal price — what the NEXT share trades at while the book is open. */
   currentPriceWad: bigint;
+  /**
+   * What one held share is worth NOW: the marginal price while unresolved, the
+   * `1/p` redemption rate on the winning side once settled, zero on the losing
+   * side. `currentValueTokens` and `pnlTokens` are built from THIS. The two are
+   * separate fields because after settlement they are different numbers, and one
+   * column cannot honestly carry both.
+   */
+  worthPerShareWad: bigint;
+  /** True once the market is settled, so a reader knows which of the two it is. */
+  redeemable: boolean;
   /** Collateral units. */
   currentValueTokens: bigint;
   /** Collateral units, signed. null exactly when `entryPriceWad` is null. */
@@ -40,7 +53,31 @@ export function agentBook(
 
       const decimals = market.collateral.decimals;
       const currentPriceWad = dpm.price(market.q, position.outcome);
-      const currentValueWad = (position.shares * currentPriceWad) / WAD;
+      const winner = market.winningOutcome;
+
+      /**
+       * ONCE A MARKET IS SETTLED THE MARGINAL PRICE IS NO LONGER WHAT A SHARE IS
+       * WORTH, and this book valued every position with it regardless. The winning
+       * side redeems at `1/p`, the RECIPROCAL of the price — so a real position here
+       * read +0.695439 mUSDC when it could actually be redeemed for +45.604931.
+       * Sixty-five times too small, and in the direction that tells an agent its
+       * correct call was barely worth making. The losing side is worth nothing at
+       * all, and was being carried at a positive number.
+       *
+       * `PositionsTable` has got this right since it was written. The portfolio never
+       * did, so one holding read two different ways depending on the page you opened.
+       *
+       * FAILED AND VOIDED NEED NO BRANCH. `_snapshotLiquidation` freezes the
+       * liquidation rate at `price(q, i)` and `q` cannot move after close, so the
+       * marginal price still IS the rate those markets pay.
+       */
+      const worthPerShareWad =
+        winner === null
+          ? currentPriceWad
+          : position.outcome === winner
+            ? payoutPerShareWad(market.q, winner)
+            : 0n;
+      const currentValueWad = (position.shares * worthPerShareWad) / WAD;
       const currentValueTokens = toTokensFloor(currentValueWad, decimals);
 
       let pnlTokens: bigint | null = null;
@@ -63,6 +100,8 @@ export function agentBook(
         shares: position.shares,
         entryPriceWad: position.entryPriceWad,
         currentPriceWad,
+        worthPerShareWad,
+        redeemable: winner !== null,
         currentValueTokens,
         pnlTokens,
       });
@@ -78,8 +117,17 @@ export function agentBook(
  * SDK; this column is what replaces the Actions column that a transacting UI
  * would have had.
  */
-export function holdingStatus(status: MarketStatus): string {
-  switch (status) {
+export function holdingStatus(
+  market: {status: MarketStatus; tradingEnd: number},
+  now: number | null,
+): string {
+  // The clock first, because the status alone lies here. A market stays `Open`
+  // until somebody calls `close()`, but from `tradingEnd` onward the chain refuses
+  // buy, sell, addLiquidity and removeLiquidity alike with `TradingEnded`. Labelling
+  // such a holding "Open" tells the reader a position can still be sold when nothing
+  // on earth can sell it — and this column exists precisely to say what can be done.
+  if (tradingHasEnded(market, now)) return "Awaiting close · nothing can be traded";
+  switch (market.status) {
     case "Proposed":
     case "Open":
       return "Open";

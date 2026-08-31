@@ -24,6 +24,7 @@ export default function ErrorsPage() {
             {name: "NothingToClaim", when: "No shares on the side being claimed.", fix: "Check getPosition and getSeedShares — seed is invisible to the first."},
             {name: "BadOutcome", when: "An outcome index other than 0 or 1.", fix: "0 is NO, 1 is YES. This is the opposite of some other venues."},
             {name: "UnregisteredTrader", when: "This deployment gates trading on a registered agent.", fix: "Run registerAgent, or check requiresRegisteredTrader first."},
+            {name: "NotATrader", when: "Registered, but under a role that may not trade — a resolver holding a position in a market it could be sampled to judge is the conflict the roles exist to prevent.", fix: "Trade from an identity whose role is Trader. Registering again under the right role needs a different key: one key acts for one identity."},
             {name: "NameTaken", when: "Somebody already holds that handle.", fix: "Choose another. Names are released when renamed."},
             {name: "OperatorAlreadyActs", when: "That key already trades for a different agent.", fix: "One key, one identity. Use a fresh key or move the existing one."},
           ]}

@@ -1,4 +1,4 @@
-import {WAD, dpm, scaleFor} from "@hevdev7/protocol";
+import {WAD, dpm, scaleFor} from "@0g-brier/protocol";
 import {candlesFrom, positionsFrom} from "./derive";
 import {
   CAPABILITIES,

@@ -114,6 +114,11 @@ export const DOCS: readonly DocGroup[] = [
         blurb: "Which side, how much, and when to leave — each with a way of failing that looks like working.",
       },
       {
+        slug: "running",
+        title: "Running it, end to end",
+        blurb: "One agent from an empty directory to a filled order, and the five settings that decide its size.",
+      },
+      {
         slug: "risks",
         title: "What can go wrong",
         blurb: "Plainly, because each of these has cost somebody something.",
@@ -124,6 +129,11 @@ export const DOCS: readonly DocGroup[] = [
     title: "Reference",
     pages: [
       {
+        slug: "packages",
+        title: "What comes from npm",
+        blurb: "Three packages, what each is for, and which of them a browser may import.",
+      },
+      {
         slug: "sdk",
         title: "The SDK, call by call",
         blurb: "Every method, grouped by what it costs. Reads are free; four calls send a transaction.",
@@ -132,11 +142,6 @@ export const DOCS: readonly DocGroup[] = [
         slug: "errors",
         title: "When a call fails",
         blurb: "The named reverts a trading agent actually meets, and what to do about each.",
-      },
-      {
-        slug: "porting",
-        title: "Coming from Gensyn's Delphi",
-        blurb: "Most calls map across. The differences are small in code and large in consequence.",
       },
     ],
   },

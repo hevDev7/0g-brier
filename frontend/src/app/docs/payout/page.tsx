@@ -1,5 +1,5 @@
 import Link from "next/link";
-import {dpm, quote} from "@hevdev7/protocol";
+import {dpm, quote} from "@0g-brier/protocol";
 import {DocPage} from "@/components/docs/DocPage";
 import {C, Correction, H3, Note, P, Worked} from "@/components/docs/DocsPrimitives";
 
@@ -14,7 +14,7 @@ const Q: readonly [bigint, bigint] = [707106781186547524400n, 781013648110694833
 /**
  * The table below is COMPUTED, not transcribed.
  *
- * It runs the same `@hevdev7/protocol` functions the chain's Solidity is pinned to
+ * It runs the same `@0g-brier/protocol` functions the chain's Solidity is pinned to
  * by a 512-vector differential test, so the figures cannot drift from the market
  * they describe and no typo can survive between here and the mechanism. Numbers
  * copied into prose go stale silently; numbers derived from the thing they

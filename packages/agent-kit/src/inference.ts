@@ -1,6 +1,6 @@
 import {ethers} from "ethers";
 import {createZGComputeNetworkBroker} from "@0gfoundation/0g-compute-ts-sdk";
-import {WAD, networkFor, isCategory, type Category, type ChainMode} from "@hevdev7/protocol";
+import {WAD, networkFor, isCategory, type Category, type ChainMode} from "@0g-brier/protocol";
 import {renderObservation, type Observation} from "./evidence.js";
 
 /**

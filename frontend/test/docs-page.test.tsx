@@ -20,10 +20,11 @@ import Agent from "@/app/docs/agent/page";
 import Setup from "@/app/docs/setup/page";
 import Funding from "@/app/docs/funding/page";
 import Deciding from "@/app/docs/deciding/page";
+import Running from "@/app/docs/running/page";
 import Risks from "@/app/docs/risks/page";
+import Packages from "@/app/docs/packages/page";
 import Sdk from "@/app/docs/sdk/page";
 import Errors from "@/app/docs/errors/page";
-import Porting from "@/app/docs/porting/page";
 
 const routing = {pathname: "/docs"};
 vi.mock("next/navigation", () => ({
@@ -47,10 +48,11 @@ const ROUTES: Record<string, () => ReactElement> = {
   setup: Setup,
   funding: Funding,
   deciding: Deciding,
+  running: Running,
   risks: Risks,
+  packages: Packages,
   sdk: Sdk,
   errors: Errors,
-  porting: Porting,
 };
 
 const textOf = (slug: string) => render(ROUTES[slug]!()).container.textContent ?? "";
@@ -189,7 +191,7 @@ describe("what each page has to say", () => {
   });
 
   /**
-   * The dilution table is computed at render from `@hevdev7/protocol`, so this
+   * The dilution table is computed at render from `@0g-brier/protocol`, so this
    * checks the CLAIM the page makes about it rather than the digits: that profit
    * keeps rising while the return on each unit staked collapses. Those two moving
    * in opposite directions is the entire point, and a table that lost it would
@@ -293,15 +295,97 @@ describe("what each page has to say", () => {
   });
 
   it("setup is honest about npm, and shows a first script needing no key", () => {
+    // This assertion was inverted on 2026-08-29, when the three packages were
+    // published. It previously required the page to WARN that npm would not
+    // work and to install by `file:` path. Both were true, and both stopped
+    // being true the moment `@0g-brier/protocol@0.1.0` landed — a page that
+    // went on saying it would have been turning readers away from a working
+    // install. The `file:` form is asserted absent rather than merely unmentioned:
+    // it is the exact instruction that would still resolve on the author's disk
+    // and nowhere else.
     const text = textOf("setup");
-    expect(text).toMatch(/no npm package yet/i);
-    expect(text).toContain("file:../brier/packages/agent-kit");
+    expect(text).toMatch(/packages are on npm/i);
+    expect(text).toContain("npm install @0g-brier/agent-kit @0g-brier/protocol viem");
+    expect(text).not.toContain("file:../brier/packages");
+    expect(text).not.toMatch(/no npm package yet/i);
+    // ESM-only is the constraint that replaced it, and the one a CommonJS
+    // project trips over on the first `require`.
+    expect(text).toMatch(/ESM only/i);
+    expect(text).toContain("npm pkg set type=module");
     expect(text).toContain("tsx");
     expect(text).toContain("new BrierClient({");
     expect(text).toContain("listMarkets()");
     expect(text).toMatch(/no privateKey/i);
     expect(text).toContain("canWrite");
     expect(text).toContain("privateKey: process.env.AGENT_KEY");
+  });
+
+  /**
+   * The packages page exists because `npm install` started working on
+   * 2026-08-29. Everything asserted here is a fact a reader would act on and be
+   * wrong about if it drifted: the names they type, the constraint that decides
+   * whether their project can `require` any of it, and the one import that must
+   * not reach a browser bundle.
+   */
+  it("packages names all three, the ESM constraint, the subpath and the repository", () => {
+    const text = textOf("packages");
+    for (const name of ["@0g-brier/agent-kit", "@0g-brier/protocol", "@0g-brier/zg-storage"]) {
+      expect(text, `${name} is not named`).toContain(name);
+    }
+    expect(text).toMatch(/ESM only/i);
+    // Exact pins, not carets: agent-kit is differential against protocol, and a
+    // caret would let a mirror it was never checked against be resolved beside it.
+    expect(text).toContain("^0.1.0");
+    expect(text).toContain("@0g-brier/protocol/node");
+    expect(text).toMatch(/cannot enter a browser bundle/i);
+    // The manifest deliberately does not ship, so the page has to say where it is.
+    expect(text).toMatch(/not in the package/i);
+
+    const {container, unmount} = render(ROUTES.packages!());
+    const hrefs = [...container.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    expect(hrefs).toContain("https://github.com/hevDev7/0g-brier");
+    for (const pkg of ["agent-kit", "protocol", "zg-storage"]) {
+      expect(hrefs, `${pkg} has no npm link`).toContain(`https://www.npmjs.com/package/@0g-brier/${pkg}`);
+    }
+    // An outbound link that replaces the page loses the reader's place in a
+    // setup they are halfway through.
+    for (const a of container.querySelectorAll('a[href^="https://"]')) {
+      expect(a.getAttribute("target"), `${a.getAttribute("href")} opens in place`).toBe("_blank");
+      expect(a.getAttribute("rel")).toContain("noreferrer");
+    }
+    unmount();
+  });
+
+  /**
+   * The runbook is the only page that states what an agent RISKS. Its five
+   * settings were undocumented anywhere until it existed, and each is a number a
+   * reader will copy into a file that spends money — so the names, and the one
+   * that is a fraction rather than basis points, are asserted rather than trusted.
+   */
+  it("running documents every policy setting, the unit trap, and a real fill", () => {
+    const text = textOf("running");
+    for (const knob of [
+      "MIN_EDGE_BPS",
+      "BANKROLL_FRACTION_CAP",
+      "MAX_IMPACT_BPS",
+      "SLIPPAGE_BPS",
+      "REVERSAL_EDGE_BPS",
+    ]) {
+      expect(text, `${knob} is not documented`).toContain(knob);
+    }
+    // The one that is not in basis points despite sitting among four that are.
+    expect(text).toMatch(/fraction, not basis points/i);
+    // sizeWithinImpact returns collateral and buyShares takes shares; the page
+    // exists partly because that conversion is silent when you get it wrong.
+    expect(text).toContain("quoteBuySpend");
+    expect(text).toMatch(/answers in collateral/i);
+    // A transcript, not a mock: an order that filled and moved the book.
+    expect(text).toMatch(/no trade\s+edge below the floor/);
+    expect(text).toContain("filled     63.84 in tx 0x");
+    // The agent it prints imports only what npm ships.
+    expect(text).toContain('from "@0g-brier/protocol/node"');
+    expect(text).toContain('from "@0g-brier/agent-kit"');
+    expect(text).toContain('from "@0g-brier/zg-storage"');
   });
 
   it("funding gives the concrete numbers and the two-part gas price", () => {
@@ -349,10 +433,4 @@ describe("what each page has to say", () => {
     expect(text).not.toContain("npm run");
   });
 
-  it("porting names the reversed outcome index", () => {
-    const text = textOf("porting");
-    // The single most dangerous difference: it compiles and runs either way.
-    expect(text).toContain("0 = NO, 1 = YES");
-    expect(text).toContain("0 = YES, 1 = NO");
-  });
 });

@@ -90,7 +90,9 @@ describe("FinalOutcome", () => {
 describe("ResolutionEvidence", () => {
   it("shows every resolver model and its vote", () => {
     render(<ResolutionEvidence receipt={receipt} />);
-    for (const v of receipt.votes) expect(screen.getByText(v.model)).toBeInTheDocument();
+    for (const v of receipt.votes) {
+      expect(screen.getByText(v.model ?? "no model consulted")).toBeInTheDocument();
+    }
   });
 
   it("shows the reasoning verbatim, untrimmed", () => {
@@ -174,8 +176,73 @@ describe("ResolutionEvidence — resolved, but with nothing to show", () => {
 
   it("does not promise votes that will never arrive", () => {
     render(<ResolutionEvidence receipt={bare} />);
-    expect(screen.getByText(/No models were consulted for this settlement/i)).toBeInTheDocument();
+    // The copy used to say "no models were consulted", which described the wrong
+    // absence: a committee CAN vote without consulting a model, and three such
+    // votes were being rendered as none. What is empty here is the vote list
+    // itself, and the reason is that nobody voted — the market was settled
+    // directly.
+    expect(screen.getByText(/recorded no resolver votes/i)).toBeInTheDocument();
     expect(screen.queryByText(/No resolver votes yet/i)).not.toBeInTheDocument();
+  });
+
+  /**
+   * The defect this replaces: market 0x921A6634 had three reveals on chain — three
+   * staked agents, each committing blind and revealing YES, each anchoring its own
+   * receipt — and the panel said "no votes". The list was being built from model
+   * names, so a committee that consulted no model produced no rows.
+   *
+   * A vote is cast by an AGENT, not by a model. That is what is at stake in it:
+   * the agent's collateral, which can be slashed for the answer.
+   */
+  it("lists a committee's votes by agent, model or no model", () => {
+    render(
+      <ResolutionEvidence receipt={{
+          ...bare,
+          outcome: 1,
+          viaCommittee: true,
+          votes: [
+            {agentId: 2, receiptRoot: "0xc7e2ee84", model: null, outcome: 1, teeVerified: false, simulated: false},
+            {agentId: 3, receiptRoot: "0x811025de", model: "qwen/qwen2.5-omni-7b", outcome: 1, teeVerified: true, simulated: false},
+            {agentId: 4, receiptRoot: "0x3d4274a4", model: null, outcome: 0, teeVerified: false, simulated: false},
+          ],
+        }}
+      />,
+    );
+    expect(screen.getAllByTestId(/^vote-/)).toHaveLength(3);
+    expect(screen.getByTestId("vote-2")).toHaveTextContent("#2");
+    // The receipt root is what makes the vote checkable by someone who does not
+    // trust this page, so it has to be on screen, not merely parsed.
+    expect(screen.getByTestId("vote-2")).toHaveTextContent("0xc7e2ee84");
+    expect(screen.getByTestId("vote-2")).toHaveTextContent(/no model consulted/i);
+    expect(screen.getByTestId("vote-3")).toHaveTextContent("qwen/qwen2.5-omni-7b");
+    // Agent 4 voted against the settled outcome and is marked for it.
+    expect(screen.getByTestId("vote-4")).toHaveTextContent(/dissent/i);
+  });
+
+  /**
+   * `Outcomes.NONE` is 3 and the contract stores reveals plus one so that silence
+   * can never be read as a NO. The panel has to keep that distinction: accusing a
+   * resolver of a verdict it never gave is worse than showing a gap.
+   */
+  it("separates a resolver that voted UNRESOLVABLE from one that never revealed", () => {
+    render(
+      <ResolutionEvidence receipt={{
+          ...bare,
+          outcome: 1,
+          viaCommittee: true,
+          votes: [
+            {agentId: 2, receiptRoot: "0xaa", model: null, outcome: "unresolvable", teeVerified: false, simulated: false},
+            {agentId: 3, receiptRoot: "0xbb", model: null, outcome: null, teeVerified: false, simulated: false},
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByTestId("vote-2")).toHaveTextContent("UNRESOLVABLE");
+    expect(screen.getByTestId("vote-2")).not.toHaveTextContent(/no vote yet/i);
+    expect(screen.getByTestId("vote-3")).toHaveTextContent(/no vote yet/i);
+    // Neither may be rendered as a NO, which is the vote neither of them cast.
+    expect(screen.getByTestId("vote-2")).not.toHaveTextContent(/\bNO\b/);
+    expect(screen.getByTestId("vote-3")).not.toHaveTextContent(/\bNO\b/);
   });
 
   it("still says 'yet' while the market is genuinely unresolved", () => {
@@ -296,6 +363,39 @@ describe("where the judgement ran", () => {
     // The apostrophe is typographic on screen (&rsquo;), so the pattern matches
     // either rather than pinning a character the copy may reasonably change.
     expect(note).toHaveTextContent(/resolver.s own account of itself/i);
+  });
+
+  /**
+   * A settlement where NO model ran is not a weaker version of one that ran
+   * somewhere unverifiable — it is a different claim, and the warning above would
+   * be false twice over: it asserts an inference that never happened, and it used
+   * to interpolate `route: "none"` into "a private endpoint (none)".
+   *
+   * `committee-run.mjs` writes exactly this receipt. It applies the market's
+   * published rule in JavaScript and consults nothing, which is the honest thing
+   * to do for a threshold question — so the panel has to say that, rather than
+   * warn about an endpoint nobody ever contacted.
+   */
+  it("distinguishes 'no model ran' from 'a model ran where you cannot check it'", () => {
+    render(
+      <ResolutionEvidence receipt={{
+          ...receipt,
+          route: "none",
+          provider: "0x0000000000000000000000000000000000000000",
+          chatId: null,
+          judgeModel: null,
+          votes: [],
+        }}
+      />,
+    );
+    expect(screen.queryByTestId("no-attestation")).not.toBeInTheDocument();
+    const none = screen.getByTestId("no-inference");
+    expect(none).toHaveTextContent(/no model was consulted/i);
+    // The endpoint that does not exist must not be named as though it does.
+    expect(none).not.toHaveTextContent(/private endpoint/i);
+    expect(none).not.toHaveTextContent(/\(none\)/);
+    // And it points at what CAN be checked, not only at what cannot.
+    expect(none).toHaveTextContent(/bytes it received and their hash/i);
   });
 
   /**

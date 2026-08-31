@@ -1,0 +1,498 @@
+<title>Minting a Brier Market</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
+<style>
+  /* ── Tokens ────────────────────────────────────────────────────────────
+     Taken from the app's own palette (frontend/src/app/globals.css), including
+     its rule: an element is coloured ONLY when the colour carries information
+     that exists nowhere else. Teal marks the chain. Green and amber mark the
+     two kinds of money. Everything else is ink on paper. */
+  :root {
+    --paper:  hsl(42 29% 96%);
+    --panel:  hsl(42 31% 98.5%);
+    --inset:  hsl(38 21% 92%);
+    --rule:   hsl(214 16% 86%);
+    --rule-2: hsl(214 16% 76%);
+    --ink:    hsl(213 33% 16%);
+    --ink-2:  hsl(213 14% 35%);
+    --ink-3:  hsl(213 11% 46%);
+    --chain:  hsl(174 58% 28%);
+    --chain-wash: hsl(174 58% 28% / 0.07);
+    --returns:    hsl(142 58% 29%);
+    --spent:      hsl(28 82% 33%);
+    --shadow: 0 1px 2px hsl(213 20% 20% / 0.05), 0 8px 24px hsl(213 20% 20% / 0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:  hsl(214 34% 11%);
+      --panel:  hsl(215 29% 15%);
+      --inset:  hsl(215 26% 18%);
+      --rule:   hsl(215 21% 24%);
+      --rule-2: hsl(215 20% 34%);
+      --ink:    hsl(40 28% 92%);
+      --ink-2:  hsl(214 13% 70%);
+      --ink-3:  hsl(214 12% 59%);
+      --chain:  hsl(174 55% 52%);
+      --chain-wash: hsl(174 55% 52% / 0.10);
+      --returns:    hsl(142 55% 53%);
+      --spent:      hsl(32 88% 58%);
+      --shadow: 0 1px 2px hsl(0 0% 0% / 0.3), 0 8px 24px hsl(0 0% 0% / 0.22);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:  hsl(214 34% 11%);
+    --panel:  hsl(215 29% 15%);
+    --inset:  hsl(215 26% 18%);
+    --rule:   hsl(215 21% 24%);
+    --rule-2: hsl(215 20% 34%);
+    --ink:    hsl(40 28% 92%);
+    --ink-2:  hsl(214 13% 70%);
+    --ink-3:  hsl(214 12% 59%);
+    --chain:  hsl(174 55% 52%);
+    --chain-wash: hsl(174 55% 52% / 0.10);
+    --returns:    hsl(142 55% 53%);
+    --spent:      hsl(32 88% 58%);
+    --shadow: 0 1px 2px hsl(0 0% 0% / 0.3), 0 8px 24px hsl(0 0% 0% / 0.22);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: clamp(2.5rem, 6vw, 5rem) clamp(1.15rem, 4vw, 2.5rem) 5rem;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2.5rem, 5vw, 3.75rem);
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0;
+  }
+
+  h1 {
+    font-size: clamp(1.9rem, 5vw, 2.7rem);
+    font-weight: 700;
+    letter-spacing: -0.022em;
+    line-height: 1.12;
+    text-wrap: balance;
+    margin: 0.5rem 0 0;
+  }
+
+  .standfirst {
+    max-width: 62ch;
+    color: var(--ink-2);
+    font-size: 1.0625rem;
+    margin: 1rem 0 0;
+  }
+
+  h2 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    margin: 0 0 0.35rem;
+    text-wrap: balance;
+  }
+
+  .lede { color: var(--ink-2); margin: 0 0 1.5rem; max-width: 62ch; }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.855em;
+  }
+  code {
+    background: var(--inset);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+    color: var(--ink);
+  }
+
+  /* ── The spine ──────────────────────────────────────────────────────────
+     One sequence, one rail. The rail changes from dashed to solid teal at the
+     step where control passes from the creator's machine to the chain — the
+     only structural change in the diagram, because it is the only moment in
+     the workflow that changes who is in charge. */
+  .flow { display: flex; flex-direction: column; gap: 0; }
+
+  .lane-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.7rem;
+    padding: 0 0 0.9rem 3.25rem;
+  }
+  .lane-head .where { font-weight: 600; font-size: 0.95rem; }
+  .lane-head .what  { color: var(--ink-3); font-size: 0.9rem; }
+  .lane-head.chain .where { color: var(--chain); }
+
+  .step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 3.25rem 1fr;
+    align-items: start;
+    padding-bottom: 1.5rem;
+  }
+  .step:last-child { padding-bottom: 0; }
+
+  /* the rail itself */
+  .step::before {
+    content: "";
+    position: absolute;
+    left: 1.0625rem;
+    top: 1.9rem;
+    bottom: -0.35rem;
+    width: 2px;
+    background: var(--rule-2);
+  }
+  .step.pre::before {
+    background: repeating-linear-gradient(
+      to bottom, var(--rule-2) 0 5px, transparent 5px 10px);
+  }
+  .step.chain::before { background: var(--chain); }
+  .step.last::before { display: none; }
+
+  .dot {
+    grid-column: 1;
+    width: 2.125rem;
+    height: 2.125rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: var(--panel);
+    border: 2px solid var(--rule-2);
+    color: var(--ink-2);
+    position: relative;
+    z-index: 1;
+  }
+  .step.chain .dot { border-color: var(--chain); color: var(--chain); }
+
+  .body { grid-column: 2; padding-top: 0.2rem; }
+  .body h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+    letter-spacing: -0.008em;
+  }
+  .body p { margin: 0; color: var(--ink-2); font-size: 0.95rem; max-width: 58ch; }
+
+  .out {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.6rem;
+    padding: 0.28rem 0.6rem 0.28rem 0.5rem;
+    background: var(--chain-wash);
+    border: 1px solid color-mix(in srgb, var(--chain) 28%, transparent);
+    border-radius: 5px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--chain);
+  }
+  .out span:first-child { opacity: 0.72; }
+
+  /* the transaction bracket */
+  .tx {
+    margin: 0.35rem 0 1.4rem 3.25rem;
+    padding: 0.55rem 0.9rem;
+    background: var(--chain-wash);
+    border-left: 2px solid var(--chain);
+    border-radius: 0 5px 5px 0;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--chain);
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .checks {
+    margin-top: 0.7rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .checks li {
+    list-style: none;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-2);
+    background: var(--inset);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 0.2rem 0.5rem;
+  }
+  .checks { padding: 0; }
+
+  /* ── Money ─────────────────────────────────────────────────────────────── */
+  .money { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 1.15rem 1.25rem 1.3rem;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .card .tag {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .card.returns .tag { color: var(--returns); }
+  .card.spent   .tag { color: var(--spent); }
+  .card h3 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+  .card p { margin: 0; color: var(--ink-2); font-size: 0.925rem; }
+  .card .formula {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.85rem;
+    color: var(--ink);
+    background: var(--inset);
+    border-radius: 5px;
+    padding: 0.45rem 0.65rem;
+    align-self: flex-start;
+  }
+
+  .note {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+  .note p { margin: 0; color: var(--ink-2); max-width: 64ch; font-size: 0.95rem; }
+  .note strong { color: var(--ink); font-weight: 600; }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.25rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--ink-3);
+    line-height: 1.8;
+  }
+
+  @media (max-width: 560px) {
+    .step { grid-template-columns: 2.5rem 1fr; }
+    .step::before { left: 0.78rem; }
+    .dot { width: 1.6rem; height: 1.6rem; font-size: 0.7rem; }
+    .lane-head, .tx { padding-left: 2.5rem; margin-left: 0; }
+    .tx { margin-left: 2.5rem; padding-left: 0.9rem; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Brier · 0G Chain</p>
+    <h1>How a market gets made</h1>
+    <p class="standfirst">
+      Three things are prepared before any transaction, and they converge into one call.
+      The rail below turns solid where control passes from the creator's machine to the
+      chain — the only moment in this workflow that changes who is in charge.
+    </p>
+  </header>
+
+  <section class="flow">
+
+    <div class="lane-head">
+      <span class="where">Off-chain</span>
+      <span class="what">on the creator's machine · nothing is committed yet</span>
+    </div>
+
+    <div class="step pre">
+      <div class="dot">1</div>
+      <div class="body">
+        <h3>Write the question</h3>
+        <p>
+          A JSON spec: the question itself, the rules that decide it, the tier, the category,
+          and two deadlines — when trading stops, and when a resolver is out of time.
+        </p>
+      </div>
+    </div>
+
+    <div class="step pre">
+      <div class="dot">2</div>
+      <div class="body">
+        <h3>Upload it to 0G Storage</h3>
+        <p>
+          Storage returns a Merkle root. That root is the document's address: anyone can fetch
+          the bytes back and recompute it. The chain will store the root, never the text.
+        </p>
+        <span class="out"><span>produces</span> specRoot</span>
+      </div>
+    </div>
+
+    <div class="step pre">
+      <div class="dot">3</div>
+      <div class="body">
+        <h3>Get a curator's approval</h3>
+        <p>
+          An EIP-712 signature over every parameter at once — root, deadlines, tier, category,
+          creator, collateral, seed, deposit, nonce. Creating a market is permissioned. Trading
+          is not.
+        </p>
+        <span class="out"><span>produces</span> curatorSig</span>
+      </div>
+    </div>
+
+    <div class="lane-head chain" style="padding-top:0.6rem">
+      <span class="where">On-chain</span>
+      <span class="what">one transaction · all of it, or none of it</span>
+    </div>
+
+    <div class="tx">createMarket(params, seedTokens, depositTokens, nonce, curatorSig)</div>
+
+    <div class="step chain">
+      <div class="dot">4</div>
+      <div class="body">
+        <h3>The factory checks who is asking</h3>
+        <p>Five conditions, before a single token moves.</p>
+        <ul class="checks">
+          <li>protocol not paused</li>
+          <li>sender is the named creator</li>
+          <li>collateral allowlisted</li>
+          <li>category exists</li>
+          <li>agent id belongs to sender</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step chain">
+      <div class="dot">5</div>
+      <div class="body">
+        <h3>It rebuilds the signature and recovers the signer</h3>
+        <p>
+          The recovered address must be the curator. The digest is then marked used, so one
+          approval can only ever mint one market — and an approval names its creator, so it is
+          not a bearer instrument somebody else can spend.
+        </p>
+      </div>
+    </div>
+
+    <div class="step chain">
+      <div class="dot">6</div>
+      <div class="body">
+        <h3>A market is cloned</h3>
+        <p>
+          An EIP-1167 clone of the market implementation. Cheap to mint, and permanently
+          unupgradeable — it will hold user funds, so nobody may change its rules afterwards.
+        </p>
+      </div>
+    </div>
+
+    <div class="step chain">
+      <div class="dot">7</div>
+      <div class="body">
+        <h3>The registry records it</h3>
+        <p>
+          <code>isMarket[market]</code> becomes true and the address joins the list. This is how
+          anything else — the website, an agent, an indexer — knows the address is a real market
+          and not a look-alike.
+        </p>
+      </div>
+    </div>
+
+    <div class="step chain">
+      <div class="dot">8</div>
+      <div class="body">
+        <h3>The money moves</h3>
+        <p>
+          Seed and deposit are pulled from the creator straight into the new market. Two
+          different kinds of money, with two different fates — see below.
+        </p>
+      </div>
+    </div>
+
+    <div class="step chain">
+      <div class="dot">9</div>
+      <div class="body">
+        <h3>The market initialises</h3>
+        <p>
+          The seed becomes a share position on both sides, and the pool is set to
+          <code>costUp(q)</code>. From this instant the market has a price and a depth.
+        </p>
+      </div>
+    </div>
+
+    <div class="step chain last">
+      <div class="dot">10</div>
+      <div class="body">
+        <h3>It announces itself</h3>
+        <p>
+          <code>MarketCreated</code> carries the address, creator, agent id, spec root, seed and
+          tier. Every reader of this protocol starts from that event.
+        </p>
+      </div>
+    </div>
+
+  </section>
+
+  <section>
+    <h2>The two kinds of money</h2>
+    <p class="lede">
+      Both arrive in the same transaction and are easy to confuse. Only one of them comes back.
+    </p>
+    <div class="money">
+      <div class="card returns">
+        <span class="tag">Comes back</span>
+        <h3>Seed</h3>
+        <span class="formula">s = √(seed² / 2), on both sides</span>
+        <p>
+          Not a fee — a position. It is what gives the market depth on its first second, and the
+          creator redeems or liquidates it exactly like any other holder.
+        </p>
+      </div>
+      <div class="card spent">
+        <span class="tag">Does not come back</span>
+        <h3>Settlement deposit</h3>
+        <span class="formula">≥ 20 mUSDC</span>
+        <p>
+          This is the actual cost of creating a market. At settlement it goes to the resolver
+          pool — it pays whoever will have to answer the question. On a void it is slashed to
+          the treasury instead.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="note">
+    <p>
+      <strong>The question is not on the chain — only its address is.</strong> Storing the text
+      on chain would make writing it expensive and checking it unnecessary. Storing the root
+      makes checking it cheap and changing it impossible: fetch the bytes, recompute, compare.
+    </p>
+    <p>
+      <strong>Creation is gated; trading is not.</strong> A market needs a curator's signature.
+      Buying and selling need only a wallet — the registration gate exists in the contract but
+      is switched off on this deployment.
+    </p>
+  </section>
+
+  <footer>
+    Read from MarketFactory.createMarket and scripts/e2e-market.sh · Galileo, chain 16602
+  </footer>
+
+</div>

@@ -11,7 +11,7 @@
  * whose trades need attributing. A `Trade` event carries `msg.sender` and nothing
  * else, so the reverse index from that key is the only route back to a name.
  */
-import {loadDeployment} from "@hevdev7/protocol/node";
+import {loadDeployment} from "@0g-brier/protocol/node";
 import {BrierClient, type AgentRole} from "../src/index";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);

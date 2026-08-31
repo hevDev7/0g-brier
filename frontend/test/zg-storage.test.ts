@@ -1,4 +1,6 @@
 import {describe, expect, it, vi} from "vitest";
+import {readFileSync} from "node:fs";
+import {join} from "node:path";
 import {SpecRootMismatchError, ZgStore} from "@/lib/data/zg-storage";
 
 /**
@@ -6,7 +8,7 @@ import {SpecRootMismatchError, ZgStore} from "@/lib/data/zg-storage";
  * the root the network gave back for it.
  *
  * The Merkle arithmetic that proves the pairing is pinned by 19 SDK vectors in
- * `@hevdev7/zg-storage`, which is where it now lives. What this file still
+ * `@0g-brier/zg-storage`, which is where it now lives. What this file still
  * owns is the step after the proof: turning verified bytes into the shapes this
  * application renders.
  */
@@ -98,5 +100,37 @@ describe("the documents behind a verified root", () => {
     expect(await store.getSpec(LIVE_ROOT)).toBeNull();
     expect(await store.getSpec(LIVE_ROOT)).toBeNull();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * The producers, checked against the reader.
+ *
+ * `parseReceipt` returns null when a document has no `rationale`, and a null
+ * document reaches the settlement report as "anchored a receipt, but none has a
+ * readable document" — a market that looks tampered with when it is only
+ * misspelled. That is not hypothetical: `committee-run.mjs` wrote `reasoning`
+ * and `sources`, both plausible, neither read, and three roots went on chain
+ * pointing at documents the site could not display.
+ *
+ * A root is permanent. There is no fixing a receipt after it is anchored, so the
+ * key names have to be right the first time — which makes this worth a test that
+ * fails in CI rather than a convention nobody can check.
+ */
+describe("what writes a receipt and what reads one", () => {
+  const ROOT = join(__dirname, "..", "..");
+  const WRITERS = ["scripts/committee-run.mjs", "packages/agent-kit/examples/resolve.ts"];
+
+  it.each(WRITERS)("%s names the keys the reader requires", (path) => {
+    const src = readFileSync(join(ROOT, path), "utf-8");
+    // `rationale` is the one the parser hard-requires; the others decide whether
+    // the panel has anything to show once it renders.
+    expect(src, "the key parseReceipt refuses a document without").toMatch(/\brationale:/);
+    expect(src, "outcome, or the report cannot state one").toMatch(/\boutcome:/);
+    expect(src, "evidence[], which is where the sources are read from").toMatch(/\bevidence:/);
+    // The near-misses that caused this. Named explicitly so the failure message
+    // says what is wrong rather than only that something is.
+    expect(src, "`reasoning` is not read — the key is `rationale`").not.toMatch(/\breasoning:/);
+    expect(src, "`sources` is not read — the key is `evidence`").not.toMatch(/^\s*sources:/m);
   });
 });

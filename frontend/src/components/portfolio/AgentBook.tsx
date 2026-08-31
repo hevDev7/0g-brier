@@ -12,7 +12,8 @@ import {useDataSource} from "@/hooks/provider";
 import {useMarkets} from "@/hooks/useMarkets";
 import {agentBook, holdingStatus, type BookRow} from "@/lib/agent-book";
 import {collect} from "@/lib/collect";
-import {statusTone} from "@/lib/market-rows";
+import {useNowSeconds} from "@/lib/use-now";
+import {tradingState} from "@/lib/market-rows";
 import {formatCollateral, formatPricePerShare, formatShares, shortAddress} from "@/lib/format";
 import type {MarketSummary} from "@/lib/data/types";
 
@@ -139,6 +140,10 @@ function BookRowCells({row}: {row: BookRow}) {
   // wrong source.
   const {mode} = useDataSource();
   const {market} = row;
+  // The same clock the market pages read, so a holding never claims a market is
+  // tradable on one screen and closed on another.
+  const now = useNowSeconds();
+  const state = tradingState(market, now);
   const decimals = market.collateral.decimals;
   return (
     <tr className="group border-t border-border hover:bg-bg-sunken/50">
@@ -169,8 +174,20 @@ function BookRowCells({row}: {row: BookRow}) {
           formatPricePerShare(row.entryPriceWad)
         )}
       </td>
-      <td className="px-3 py-3 text-right font-mono">
-        {formatPricePerShare(row.currentPriceWad)}
+      {/* The SAME per-share number the Value and Unrealised cells are built from.
+          Showing the marginal price here while valuing the row at the redemption
+          rate would put two contradicting numbers side by side and let the reader
+          discover the contradiction by multiplying. `title` names which of the two
+          this is, because after settlement it stops being a price at all. */}
+      <td
+        className="px-3 py-3 text-right font-mono"
+        title={
+          row.redeemable
+            ? "Redemption rate per share — what the settlement pays, not a price"
+            : "Marginal price: what the next share trades at"
+        }
+      >
+        {formatPricePerShare(row.worthPerShareWad)}
       </td>
       <td className="px-3 py-3 text-right font-mono">
         {formatCollateral(row.currentValueTokens, decimals)}
@@ -186,7 +203,7 @@ function BookRowCells({row}: {row: BookRow}) {
         )}
       </td>
       <td className="px-4 py-3">
-        <Badge tone={statusTone(market.status)} label={holdingStatus(market.status)} dot />
+        <Badge tone={state.tone} label={holdingStatus(market, now)} title={state.hint} dot />
       </td>
     </tr>
   );

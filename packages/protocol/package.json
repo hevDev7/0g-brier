@@ -1,5 +1,5 @@
 {
-  "name": "@hevdev7/protocol",
+  "name": "@0g-brier/protocol",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -37,7 +37,7 @@
     "defi"
   ],
   "license": "MIT",
-  "author": "hevDev7",
+  "author": "0g-brier",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hevDev7/0g-brier.git",

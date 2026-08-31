@@ -1,5 +1,5 @@
 {
-  "name": "@hevdev7/agent-kit",
+  "name": "@0g-brier/agent-kit",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -17,11 +17,11 @@
     "prepare": "npm run build"
   },
   "dependencies": {
-    "@hevdev7/protocol": "0.1.0",
+    "@0g-brier/protocol": "0.1.0",
     "viem": "^2.56.0",
     "@0gfoundation/0g-compute-ts-sdk": "^0.9.0",
     "ethers": "6.13.1",
-    "@hevdev7/zg-storage": "0.1.0"
+    "@0g-brier/zg-storage": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -38,7 +38,7 @@
     "sdk"
   ],
   "license": "MIT",
-  "author": "hevDev7",
+  "author": "0g-brier",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hevDev7/0g-brier.git",

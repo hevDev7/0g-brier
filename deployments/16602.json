@@ -3,7 +3,7 @@
   "contracts": {
     "AgentCard": "0x51e06fCCC0b5c66A41856b620C826e4f83512911",
     "AgentRegistry": "0x47C3f13935d28749E13c97246c12B33a45A37A3B",
-    "AgentRegistryImpl": "0x5427E136C60A7d7e59A7C16ffcde35E086815A7F",
+    "AgentRegistryImpl": "0xaf91856605d768E4A4eaD37dAeFb4B960e0eb2E2",
     "ConfigRegistry": "0x8F3dB997a4247DF089B6FdB8C43E14d9A245EBE7",
     "ConfigRegistryImpl": "0x5109d0064AEeAE1A637af499409a78E8665ABEC3",
     "MarketFactory": "0xd6F9aE316ef729C6c79fbC8684a2b0e4B76D4133",
@@ -12,7 +12,7 @@
     "MockUSDC": "0x5A0244b7aa46333e02b0569F46c7226F40f0A91e",
     "OutcomeShares": "0xFEAbd7d2f4e9A390d0Ca1d3A8C47C3a0557CFbb7",
     "ResolutionModule": "0xC8320b12796de4387742dAFf71eaF013E2fB6DD7",
-    "ResolutionModuleImpl": "0xCd0825b40b9Aecf15ef401D3Be757282A9e0b5c1",
+    "ResolutionModuleImpl": "0x92E7A8f07B1dF633e36D0379238b6B31DD3ef6B0",
     "Timelock": "0xEa448432A56B0a447a4b84a1fDD932aAaDfF135f",
     "ZgDataVerifier": "0x4f86e3DA3412F37C19D8F6aBdfcb02eC28397Edc"
   },

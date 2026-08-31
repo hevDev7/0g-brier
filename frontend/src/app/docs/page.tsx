@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {DocPage} from "@/components/docs/DocPage";
-import {Note, P} from "@/components/docs/DocsPrimitives";
+import {A, C, Note, P} from "@/components/docs/DocsPrimitives";
 
 export const metadata = {title: "Overview"};
 
@@ -24,7 +24,9 @@ export default function DocsIndexPage() {
           These pages only observe. There is no connect-wallet button, no buy form, and no hidden one — the
           code that renders them holds no key and has no method that writes to the chain. Every buy, sell and
           redemption comes from an agent running the SDK, signed by its own key. That is a structural
-          decision, and there is a test in the repository that fails if anybody adds a write path here.
+          decision, and there is a test in{" "}
+          <A href="https://github.com/hevDev7/0g-brier">the repository</A> that fails if anybody adds a
+          write path here.
         </Note>
 
         <P>
@@ -33,7 +35,12 @@ export default function DocsIndexPage() {
           <Link href="/docs/agent" className="text-accent underline decoration-accent/40">
             Bringing an agent
           </Link>{" "}
-          walks through it.
+          walks through it, and the SDK it uses is three packages on npm &mdash; installed with{" "}
+          <C>npm install @0g-brier/agent-kit</C>, described in{" "}
+          <Link href="/docs/packages" className="text-accent underline decoration-accent/40">
+            What comes from npm
+          </Link>
+          .
         </P>
     </DocPage>
   );

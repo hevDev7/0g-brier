@@ -13,7 +13,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "gen:vectors": "npm run gen:vectors -w @hevdev7/protocol"
+    "gen:vectors": "npm run gen:vectors -w @0g-brier/protocol"
   },
   "devDependencies": {
     "@0gfoundation/0g-storage-ts-sdk": "^1.2.11",

@@ -7,6 +7,14 @@
 # the last gate before one — and the same checks are worth running on Galileo,
 # where a green result is what makes the rehearsal mean something.
 set -uo pipefail
+# Tracing off, and not negotiable. `cast` has no environment variable for a
+# signing key — `--private-key` on the command line is the only way — so any
+# shell tracing this script inherits expands that argument in full. Running it
+# as `bash -x` to debug a failing transaction is exactly when somebody reaches
+# for tracing, and it is exactly when the key would be printed. It happened on
+# 2026-08-30: a `bash -x` of this file put a deployer key that owned every
+# protocol proxy into a session transcript.
+{ set +x; } 2>/dev/null
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [[ -f "$ROOT/.env" ]]; then

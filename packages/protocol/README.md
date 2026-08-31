@@ -1,4 +1,4 @@
-# @hevdev7/protocol
+# @0g-brier/protocol
 
 The Dynamic Pari-mutuel Market maths behind [Brier](https://github.com/hevDev7/0g-brier),
 in TypeScript. A mirror of the Solidity library, pinned to it by vectors generated
@@ -6,11 +6,11 @@ from the contracts themselves — a mirror is only worth having if something fai
 when it drifts.
 
 ```bash
-npm i @hevdev7/protocol
+npm i @0g-brier/protocol
 ```
 
 ```ts
-import {dpm, WAD, networkFor} from "@hevdev7/protocol";
+import {dpm, WAD, networkFor} from "@0g-brier/protocol";
 
 const q: readonly [bigint, bigint] = [1000n * WAD, 1200n * WAD]; // [NO, YES]
 
@@ -29,7 +29,7 @@ and `quote` size a trade against that.
 Deployment manifests load through the `./node` entry point:
 
 ```ts
-import {loadDeployment} from "@hevdev7/protocol/node";
+import {loadDeployment} from "@0g-brier/protocol/node";
 const {contracts} = loadDeployment(16602, "./deployments");
 ```
 

@@ -196,11 +196,25 @@ export interface Position {
 }
 
 export interface ResolverVote {
-  model: string;
-  /** null = the resolver cast no vote (not yet revealed, or abstained). */
-  outcome: Outcome | null;
+  /**
+   * null when the resolver consulted no model. The VOTE is still real — it was
+   * committed blind, revealed on chain and counted — so a missing model must not
+   * be allowed to delete it from the list. Deriving votes from model names is
+   * what made three on-chain reveals render as "no votes".
+   */
+  model: string | null;
+  /**
+   * `"unresolvable"` is a VOTE — the resolver read the criteria, judged the
+   * question unanswerable and said so. `null` is the absence of one: not yet
+   * revealed. Folding them together labels a resolver that spoke as one that
+   * stayed silent, which is the same defect as reading a non-reveal as a NO.
+   */
+  outcome: Outcome | "unresolvable" | null;
   teeVerified: boolean;
   simulated: boolean;
+  /** Committee settlements only: who cast it, and the receipt they anchored. */
+  agentId?: number;
+  receiptRoot?: string;
 }
 
 export interface SettlementReceipt {
@@ -251,7 +265,7 @@ export interface SettlementReceipt {
  * The read contract. Note there is no method here for buying, selling, claiming
  * a settled position, or unwinding one, and that is not an oversight: the human
  * UI only observes (spec §1 F3). All execution lives in
- * `@hevdev7/agent-kit`. This boundary is enforced by a test, not merely by
+ * `@0g-brier/agent-kit`. This boundary is enforced by a test, not merely by
  * convention — see test/write-boundary.test.ts. (The two exit verbs are
  * deliberately paraphrased rather than named: that test greps every file in
  * this directory, comments included, for the literal chain-write terms.)

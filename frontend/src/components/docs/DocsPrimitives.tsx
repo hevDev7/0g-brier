@@ -1,5 +1,5 @@
 import type {ComponentType, ReactNode} from "react";
-import {AlertTriangle, Info, Lightbulb, Terminal} from "lucide-react";
+import {AlertTriangle, ExternalLink, Info, Lightbulb, Terminal} from "lucide-react";
 
 /**
  * The pieces the documentation is built from.
@@ -28,6 +28,31 @@ export function P({children}: {children: ReactNode}) {
 
 export function H3({children}: {children: ReactNode}) {
   return <h3 className="mt-2 text-[16px] font-bold tracking-tight text-text">{children}</h3>;
+}
+
+/**
+ * An outbound link.
+ *
+ * The documentation carried none of these until the packages were published,
+ * because until then everything it named lived in the reader's own checkout.
+ * A published package is somewhere else, and naming one without a way to reach
+ * it leaves the reader retyping what the page has just told them.
+ *
+ * Always a new tab. These are asides from a page somebody is working through,
+ * and navigating away from a setup they are halfway through loses their place.
+ */
+export function A({href, children}: {href: string; children: ReactNode}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-baseline gap-1 text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
+    >
+      {children}
+      <ExternalLink size={11} aria-hidden className="shrink-0 self-center" />
+    </a>
+  );
 }
 
 /** Inline code, for a number or an identifier inside a sentence. */

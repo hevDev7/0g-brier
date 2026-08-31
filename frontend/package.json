@@ -1,5 +1,5 @@
 {
-  "name": "@hevdev7/frontend",
+  "name": "@0g-brier/frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,14 +11,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hevdev7/protocol": "*",
+    "@0g-brier/protocol": "*",
     "@tanstack/react-query": "^5.102.6",
     "lucide-react": "^1.34.0",
     "next": "16.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "viem": "^2.56.0",
-    "@hevdev7/zg-storage": "0.1.0"
+    "@0g-brier/zg-storage": "0.1.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -37,7 +37,7 @@ describe("MarketView", () => {
 
   /**
    * A product decision (spec §1 F3), not a layout preference: execution lives in
-   * `@hevdev7/agent-kit`, so the human page must have no execution control at
+   * `@0g-brier/agent-kit`, so the human page must have no execution control at
    * all — not hidden, not disabled, ABSENT. A disabled button still promises
    * something that will never exist here.
    */
@@ -132,6 +132,66 @@ describe("a market whose spec blob cannot be read", () => {
     expect(panel.textContent?.replace(/\s+/g, " ").trim().length).toBeGreaterThan(30);
   });
 });
+
+  /**
+   * Which feed decides the market, shown while it is still tradable.
+   *
+   * These lived only inside the settlement report, which opens after the answer
+   * is fixed — by then the information cannot change anybody's decision. For a
+   * price question the venue IS the answer: Coinbase and Binance quote the same
+   * asset far enough apart to flip a threshold, and a reader who assumed the
+   * wrong one has a complaint the chain cannot settle.
+   */
+  describe("the settlement sources panel", () => {
+    it("names the venue and the field it reads, before the market settles", async () => {
+      const source = new MockSource();
+      const original = source.getMarket.bind(source);
+      source.getMarket = async (address) => ({
+        ...(await original(address)),
+        sources: [
+          {
+            kind: "http",
+            url: "https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60",
+            selector: "$[0][4]",
+          },
+        ],
+      });
+
+      renderMarket(source);
+
+      const panel = await screen.findByTestId("settlement-sources");
+      expect(panel).toHaveTextContent("api.exchange.coinbase.com");
+      // The selector decides WHICH number is read. A market judged on the high
+      // rather than the close is a different market, so it is shown, not hidden.
+      expect(panel).toHaveTextContent("$[0][4]");
+    });
+
+    it("tells an unreadable spec apart from a market with no source", async () => {
+      const source = new MockSource();
+      const original = source.getMarket.bind(source);
+      source.getMarket = async (address) => ({...(await original(address)), sources: null});
+
+      renderMarket(source);
+
+      // `null` is this page failing to read the spec. Rendering it as "no source"
+      // would put words in the market's mouth — the same confusion the rules
+      // panel shipped once already.
+      const panel = await screen.findByTestId("settlement-sources");
+      expect(panel).not.toHaveTextContent(/names no external source/i);
+      expect(panel.textContent?.replace(/\s+/g, " ").trim().length).toBeGreaterThan(30);
+    });
+
+    it("says so plainly when a market genuinely has no external feed", async () => {
+      const source = new MockSource();
+      const original = source.getMarket.bind(source);
+      source.getMarket = async (address) => ({...(await original(address)), sources: []});
+
+      renderMarket(source);
+
+      const panel = await screen.findByTestId("settlement-sources");
+      expect(panel).toHaveTextContent(/names no external source/i);
+    });
+  });
 
 /**
  * The wiring, not the control. Changing the bucket width re-asks the DATA SOURCE

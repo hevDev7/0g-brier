@@ -15,9 +15,9 @@
  *   not neutral on a DPM book; it is a position against whatever the market says.
  * - It will not size on Kelly alone. See `sizeWithinImpact`.
  */
-import {WAD, toTokensCeil, toWad} from "@hevdev7/protocol";
-import {loadDeployment} from "@hevdev7/protocol/node";
-import {ZgStore} from "@hevdev7/zg-storage";
+import {WAD, toTokensCeil, toWad} from "@0g-brier/protocol";
+import {loadDeployment} from "@0g-brier/protocol/node";
+import {ZgStore} from "@0g-brier/zg-storage";
 import {BrierClient, ZgInference, type Outcome} from "../src/index";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
@@ -107,8 +107,7 @@ const belief = judgement.impliedProbabilityWad;
 /**
  * Kelly for DPM: f* = (P̂ − P) / (1 − P).
  *
- * The SHAPE is the same as the LMSR form Gensyn's Delphi competition uses, and
- * the variable is not. Net odds here are
+ * The SHAPE is the same as the LMSR form, and the variable is not. Net odds here are
  * `payout/cost − 1 = (1/p)/p − 1 = (1−P)/P`, so the denominator is one minus the
  * PROBABILITY. Feeding the marginal price into a formula of this shape — which
  * is what a ported LMSR agent does, because under LMSR the two are the same

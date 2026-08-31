@@ -125,6 +125,37 @@ export const RESOLUTION_ABI = [
     outputs: [{type: "bytes32"}, {type: "address"}],
   },
   {
+    // A committee settlement writes NO market-level receipt. `resolutionOf` is
+    // filled only by the direct `settle`/`fail` path; `finalize` records one
+    // root per resolver instead, because a committee produces one judgement per
+    // member and collapsing them to a single document would throw away the very
+    // independence the committee exists for. Reading them means asking who was
+    // sampled, then asking each what they anchored.
+    type: "function",
+    name: "committeeOf",
+    stateMutability: "view",
+    inputs: [{type: "address"}],
+    outputs: [{type: "uint256[]"}],
+  },
+  {
+    type: "function",
+    name: "receiptRootOf",
+    stateMutability: "view",
+    inputs: [{type: "address"}, {type: "uint256"}],
+    outputs: [{type: "bytes32"}],
+  },
+  {
+    // What each member actually voted. `3` is `Outcomes.NONE` — not a vote, the
+    // ABSENCE of one — and the contract stores reveals plus one precisely so that
+    // "did not reveal" cannot be read as "voted NO". A page that collapsed the two
+    // would accuse a resolver of a verdict it never gave.
+    type: "function",
+    name: "revealOf",
+    stateMutability: "view",
+    inputs: [{type: "address"}, {type: "uint256"}],
+    outputs: [{type: "uint8"}],
+  },
+  {
     // Whether a COMMITTEE decided it, or one allowlisted key did. The module
     // keeps this flag so the shortcut cannot pass itself off as a committee, and
     // reading it is the only way a page can tell the two apart.

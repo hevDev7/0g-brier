@@ -11,12 +11,12 @@ import {ErrorNote} from "@/components/primitives/QueryStates";
 import {SkeletonRows} from "@/components/primitives/Skeleton";
 import {Unavailable} from "@/components/primitives/Unavailable";
 import {Lifecycle} from "@/components/market/Lifecycle";
+import {MarketActivity} from "@/components/market/MarketActivity";
 import {MarketStats} from "@/components/market/MarketStats";
+import {SettlementSources} from "@/components/market/SettlementSources";
 import {PayoutPanel} from "@/components/market/PayoutPanel";
-import {PositionsTable} from "@/components/market/PositionsTable";
 import {ProbabilityChart} from "@/components/market/ProbabilityChart";
 import {ProbabilityPanel} from "@/components/market/ProbabilityPanel";
-import {TradeTape} from "@/components/market/TradeTape";
 import {FinalOutcome} from "@/components/settlement/FinalOutcome";
 import {SettlementReport} from "@/components/settlement/SettlementReport";
 import {useDataSource} from "@/hooks/provider";
@@ -26,17 +26,15 @@ import {useMarket} from "@/hooks/useMarket";
 import {usePositions} from "@/hooks/usePositions";
 import {useReceipt} from "@/hooks/useReceipt";
 import {useTrades} from "@/hooks/useTrades";
-import {statusTone} from "@/lib/market-rows";
+import {tradingState} from "@/lib/market-rows";
+import {useNowSeconds} from "@/lib/use-now";
 import type {
   Candle,
   Interval,
-  CollateralInfo,
   DataMode,
   MarketDetail,
-  Position,
   Query,
   SettlementReceipt,
-  Trade,
 } from "@/lib/data/types";
 
 /**
@@ -89,6 +87,10 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
   const candles = useCandles(market.address, interval);
   const positions = usePositions(market.address);
   const receipt = useReceipt(market.address);
+  // One clock, read here rather than inside the badge, so every deadline on this
+  // page agrees with every other one on it.
+  const now = useNowSeconds();
+  const state = tradingState(market, now);
 
   return (
     <>
@@ -110,7 +112,15 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
         description="Inspect the price, its history, who holds what, and the evidence behind the settlement. Every trade shown here was executed by an agent through the SDK."
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={statusTone(market.status)} label={market.status} dot />
+            {/* `tradingState`, not the raw enum. A market stays `Open` on chain until
+                somebody calls `close()`, and nothing obliges anyone to do it promptly —
+                so between `tradingEnd` and that call the chain says Open while the same
+                chain refuses every trade with `TradingEnded`. Badging the enum painted
+                that window green and called it Open on the one page where a person
+                decides what to do. The market LIST already used this helper and the
+                detail page did not, so the same market read two different ways
+                depending on where you looked at it from. */}
+            <Badge tone={state.tone} label={state.label} title={state.hint} dot />
             {/* The guard used to be `status === "Open"` alone, on the assumption
                 that an Open market is one still trading. It is not: a market stays
                 Open until somebody calls `close()`, and nothing obliges anyone to
@@ -143,8 +153,16 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
               is ever told the payout floats, so it must not sit below the fold. */}
           <PayoutPanel q={market.q} winningOutcome={market.winningOutcome} />
           {renderChart(candles, interval, setInterval)}
-          {renderPositions(positions, market, source.mode)}
-          {renderTrades(trades, market.collateral)}
+          {/* One panel, two tabs. Positions are state and trades are events, so they
+              cannot share rows — but they were sharing a look, three column names and
+              a stack, which read as the same thing said twice. */}
+          <MarketActivity
+            positions={positions}
+            trades={trades}
+            market={market}
+            mode={source.mode}
+            collateral={market.collateral}
+          />
 
           {/* The rules come from the MarketSpec on 0G Storage, not from chain
               state — MARKET_SPEC_BLOB, and so genuinely unavailable where no
@@ -180,6 +198,10 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
         <aside className="flex min-w-0 flex-col gap-5 xl:sticky xl:top-[84px] xl:self-start">
           <MarketStats market={market} trades={trades} />
           <Lifecycle market={market} mode={source.mode} />
+          {/* Above the settlement report, and shown while the market is still open:
+              the argument to prevent is the one after settlement, and it is prevented
+              by everyone having read the source BEFORE the answer is known. */}
+          <SettlementSources market={market} mode={source.mode} />
           {market.status === "Settled" && renderSettlement(receipt, market, source.mode)}
         </aside>
       </div>
@@ -187,36 +209,6 @@ function MarketBody({market}: {market: MarketDetail}): React.JSX.Element {
   );
 }
 
-/**
- * Extracted from a ternary into a switch over `.status` so that the
- * exhaustiveness guarantee is STRUCTURAL rather than an accident of how this
- * code happens to be written today. The explicit non-nullable return type
- * (`React.JSX.Element`) is the part that enforces it: under `strict`, a function
- * that falls off the end of a switch without returning gives back `undefined`,
- * and `undefined` is not assignable to `React.JSX.Element` — so removing a
- * `case` fails to compile (TS2366). Without the annotation TypeScript quietly
- * infers `| undefined` and the guarantee disappears.
- *
- * There is DELIBERATELY no `default` in any of the functions below: adding one
- * "just in case" strips the exhaustiveness check — the compiler stops forcing a
- * new case to be handled the moment a catch-all exists.
- */
-function renderTrades(trades: Query<Trade[]>, collateral: CollateralInfo): React.JSX.Element {
-  switch (trades.status) {
-    case "ready":
-      return <TradeTape trades={trades.data} collateral={collateral} />;
-    case "unavailable":
-      return <Unavailable capability={trades.capability} mode={trades.mode} />;
-    case "error":
-      return <ErrorNote error={trades.error} what="the trade tape" />;
-    case "loading":
-      return (
-        <Panel>
-          <SkeletonRows rows={5} cols={5} />
-        </Panel>
-      );
-  }
-}
 
 function renderChart(
   candles: Query<Candle[]>,
@@ -241,32 +233,6 @@ function renderChart(
   }
 }
 
-/**
- * `mode` comes from the data source rather than from `positions` — the `ready`
- * branch does not carry it, and the table still needs the current mode for the
- * entry-price cell, which can be `null` (COST_BASIS). Availability per CELL, not
- * per panel.
- */
-function renderPositions(
-  positions: Query<Position[]>,
-  market: MarketDetail,
-  mode: DataMode,
-): React.JSX.Element {
-  switch (positions.status) {
-    case "ready":
-      return <PositionsTable positions={positions.data} market={market} mode={mode} />;
-    case "unavailable":
-      return <Unavailable capability={positions.capability} mode={positions.mode} />;
-    case "error":
-      return <ErrorNote error={positions.error} what="the positions" />;
-    case "loading":
-      return (
-        <Panel>
-          <SkeletonRows rows={4} cols={5} />
-        </Panel>
-      );
-  }
-}
 
 /**
  * The verdict in the sidebar, the record behind a click.

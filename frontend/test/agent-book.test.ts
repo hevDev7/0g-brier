@@ -106,7 +106,14 @@ describe("agentBook", () => {
     for (const row of agentBook(markets, lists, agent)) {
       expect(row.entryPriceWad).toBeNull();
       expect(row.pnlTokens).toBeNull();
-      expect(row.currentValueTokens).toBeGreaterThan(0n);
+      // Value stays KNOWN — that is what this test is about. But the losing side of
+      // a settled market is worth exactly nothing, and that zero is a fact, not a
+      // gap: `pnlTokens` is the field that goes null when the cost basis is missing.
+      if (row.redeemable && row.market.winningOutcome !== row.outcome) {
+        expect(row.currentValueTokens).toBe(0n);
+      } else {
+        expect(row.currentValueTokens).toBeGreaterThan(0n);
+      }
     }
   });
 });
@@ -116,14 +123,31 @@ describe("holdingStatus", () => {
     const all: MarketStatus[] = [
       "Open", "Closed", "Proposed", "Disputed", "Settled", "Failed", "Voided",
     ];
+    // A clock far before `tradingEnd`, so this loop still exercises the status
+    // branches; the deadline branch has its own test below.
+    const live = (status: MarketStatus) => ({status, tradingEnd: 2_000_000_000});
     for (const status of all) {
-      const label = holdingStatus(status);
+      const label = holdingStatus(live(status), 1_000_000_000);
       expect(label.length).toBeGreaterThan(0);
       // It reports what the AGENT can do, never what this page can.
       expect(label).not.toMatch(/^(redeem|liquidate|claim)$/i);
     }
-    expect(holdingStatus("Settled")).toMatch(/agent can redeem/i);
-    expect(holdingStatus("Voided")).toMatch(/agent can liquidate/i);
+    expect(holdingStatus(live("Settled"), 1_000_000_000)).toMatch(/agent can redeem/i);
+    expect(holdingStatus(live("Voided"), 1_000_000_000)).toMatch(/agent can liquidate/i);
+  });
+
+  /**
+   * The window this column used to misreport. `status` still reads `Open` — nobody
+   * has called `close()` — while the chain already refuses buy, sell, addLiquidity
+   * and removeLiquidity alike with `TradingEnded`. A holding labelled "Open" here
+   * promised the agent could still sell, when nothing on earth could.
+   */
+  it("does not call a holding Open once its market's trading deadline has passed", () => {
+    const m = {status: "Open" as MarketStatus, tradingEnd: 1_000_000_000};
+    expect(holdingStatus(m, 1_000_000_500)).not.toBe("Open");
+    expect(holdingStatus(m, 1_000_000_500)).toMatch(/nothing can be traded/i);
+    // One second earlier it is genuinely open, and still says so.
+    expect(holdingStatus(m, 999_999_999)).toBe("Open");
   });
 });
 
@@ -136,29 +160,63 @@ describe("aggregate totals", () => {
    * make the total wrong; the UI says instead that rows are rounded and totals
    * are not.
    */
+  /**
+   * The defect this pins. A settled market pays the winning side `1/p` per share —
+   * the RECIPROCAL of the price — and the losing side nothing. This book valued
+   * every position at the marginal price regardless, so a real holding on Galileo
+   * read +0.695439 mUSDC when it could be redeemed for +45.604931: sixty-five times
+   * too small, in the direction that tells an agent its correct call barely paid.
+   */
+  it("values a settled position at what it redeems for, not at the marginal price", async () => {
+    const {markets, lists} = await book();
+    const settled = markets.find((m) => m.winningOutcome !== null);
+    expect(settled, "a fixture must be settled for this to mean anything").toBeDefined();
+    const idx = markets.findIndex((m) => m.address === settled!.address);
+    const all = agentBook([settled!], [lists[idx]!], lists[idx]![0]!.agent);
+    for (const row of all) {
+      const marginal = (row.shares * row.currentPriceWad) / 10n ** 18n;
+      if (row.outcome === settled!.winningOutcome) {
+        // The winner is worth MORE than the marginal price suggests, never less.
+        expect(row.worthPerShareWad).toBeGreaterThan(row.currentPriceWad);
+        expect((row.shares * row.worthPerShareWad) / 10n ** 18n).toBeGreaterThan(marginal);
+      } else {
+        // And the loser is worth nothing at all, not a positive number.
+        expect(row.worthPerShareWad).toBe(0n);
+        expect(row.currentValueTokens).toBe(0n);
+      }
+      expect(row.redeemable).toBe(true);
+    }
+  });
+
   it("sums exact amounts rather than the rounded row figures", async () => {
     const {markets, lists} = await book();
-    // Scoped to the FIRST THREE fixtures on purpose. This test is not counting rows,
-    // it is demonstrating one specific piece of arithmetic — three figures whose
-    // printed forms add to a different number than their exact ones do. Widening it
-    // to every fixture would change the numbers and lose the demonstration.
-    const three = markets.slice(0, 3);
-    const rows = agentBook(three, lists, "0xbb0c000000000000000000000000000000000000");
-    expect(rows).toHaveLength(3);
+    // FOUR UNRESOLVED fixtures, and both halves of that are deliberate.
+    //
+    // Unresolved, because a settled market values its positions at the `1/p`
+    // redemption rate rather than the marginal price, and the losing side at zero.
+    // Those are the right numbers and they are two orders of magnitude larger,
+    // which drowns the sub-cent remainders this test exists to show — with a
+    // settled row in the set the two totals agree and the test proves nothing.
+    //
+    // Four rather than three, because three of these happen to round cleanly. The
+    // count is chosen to make the discrepancy appear, not to count rows.
+    const some = markets.filter((m) => m.winningOutcome === null).slice(0, 4);
+    const rows = agentBook(some, lists, "0xbb0c000000000000000000000000000000000000");
+    expect(rows).toHaveLength(4);
 
     const exact = rows.reduce((sum, r) => sum + (r.pnlTokens ?? 0n), 0n);
-    expect(exact).toBe(-3_462_942n);
+    expect(exact).toBe(-53_233_386n);
 
     // The total the UI shows: the exact sum, rounded once.
-    expect(formatCollateral(exact, 6)).toBe("-3.46");
+    expect(formatCollateral(exact, 6)).toBe("-53.23");
 
     // What a reader gets by adding the printed column. Number() on DISPLAY
     // STRINGS is deliberate and is not a violation of the no-floats-on-money
     // rule: the point is to reproduce what a human does with the rendered
     // figures, which is exactly a lossy float addition.
     const printed = rows.map((r) => formatCollateral(r.pnlTokens!, 6));
-    expect(printed).toEqual(["-1.67", "-1.09", "-0.71"]);
+    expect(printed).toEqual(["-1.67", "-1.09", "-85.84", "35.36"]);
     const handSum = printed.reduce((a, text) => a + Number(text), 0);
-    expect(handSum.toFixed(2)).toBe("-3.47");
+    expect(handSum.toFixed(2)).toBe("-53.24");
   });
 });

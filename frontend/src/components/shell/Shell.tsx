@@ -4,6 +4,7 @@ import {useState} from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {BookOpen, FileText, LineChart, Menu, Radio, Trophy, X} from "lucide-react";
+import {BrierMark} from "./BrierMark";
 import {ModeIndicator} from "./ModeIndicator";
 import {ThemeToggle} from "./ThemeToggle";
 
@@ -45,9 +46,7 @@ export function Shell({children}: {children: React.ReactNode}) {
         */}
         <div className="relative mx-auto flex h-16 w-full max-w-[1440px] items-center gap-4 px-4 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:gap-6 md:px-8">
           <Link href="/" data-testid="link-brand" className="flex shrink-0 items-center gap-3">
-            <span className="grid size-8 place-items-center rounded-md bg-accent text-accent-fg">
-              <Radio size={16} strokeWidth={2.5} aria-hidden />
-            </span>
+            <BrierMark size={32} className="shrink-0" />
             <span>
               <span className="block text-[15px] leading-tight font-extrabold tracking-tight text-text">
                 BRIER
@@ -133,6 +132,7 @@ export function Shell({children}: {children: React.ReactNode}) {
       */}
       <footer className="border-t border-border">
         <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-4 md:px-8">
+          <BrierMark size={20} className="shrink-0" />
           <span className="eyebrow flex items-center gap-1.5 text-text-faint">
             <Radio size={12} aria-hidden />
             Read-only node

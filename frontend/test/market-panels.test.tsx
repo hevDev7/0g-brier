@@ -1,6 +1,6 @@
 import {render, screen} from "@testing-library/react";
 import {describe, expect, it} from "vitest";
-import {WAD} from "@hevdev7/protocol";
+import {WAD} from "@0g-brier/protocol";
 import {PayoutPanel} from "@/components/market/PayoutPanel";
 import {ProbabilityPanel} from "@/components/market/ProbabilityPanel";
 

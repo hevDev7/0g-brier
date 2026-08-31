@@ -121,7 +121,7 @@ export default function CreationPage() {
       </Note>
 
       <Note kind="warn" title="Creating one is not something the SDK does yet">
-        <C>@hevdev7/agent-kit</C> covers trading and identity. Creation needs a curator signature, which means a
+        <C>@0g-brier/agent-kit</C> covers trading and identity. Creation needs a curator signature, which means a
         key an agent will not have, so it lives in the repository&rsquo;s deployment scripts rather than in the
         client. If you want a market to exist, ask whoever holds the curator key.
       </Note>

@@ -3,8 +3,9 @@ import {Badge} from "@/components/primitives/Badge";
 import {Panel, PanelHeader} from "@/components/primitives/Panel";
 import type {Outcome, ResolverVote, SettlementReceipt} from "@/lib/data/types";
 
-function outcomeLabel(outcome: Outcome | null): string {
+function outcomeLabel(outcome: ResolverVote["outcome"]): string {
   if (outcome === null) return "no vote yet";
+  if (outcome === "unresolvable") return "UNRESOLVABLE";
   return outcome === 1 ? "YES" : "NO";
 }
 
@@ -28,15 +29,25 @@ function VoteRow({vote, finalOutcome}: {vote: ResolverVote; finalOutcome: Outcom
   const dissents = finalOutcome !== null && vote.outcome !== null && vote.outcome !== finalOutcome;
   return (
     <li
-      data-testid={`vote-${vote.model}`}
-      className="flex items-center justify-between gap-3 py-2 text-[14px]"
+      data-testid={`vote-${vote.agentId ?? vote.model}`}
+      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-[14px]"
     >
       <span className="flex items-center gap-2">
+        {/* WHO voted comes first, because in a committee that is the identity at
+            stake — the agent put collateral behind this answer and can be slashed
+            for it. The model is what it consulted, which may be nothing. */}
+        {vote.agentId !== undefined && (
+          <span className="font-mono text-[12px] text-text-muted">#{vote.agentId}</span>
+        )}
         {/* The model name is deliberately ONE element with no other text inside —
             getByText joins only an element's DIRECT text nodes, so a phrase that
             must match the model name exactly may not share an element with other
             text (see the same note in Unavailable.tsx). */}
-        <span className="font-mono text-[13px] text-text">{vote.model}</span>
+        {vote.model === null ? (
+          <span className="text-[13px] text-text-muted">no model consulted</span>
+        ) : (
+          <span className="font-mono text-[13px] text-text">{vote.model}</span>
+        )}
         {vote.teeVerified && <Badge tone="verified" label="TEE" />}
       </span>
       <span className="flex items-center gap-2">
@@ -49,6 +60,14 @@ function VoteRow({vote, finalOutcome}: {vote: ResolverVote; finalOutcome: Outcom
         </span>
         {dissents && <Badge tone="warning" label="Dissent" />}
       </span>
+      {/* The root is the whole point of a per-member receipt: it is what makes the
+          vote checkable by someone who does not trust this page. Printed in full,
+          because a truncated hash cannot be pasted into a query. */}
+      {vote.receiptRoot !== undefined && (
+        <span className="w-full font-mono text-[11px] break-all text-text-faint">
+          {vote.receiptRoot}
+        </span>
+      )}
     </li>
   );
 }
@@ -82,12 +101,33 @@ function InferenceProvenance({receipt}: {receipt: SettlementReceipt}) {
     );
   }
 
+  // NO MODEL AT ALL is a different fact from "a model ran where you cannot check
+  // it", and the warning below states the second. Applied to the first it is
+  // false twice over: it asserts an inference that never happened, and — with
+  // `route: "none"` interpolated — it names the endpoint "none".
+  //
+  // It is also the wrong shape of warning. A rule applied directly to a pinned
+  // source is MORE checkable than a model, not less: the receipt carries the
+  // bytes' hash, so anyone can re-fetch and compare. Colouring that as a defect
+  // teaches the reader to distrust the stronger evidence.
+  if (receipt.judgeModel === null && receipt.votes.length === 0) {
+    return (
+      <p data-testid="no-inference" className="text-[13px] leading-relaxed text-text-muted">
+        No model was consulted. This settlement applied the market&rsquo;s published rule to the
+        source directly, so there is no inference to attest and this panel does not invent one.
+        What can be checked instead is in the receipt itself: the source it read, the bytes it
+        received and their hash, and the reasoning below.
+      </p>
+    );
+  }
+
   return (
     <p data-testid="no-attestation" className="text-[13px] leading-relaxed text-warn">
       No attestation. This judgement was made on a private endpoint
-      {receipt.route === null ? "" : ` (${receipt.route})`}, and nothing on chain or in this
-      document lets you check which model ran or what it was given. The reasoning and the sources
-      below are still verbatim — but they are the resolver&rsquo;s own account of itself.
+      {receipt.route === null || receipt.route === "none" ? "" : ` (${receipt.route})`}, and nothing
+      on chain or in this document lets you check which model ran or what it was given. The
+      reasoning and the sources below are still verbatim — but they are the resolver&rsquo;s own
+      account of itself.
     </p>
   );
 }
@@ -137,7 +177,7 @@ export function ResolutionEvidence({receipt}: {receipt: SettlementReceipt}) {
           <p className="text-[14px] text-text-muted">
             {receipt.outcome === null
               ? "No resolver votes yet."
-              : "No models were consulted for this settlement."}
+              : "This settlement recorded no resolver votes — it was decided directly, not by a committee."}
           </p>
         ) : (
           <ul className="divide-y divide-border">

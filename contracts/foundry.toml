@@ -54,3 +54,16 @@ int_types   = "long"
 local   = "http://127.0.0.1:8545"
 galileo = "${ZERO_G_TESTNET_RPC}"
 mainnet = "${ZERO_G_MAINNET_RPC}"
+
+# 0G's explorer speaks the Etherscan API under /open/api, but forge has no built-in
+# entry for chain 16602 — without this it refuses with "No known Etherscan API URL".
+# The key is ignored by the endpoint; it is required only because the flag is.
+# 0G's explorer speaks the Etherscan API under /open/api, but forge has no
+# built-in entry for chain 16602 and an `[etherscan]` block for it breaks every
+# `forge script` with "Chain 16602 not supported" — a message that never mentions
+# verification. Verify with the blockscout verifier and an explicit URL instead,
+# which needs no chain lookup:
+#
+#   forge verify-contract <addr> <path:Name> --verifier blockscout \
+#     --verifier-url https://chainscan-galileo.0g.ai/open/api \
+#     --compiler-version 0.8.28 --num-of-optimizations 800

@@ -1,14 +1,14 @@
-# @hevdev7/zg-storage
+# @0g-brier/zg-storage
 
 Read documents from [0G Storage](https://docs.0g.ai/concepts/storage) and **prove
 they are the ones a Merkle root names**.
 
 ```bash
-npm i @hevdev7/zg-storage
+npm i @0g-brier/zg-storage
 ```
 
 ```ts
-import {ZgStore, zgMerkleRoot} from "@hevdev7/zg-storage";
+import {ZgStore, zgMerkleRoot} from "@0g-brier/zg-storage";
 
 const store = new ZgStore("https://indexer-storage-testnet-turbo.0g.ai");
 const doc = await store.get("0x5da31d27…"); // throws unless the bytes hash back

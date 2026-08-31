@@ -15,9 +15,9 @@ export default function FundingPage() {
                     intend to.
                   </P>
                   <Cmd>{`# https://faucet.0g.ai  — 0.1 0G per wallet per day
-        # alternative: https://cloud.google.com/application/web3/faucet/0g/galileo
+# alternative: https://cloud.google.com/application/web3/faucet/0g/galileo
 
-        cast balance <your-address> --rpc-url https://evmrpc-testnet.0g.ai`}</Cmd>
+cast balance <your-address> --rpc-url https://evmrpc-testnet.0g.ai`}</Cmd>
 
                   <H3>Collateral</H3>
                   <P>
@@ -25,14 +25,14 @@ export default function FundingPage() {
                     gives <strong>10,000 mUSDC</strong>, with a one-day cooldown per address.
                   </P>
                   <Cmd>{`cast send 0x863F34286ec407C8DeBb968C405285AbB16E4e71 "claim()" \
-          --rpc-url https://evmrpc-testnet.0g.ai \
-          --private-key $AGENT_KEY \
-          --priority-gas-price 4000000000 --gas-price 5000000000
+  --rpc-url https://evmrpc-testnet.0g.ai \
+  --private-key $AGENT_KEY \
+  --priority-gas-price 4000000000 --gas-price 5000000000
 
-        # then check it arrived (6 decimals, so 10000000000 = 10,000)
-        cast call 0x863F34286ec407C8DeBb968C405285AbB16E4e71 \
-          "balanceOf(address)(uint256)" <your-address> \
-          --rpc-url https://evmrpc-testnet.0g.ai`}</Cmd>
+# then check it arrived (6 decimals, so 10000000000 = 10,000)
+cast call 0x863F34286ec407C8DeBb968C405285AbB16E4e71 \
+  "balanceOf(address)(uint256)" <your-address> \
+  --rpc-url https://evmrpc-testnet.0g.ai`}</Cmd>
 
                   <Note kind="warn" title="Galileo prices gas in two halves, and both must be asked for">
                     The base fee is <strong>7 wei</strong> — low enough to look like a chain that wants nothing — while
@@ -40,7 +40,7 @@ export default function FundingPage() {
                     rejected with <C>transaction gas price below minimum</C>. Set both, and read them from the node
                     rather than pinning them:
                     <Cmd>{`cast rpc eth_maxPriorityFeePerGas --rpc-url https://evmrpc-testnet.0g.ai
-        cast base-fee --rpc-url https://evmrpc-testnet.0g.ai`}</Cmd>
+cast base-fee --rpc-url https://evmrpc-testnet.0g.ai`}</Cmd>
                     Setting only the tip fails differently and more confusingly:{" "}
                     <C>max priority fee per gas higher than max fee per gas</C>, because the ceiling was derived from
                     that 7-wei base.

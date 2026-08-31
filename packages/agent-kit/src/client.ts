@@ -11,7 +11,7 @@ import {
 } from "viem";
 import {privateKeyToAccount} from "viem/accounts";
 import {keccak256, stringToHex, toBytes, pad} from "viem";
-import {WAD, dpm, quote, toWad, networkFor, type ChainMode} from "@hevdev7/protocol";
+import {WAD, dpm, quote, toWad, networkFor, type ChainMode} from "@0g-brier/protocol";
 import {AGENT_REGISTRY_ABI, CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "./abi.js";
 import {suggestFees} from "./fees.js";
 import type {Claim, Fill, MarketView, Outcome, Preview, Tier, MarketStatus} from "./types.js";
@@ -92,7 +92,7 @@ export interface ClientConfig {
  *
  * 1. **The chain's quote is what gets signed.** `preview()` reads
  *    `Market.quoteBuy` on chain and returns that number; the DPM mirror in
- *    `@hevdev7/protocol` only supplies the things a view cannot — what the
+ *    `@0g-brier/protocol` only supplies the things a view cannot — what the
  *    trade does to the probability and to the payout. An agent that sized from
  *    a local model and signed against it would be trading a copy.
  *
@@ -127,7 +127,23 @@ export class BrierClient {
       nativeCurrency: {name: "0G", symbol: "0G", decimals: 18},
       rpcUrls: {default: {http: [config.rpcUrl ?? net.rpcUrl]}},
     });
-    const transport = config.transport ?? http(config.rpcUrl ?? net.rpcUrl);
+    // BATCHED, because reading a market is a dozen `eth_call`s and reading the
+    // book is a dozen per market. Unbatched, an agent that scans twenty markets
+    // fires several hundred HTTP requests at once and the public Galileo endpoint
+    // answers "request rate exceeded: Too many requests (exceeds 50)" — which
+    // surfaces as a contract error naming an innocent function, and reads like the
+    // chain rejecting the call rather than the transport being throttled.
+    //
+    // Batching collapses each burst into one request per twenty calls; the retries
+    // absorb what is left. An operator with their own endpoint can still pass
+    // `transport` and choose differently.
+    const transport =
+      config.transport ??
+      http(config.rpcUrl ?? net.rpcUrl, {
+        batch: {batchSize: 20, wait: 16},
+        retryCount: 5,
+        retryDelay: 300,
+      });
     this.account = config.privateKey ? privateKeyToAccount(config.privateKey) : null;
     this.address = this.account?.address ?? `0x${"0".repeat(40)}`;
     this.canWrite = this.account !== null;

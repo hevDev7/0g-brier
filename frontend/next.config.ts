@@ -23,9 +23,6 @@ const allowedDevOrigins = (process.env.DEV_ALLOWED_HOSTS ?? "")
   .filter(Boolean);
 
 const nextConfig: NextConfig = {
-  // @hevdev7/protocol exports raw .ts, not compiled JS. Without this, the
-  // build fails when importing the DPM mirror.
-  transpilePackages: ["@hevdev7/protocol"],
   allowedDevOrigins,
 };
 

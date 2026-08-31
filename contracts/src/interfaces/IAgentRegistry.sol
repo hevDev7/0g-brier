@@ -27,6 +27,13 @@ interface IAgentRegistry {
     function resolverCount() external view returns (uint256);
     function operatorOf(uint256 agentId) external view returns (address);
     /// @notice Which agent an operator key acts for. Zero means none.
+    /// @dev The ERC-721 owner. `agentOf` maps an OPERATOR key to its agent, which is
+    ///      the key that trades and votes; ownership is a different question and a
+    ///      different key. Spending an agent's earnings is the owner's right, not
+    ///      the operator's — an operator compromised on a trading machine must not
+    ///      be able to withdraw.
+    function ownerOf(uint256 agentId) external view returns (address);
+
     function agentOf(address operator) external view returns (uint256);
     function nameOf(uint256 agentId) external view returns (bytes32);
     function nameOfOperator(address operator) external view returns (bytes32);

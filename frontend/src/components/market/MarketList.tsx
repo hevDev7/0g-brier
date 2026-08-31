@@ -4,7 +4,7 @@ import {useMemo, useState} from "react";
 import Link from "next/link";
 import {usePathname, useRouter, useSearchParams} from "next/navigation";
 import {ArrowDownUp, ChevronRight, Filter, Search} from "lucide-react";
-import {toTokensFloor} from "@hevdev7/protocol";
+import {toTokensFloor} from "@0g-brier/protocol";
 import {Badge} from "@/components/primitives/Badge";
 import {Countdown} from "@/components/primitives/Countdown";
 import {Panel} from "@/components/primitives/Panel";

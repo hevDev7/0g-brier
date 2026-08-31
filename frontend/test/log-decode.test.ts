@@ -1,6 +1,6 @@
 import {describe, expect, it} from "vitest";
 import {LogSource} from "@/lib/data/logs";
-import {dpm} from "@hevdev7/protocol";
+import {dpm} from "@0g-brier/protocol";
 
 /**
  * The decode step, with the chain stubbed out.
