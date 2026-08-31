@@ -44,6 +44,8 @@ import {
 import {decodeEventLog} from "viem";
 import {privateKeyToAccount} from "viem/accounts";
 import fs from "node:fs";
+import {execFileSync} from "node:child_process";
+import {createHash} from "node:crypto";
 
 const RPC = process.env.RPC_URL ?? "https://evmrpc-testnet.0g.ai";
 const MARKET = process.argv[2];
@@ -52,6 +54,7 @@ if (!MARKET) throw new Error("usage: node scripts/committee-run.mjs <market addr
 const raw = process.env.DEPLOYER_KEY;
 if (!raw) throw new Error("set DEPLOYER_KEY — it funds the resolvers and derives their keys");
 const DEPLOYER = (raw.startsWith("0x") ? raw : `0x${raw}`);
+const ROOT = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
 
 const C = JSON.parse(fs.readFileSync(new URL("../deployments/16602.json", import.meta.url), "utf-8")).contracts;
 const chain = defineChain({
@@ -80,7 +83,9 @@ const REGISTRY = [
   {type: "function", name: "reputationOf", stateMutability: "view", inputs: [{type: "uint256"}], outputs: [{type: "tuple", components: [{name: "marketsCreated", type: "uint32"}, {name: "marketsVoided", type: "uint32"}, {name: "resolutionsAgreed", type: "uint32"}, {name: "resolutionsOverturned", type: "uint32"}, {name: "realizedPnl", type: "int128"}, {name: "tradesExecuted", type: "uint32"}]}]},
 ];
 const MODULE = [
+  {type: "function", name: "requestResolution", stateMutability: "nonpayable", inputs: [{type: "address"}], outputs: []},
   {type: "function", name: "openResolution", stateMutability: "nonpayable", inputs: [{type: "address"}], outputs: []},
+  {type: "function", name: "drawOf", stateMutability: "view", inputs: [{type: "address"}], outputs: [{type: "tuple", components: [{name: "drawBlock", type: "uint64"}, {name: "index", type: "uint8"}]}]},
   {type: "function", name: "commitVote", stateMutability: "nonpayable", inputs: [{type: "address"}, {type: "uint256"}, {type: "bytes32"}], outputs: []},
   {type: "function", name: "revealVote", stateMutability: "nonpayable", inputs: [{type: "address"}, {type: "uint256"}, {type: "uint8"}, {type: "bytes32"}, {type: "bytes32"}], outputs: []},
   {type: "function", name: "finalize", stateMutability: "nonpayable", inputs: [{type: "address"}], outputs: []},
@@ -161,14 +166,20 @@ async function main() {
   // not an arbitrary choice: `setBounds` refuses anything shorter.
   console.log("\n── 1. windows shortened to the configured floor (testnet) ──");
   const disputeKey = ["DISPUTE_WINDOW_FAST", "DISPUTE_WINDOW_VERIFIED", "DISPUTE_WINDOW_DETERMINISTIC"][tier];
-  for (const name of ["COMMIT_WINDOW", "REVEAL_WINDOW", disputeKey]) {
+  // Not all 60s. The commit window has to contain a 0G Storage upload per
+  // member, and storage latency — not inference, not the chain — is what ended
+  // the first weather run at one commit out of three. 60s is the floor
+  // `setBounds` allows, which makes it the tempting number and the wrong one:
+  // it is shorter than the work the window exists to hold.
+  const windows = {COMMIT_WINDOW: 300n, REVEAL_WINDOW: 120n, [disputeKey]: 60n};
+  for (const [name, want] of Object.entries(windows)) {
     const before = await pub.readContract({address: C.ConfigRegistry, abi: CONFIG, functionName: "params", args: [key(name)]});
-    if (before === 60n) {
-      console.log(`   ${name} already 60s`);
+    if (before === want) {
+      console.log(`   ${name} already ${want}s`);
       continue;
     }
-    await send(boss, {address: C.ConfigRegistry, abi: CONFIG, functionName: "setParam", args: [key(name), 60n]}, name);
-    console.log(`   ${name} ${before}s → 60s`);
+    await send(boss, {address: C.ConfigRegistry, abi: CONFIG, functionName: "setParam", args: [key(name), want]}, name);
+    console.log(`   ${name} ${before}s → ${want}s`);
   }
 
   // ── 2. three resolvers: funded, registered, staked, linked to ERC-8004 ────
@@ -221,10 +232,53 @@ async function main() {
   }
 
   // ── 3. what the market's own source says ─────────────────────────────────
-  const spec = await (await fetch(`${process.env.ZG_INDEXER ?? "https://indexer-storage-testnet-turbo.0g.ai"}/file?root=${await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "specRoot"})}`)).json();
+  const specRoot = await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "specRoot"});
+  const spec = await (await fetch(`${process.env.ZG_INDEXER ?? "https://indexer-storage-testnet-turbo.0g.ai"}/file?root=${specRoot}`)).json();
   const src = spec.sources[0];
-  const reading = (await (await fetch(src.url)).json())[0][4];
-  const threshold = Number(spec.rules.match(/greater than ([\d.]+)/)[1]);
+  // The BYTES, then the number — in that order and only once. A receipt claims
+  // "this is what the source said", and that claim is only checkable if what was
+  // hashed is what was read. Fetching twice would hash a different response than
+  // the one the vote came from.
+  const res = await fetch(src.url);
+  const body = await res.text();
+  const evidence = {
+    url: src.url,
+    kind: src.kind ?? "http",
+    selector: src.selector ?? null,
+    observed: true,
+    fetchedAt: Math.floor(Date.now() / 1000),
+    finalUrl: res.url,
+    httpStatus: res.status,
+    contentType: res.headers.get("content-type"),
+    bytes: Buffer.byteLength(body),
+    sha256: createHash("sha256").update(body).digest("hex"),
+    truncated: false,
+    via: "selector",
+    hint: null,
+    clipped: false,
+  };
+  const reading = Number(JSON.parse(body)[0][4]);
+  evidence.value = String(reading);
+  // `[\d.]+` was greedy and the rules text ends its sentence right after the
+  // number, so this captured "2397.73." — including the full stop — and Number()
+  // gave NaN. Anchoring the decimal part stops at the digit.
+  const threshold = Number(spec.rules.match(/greater than ([0-9]+(?:\.[0-9]+)?)/)?.[1]);
+
+  // THE REAL DEFECT WAS HERE, NOT IN THE REGEX. `2420.71 > NaN` is false, like
+  // every comparison against NaN, so an unparseable threshold did not fail — it
+  // voted NO, with three resolvers agreeing and the chain recording it as a
+  // committee decision. Market 0xABE2Cf5C is settled NO forever because of it,
+  // when its own source says YES.
+  //
+  // A resolver that cannot read the question must refuse to answer it. Refusing
+  // costs the round; answering wrongly costs someone their money and cannot be
+  // taken back.
+  if (!Number.isFinite(threshold)) {
+    throw new Error(`cannot read a threshold out of the market's rules — refusing to vote.\n  rules: ${spec.rules}`);
+  }
+  if (!Number.isFinite(reading)) {
+    throw new Error(`source ${src.url} did not yield a number — refusing to vote.`);
+  }
   const outcome = reading > threshold ? OUTCOMES.YES : OUTCOMES.NO;
   console.log(`\n── 3. the rule, applied ──`);
   console.log(`   ${spec.question}`);
@@ -234,8 +288,22 @@ async function main() {
   console.log("\n── 4. sample a committee ──");
   // Not idempotent: a second call reverts `RoundAlreadyOpen`. A rerun after a crash
   // has to join the round that already exists rather than demand a fresh one.
+  //
+  // TWO CALLS. `requestResolution` books a future block; `openResolution` draws from
+  // that block's hash once it has been mined. The seed cannot be read at the moment
+  // the draw is asked for, which is what stops a caller shopping for a committee by
+  // simulating the sample and only sending when it likes the answer.
   const existing = await pub.readContract({address: C.ResolutionModule, abi: MODULE, functionName: "roundOf", args: [MARKET]});
   if (existing.n === 0) {
+    let draw = await pub.readContract({address: C.ResolutionModule, abi: MODULE, functionName: "drawOf", args: [MARKET]});
+    if (draw.drawBlock === 0n) {
+      await send(boss, {address: C.ResolutionModule, abi: MODULE, functionName: "requestResolution", args: [MARKET]}, "requestResolution");
+      draw = await pub.readContract({address: C.ResolutionModule, abi: MODULE, functionName: "drawOf", args: [MARKET]});
+    }
+    while ((await pub.getBlockNumber()) <= draw.drawBlock) {
+      console.log(`   waiting for block ${draw.drawBlock} to seed the draw`);
+      await new Promise((r) => setTimeout(r, 2_000));
+    }
     await send(boss, {address: C.ResolutionModule, abi: MODULE, functionName: "openResolution", args: [MARKET]}, "openResolution");
   } else {
     console.log(`   a round is already open (${existing.commits} commits, ${existing.reveals} reveals) — joining it`);
@@ -245,13 +313,61 @@ async function main() {
 
   // ── 5. commit ────────────────────────────────────────────────────────────
   console.log("\n── 5. commit (the vote is a hash; nobody can see it) ──");
-  const receiptRoot = keccak256(toHex(`brier-committee-${MARKET}`));
+  // A REAL receipt per resolver, uploaded before it is committed to.
+  //
+  // This used to anchor `keccak256("brier-committee-" + MARKET)` — a number
+  // invented from the market address, pointing at nothing. The chain then
+  // recorded "here is the receipt" for a document that did not exist, and the
+  // settlement report on the website said so: root present, body missing. A
+  // placeholder is worse than an empty field, because it looks like evidence.
+  //
+  // One document per member, not one shared between them: a committee's whole
+  // value is that its members judged separately, and three identical roots would
+  // be a claim that they did not.
+  const roundNo = (await pub.readContract({address: C.ResolutionModule, abi: MODULE, functionName: "roundOf", args: [MARKET]})).index;
   const salts = new Map();
+  const roots = new Map();
   for (const r of resolvers) {
     if (!committee.includes(r.agentId)) continue;
-    const salt = keccak256(toHex(`salt-${r.agentId}-${MARKET}`));
-    salts.set(r.agentId, salt);
-    const commitment = keccak256(encodeAbiParameters(parseAbiParameters("address, uint8, bytes32, bytes32, address"), [MARKET, outcome, salt, receiptRoot, r.account.address]));
+    const doc = JSON.stringify({
+      version: 1,
+      market: MARKET,
+      specRoot,
+      round: Number(roundNo),
+      resolver: r.account.address,
+      // `route: "none"` is the honest value and the reader treats it as such:
+      // a null model produces NO vote row, so the settlement report shows this
+      // was decided without one rather than inventing an attestation. The 0G
+      // Compute path is `examples/resolve.ts`, and it is a separate claim.
+      inference: {route: "none", providerAddress: null, model: null, chatID: null, teeVerified: false, temperature: null, simulated: false},
+      evidence: [{...evidence, agentId: Number(r.agentId)}],
+      outcome: outcome === 1 ? "YES" : outcome === 0 ? "NO" : "UNRESOLVABLE",
+      confidence: 1,
+      // `rationale`, not `reasoning`. The reader looks for this exact key and
+      // treats a receipt without it as unreadable — an anchored root with no
+      // legible document behind it, which is the one thing worse than no root.
+      rationale: `Coinbase candle for the pinned minute closed at ${reading}; the rule asks for strictly greater than ${threshold}. ${reading > threshold ? "Greater, so YES" : "Not greater, so NO"}.`,
+      criteria: spec.rules ?? null,
+      citations: [src.url],
+      rawResponse: null,
+    }, null, 2);
+    const root = execFileSync("node", [`${ROOT}/scripts/upload-doc.mjs`], {
+      input: doc,
+      env: {...process.env, UPLOADER_KEY: DEPLOYER},
+      encoding: "utf8",
+    }).trim().split("\n").pop();
+    roots.set(r.agentId, root);
+    console.log(`   agent ${r.agentId} receipt ${root.slice(0, 18)}…`);
+
+    salts.set(r.agentId, keccak256(toHex(`salt-${r.agentId}-${MARKET}`)));
+  }
+
+  // Commits go out only once every receipt exists. Interleaving them would put
+  // an upload between each pair of transactions, and the window is a deadline
+  // for the whole set, not for each one.
+  for (const r of resolvers) {
+    if (!committee.includes(r.agentId)) continue;
+    const commitment = keccak256(encodeAbiParameters(parseAbiParameters("address, uint8, bytes32, bytes32, address"), [MARKET, outcome, salts.get(r.agentId), roots.get(r.agentId), r.account.address]));
     await send(r.wallet, {address: C.ResolutionModule, abi: MODULE, functionName: "commitVote", args: [MARKET, r.agentId, commitment]}, "commit");
     console.log(`   agent ${r.agentId} committed ${commitment.slice(0, 18)}…`);
   }
@@ -263,7 +379,7 @@ async function main() {
   console.log("── 6. reveal ──");
   for (const r of resolvers) {
     if (!committee.includes(r.agentId)) continue;
-    await send(r.wallet, {address: C.ResolutionModule, abi: MODULE, functionName: "revealVote", args: [MARKET, r.agentId, outcome, salts.get(r.agentId), receiptRoot]}, "reveal");
+    await send(r.wallet, {address: C.ResolutionModule, abi: MODULE, functionName: "revealVote", args: [MARKET, r.agentId, outcome, salts.get(r.agentId), roots.get(r.agentId)]}, "reveal");
     console.log(`   agent ${r.agentId} revealed ${outcome === 1 ? "YES" : "NO"}`);
   }
 

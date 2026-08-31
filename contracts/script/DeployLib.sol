@@ -80,10 +80,18 @@ library DeployLib {
         config.setBounds(ConfigKeys.DISPUTE_WINDOW_FAST, 60, 30 days);
         config.setBounds(ConfigKeys.DISPUTE_WINDOW_VERIFIED, 60, 30 days);
         config.setBounds(ConfigKeys.DISPUTE_WINDOW_DETERMINISTIC, 60, 30 days);
-        config.setBounds(ConfigKeys.COMMITTEE_FAST, 257, 65_535);
-        config.setBounds(ConfigKeys.COMMITTEE_VERIFIED, 257, 65_535);
-        config.setBounds(ConfigKeys.COMMITTEE_DETERMINISTIC, 257, 65_535);
-        config.setBounds(ConfigKeys.COMMITTEE_DISPUTE, 257, 65_535);
+        // Floor raised from 257 (n=1, k=1) to 770 (n=3, k=2). A committee of one is not
+        // a committee, and FAST shipped as exactly that. The bound cannot express the
+        // whole rule — `k` must be a MAJORITY of `n`, a relation between the two halves
+        // of the packed value — so `ResolutionModule._shapeOf` checks it at read time
+        // too. This is the cheap half of the same guard.
+        config.setBounds(ConfigKeys.COMMITTEE_FAST, 770, 65_535);
+        config.setBounds(ConfigKeys.COMMITTEE_VERIFIED, 770, 65_535);
+        config.setBounds(ConfigKeys.COMMITTEE_DETERMINISTIC, 770, 65_535);
+        config.setBounds(ConfigKeys.COMMITTEE_DISPUTE, 770, 65_535);
+        // Blocks between asking for a committee and drawing it. Must stay well below
+        // 256, the depth past which `blockhash` returns zero and the draw expires.
+        config.setBounds(ConfigKeys.RESOLUTION_DRAW_DELAY, 1, 200);
         // Slash rates are POLICY, and the bounds are what stops a later parameter
         // change from turning a mild penalty into confiscation. Disagreeing with the
         // majority is not misconduct, so it is capped lowest; being overturned by a
@@ -99,6 +107,12 @@ library DeployLib {
         // unconditionally would enforce identity on new markets and not on old ones
         // while appearing to enforce it everywhere.
         config.setBounds(ConfigKeys.REQUIRE_REGISTERED_TRADER, 0, 1);
+        // Read by `Market.initialize`, which is IMMUTABLE — a market already created
+        // keeps whatever window it was born with, so this bound protects new markets
+        // only. The lower bound is an hour rather than zero so that no future parameter
+        // change can quietly restore "one second is a valid settlement window".
+        config.setBounds(ConfigKeys.MIN_SETTLEMENT_WINDOW, 1 hours, 90 days);
+        config.setBounds(ConfigKeys.PROPOSED_FAIL_GRACE, 0, 30 days);
 
         config.setParam(ConfigKeys.COMMIT_WINDOW, 1 hours);
         config.setParam(ConfigKeys.REVEAL_WINDOW, 1 hours);
@@ -109,10 +123,21 @@ library DeployLib {
         config.setParam(ConfigKeys.DISPUTE_WINDOW_FAST, 24 hours);
         config.setParam(ConfigKeys.DISPUTE_WINDOW_VERIFIED, 6 hours);
         config.setParam(ConfigKeys.DISPUTE_WINDOW_DETERMINISTIC, 2 hours);
-        config.setParam(ConfigKeys.COMMITTEE_FAST, (1 << 8) | 1);
+        // FAST was (1 << 8) | 1 — one agent, deciding alone, on the tier with the
+        // loosest evidence requirement. It is now the same shape as VERIFIED; what
+        // still separates the tiers is the dispute window, which FAST has the longest
+        // of precisely because its evidence is the weakest.
+        config.setParam(ConfigKeys.COMMITTEE_FAST, (5 << 8) | 3);
         config.setParam(ConfigKeys.COMMITTEE_VERIFIED, (5 << 8) | 3);
         config.setParam(ConfigKeys.COMMITTEE_DETERMINISTIC, (3 << 8) | 2);
-        config.setParam(ConfigKeys.COMMITTEE_DISPUTE, (9 << 8) | 5);
+        // Raised from 5 to a two-thirds supermajority. The dispute round is the last
+        // word — there is no round 3 — so it should be harder to carry than the round
+        // it reviews, not merely as hard.
+        config.setParam(ConfigKeys.COMMITTEE_DISPUTE, (9 << 8) | 6);
+        // Eight blocks is a few seconds on 0G: long enough that the draw block cannot
+        // be known when the draw is requested, short enough that a keeper comfortably
+        // returns for it inside the 256-block window.
+        config.setParam(ConfigKeys.RESOLUTION_DRAW_DELAY, 8);
         config.setParam(ConfigKeys.NO_SHOW_SLASH_BPS, 500);
         config.setParam(ConfigKeys.DISAGREE_SLASH_BPS, 100);
         config.setParam(ConfigKeys.OVERTURN_SLASH_BPS, 2_000);
@@ -120,6 +145,11 @@ library DeployLib {
         config.setParam(ConfigKeys.MIN_RESOLVER_STAKE, 100e6);
         config.setParam(ConfigKeys.UNSTAKE_COOLDOWN, 7 days);
         config.setParam(ConfigKeys.REQUIRE_REGISTERED_TRADER, 0);
+        // Commit (1h) + reveal (1h) + the longest dispute window (24h) + the dispute
+        // round (draw, 1h, 1h) is roughly 28 hours. Three days leaves a keeper room to
+        // be late without the market losing the right to be settled at all.
+        config.setParam(ConfigKeys.MIN_SETTLEMENT_WINDOW, 3 days);
+        config.setParam(ConfigKeys.PROPOSED_FAIL_GRACE, 7 days);
     }
 
     function resolveOperationalAddresses(uint256 chainId, address treasury, address curatorSigner, address deployer)

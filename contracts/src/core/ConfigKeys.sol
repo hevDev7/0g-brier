@@ -36,6 +36,33 @@ library ConfigKeys {
     bytes32 internal constant MIN_RESOLVER_STAKE = keccak256("MIN_RESOLVER_STAKE");
     bytes32 internal constant UNSTAKE_COOLDOWN = keccak256("UNSTAKE_COOLDOWN");
 
+    /// @dev How many blocks sit between asking for a committee and drawing it. The
+    ///      seed is `blockhash(drawBlock)`, and `drawBlock` is in the FUTURE when the
+    ///      request is made, so the caller cannot read the draw it is about to get.
+    ///      That is the whole point: with the old single-call sampling the seed was
+    ///      `blockhash(block.number - 1)`, which every caller could compute one block
+    ///      ahead, so `openResolution` was not a draw at all — it was a choice. A
+    ///      measured attack seated three of five committee seats after waiting ten
+    ///      blocks. Must stay well under 256, the depth beyond which `blockhash`
+    ///      returns zero and the draw has to be requested again.
+    bytes32 internal constant RESOLUTION_DRAW_DELAY = keccak256("RESOLUTION_DRAW_DELAY");
+
+    /// @dev The shortest gap a market may leave between `tradingEnd` and
+    ///      `settlementDeadline`. Governance sets it to exceed commit + reveal + the
+    ///      longest dispute window, because a market whose deadline falls before its
+    ///      own resolution can finish is one that can only ever fail — and failing
+    ///      pays BOTH sides `pᵢ`, which is exactly what a holder of the losing side
+    ///      wants. Read live by `Market.initialize`.
+    bytes32 internal constant MIN_SETTLEMENT_WINDOW = keccak256("MIN_SETTLEMENT_WINDOW");
+
+    /// @dev Extra time, past `settlementDeadline`, before ANYONE may fail a market the
+    ///      committee has already proposed an outcome for. `finalize` is permissionless
+    ///      and free to run throughout it, so the grace period is the window in which
+    ///      the committee's answer beats a stranger's `fail()`. Without it the two
+    ///      raced at the deadline, and the party motivated to win that race is the one
+    ///      holding the losing side.
+    bytes32 internal constant PROPOSED_FAIL_GRACE = keccak256("PROPOSED_FAIL_GRACE");
+
     /// @dev 1 = only a registered Trader agent may buy or sell. Off by default so a
     ///      deployment made before the registry existed is not bricked by an upgrade;
     ///      turning it on is a deliberate governance act.

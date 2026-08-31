@@ -270,7 +270,7 @@ Expected: PASS — 2 lulus.
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "gen:vectors": "npm run gen:vectors -w @hevdev7/protocol"
+    "gen:vectors": "npm run gen:vectors -w @0g-brier/protocol"
   }
 }
 ```
@@ -430,7 +430,7 @@ Expected: FAIL — the `../src/units.js` module is not found.
 
 ```json
 {
-  "name": "@hevdev7/protocol",
+  "name": "@0g-brier/protocol",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -1401,7 +1401,7 @@ export function parseDeployment(raw: unknown, expectedChainId?: number): Deploym
 export function requireContracts(m: DeploymentManifest, names: readonly string[]): void {
   const missing = names.filter((n) => m.contracts[n] === undefined);
   if (missing.length > 0) {
-    throw new Error(`manifest chainId ${m.chainId} kekurangan kontrak: ${missing.join(', ')}`);
+    throw new Error(`manifest chainId ${m.chainId} is missing contracts: ${missing.join(', ')}`);
   }
 }
 
@@ -1607,7 +1607,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 ///
 ///      The properties this library guarantees:
 ///        • Σ pᵢ² = WAD           → pᵢ² is a valid probability distribution
-///        • Σ pᵢ·qᵢ = C(q)        → likuidasi menghabiskan pool secara persis (Euler)
+///        • Σ pᵢ·qᵢ = C(q)        → liquidation exhausts the pool exactly (Euler)
 ///        • C(k·q) = k·C(q)       → proportional liquidity additions are price-neutral
 library DPMMath {
     uint256 internal constant WAD = 1e18;
@@ -5054,7 +5054,7 @@ ci:
 
 Add `coverage ci` to the `.PHONY` line.
 
-- [ ] **Step 3: Run gerbang lengkap secara lokal**
+- [ ] **Step 3: Run the full gate locally**
 
 ```bash
 make ci
@@ -5085,21 +5085,21 @@ Every part of the spec that falls within P0/P1 scope is mapped to the task imple
 | §4.3 | Contoh angka & relasi `L ↔ q` | 11 (`seedShares`) |
 | §4.4 | The rounding policy, the pool set to `costUp`, dust rejected | 6, 12, 13 |
 | §5.1 | The status enum and the per-status operation table | 15 |
-| §6.1 | Peta kontrak & pemisahan upgradeable / pemegang dana | 4, 10, 11, 17 |
+| §6.1 | Contract map & the upgradeable / fund-holding split | 4, 10, 11, 17 |
 | §6.2 | `DPMMath` lengkap termasuk `sharesForSpend` bentuk tertutup | 6, 7, 8 |
 | §6.3 | `IMarket`, seed vs tradable shares, fees outside the invariant, the guardian | 11–16 |
 | §6.4 | `MarketFactory.createMarket` + tanda tangan kurator | 17 |
 | §12.1 | Tiga saklar mode + pemeriksaan silang | 2 |
 | §12.2–12.3 | Env and the deployment manifest | 5 |
 | §12.4 | Repo structure | 1 |
-| §13.1 | Tabel risiko kontrak: reentrancy, allowlist collateral, presisi, luapan, `q=0`, front-running, `close()`, sapu, pause | 4, 12 (Step 5), 13–16, 18 |
+| §13.1 | Contract risk table: reentrancy, collateral allowlist, precision, overflow, `q=0`, front-running, `close()`, sweep, pause | 4, 12 (Step 5), 13–16, 18 |
 | §13.3 | Immutable vs UUPS, kewenangan guardian sempit | 4, 11, 17 |
 | §14.1 | INV-1..10 | 18 |
 | §14.2 L1–L2 | Unit tests, invariants, the differential test, the coverage gate | 6–18, 19 |
 | §17 | The default parameter table and the hard bounds | 5 |
 
 **Parts of the spec deliberately OUT of scope here** (and the phase that owns them):
-§7 modul resolusi → P2 · §8 lapisan agent, `AgentAccount`, ERC-7857 → P4 · §9 indexer → P3 ·
+§7 resolution module → P2 · §8 agent layer, `AgentAccount`, ERC-7857 → P4 · §9 indexer → P3 ·
 §10 SDK → P3 · §11 frontend → P5 · §13.2 keamanan ekonomi resolusi → P2 · §14.2 L3–L6 → P3–P6.
 
 Seam points already prepared for the next phases:
@@ -5117,7 +5117,7 @@ attribution is emitted by `AgentAccount`, not by the market.
 | `make fmt-check` | tiap commit | bersih |
 | `make build` | tiap commit | sukses |
 | `make prod` | every commit | succeeds (catches code that only works without `via_ir`) |
-| `make test` | tiap commit | semua hijau |
+| `make test` | every commit | all green |
 | `make vectors && git diff --exit-code` | every commit touching the DPM maths | no diff |
 | `make invariant` | after Task 18 | INV-1..10 green at 512×128 |
 | `make coverage` | setelah Task 19 | `src/core` + `src/math` ≥ 90% baris |

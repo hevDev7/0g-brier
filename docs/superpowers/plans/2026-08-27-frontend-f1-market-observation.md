@@ -6,7 +6,7 @@
 
 **Architecture:** The data layer gains three capabilities (`AGENT_POSITIONS`, `COST_BASIS`, `SETTLEMENT_RECEIPT`) and loses two that were never used (`QUOTE`, `EXECUTE`). Every new panel is a pure presentational component receiving already-resolved data; `MarketView` remains the only place a `Query<T>` is unwrapped. The chart is drawn as SVG with no third-party library.
 
-**Tech Stack:** Next.js 16.3.3, React 19.2.8, TypeScript ^5, Tailwind v4 (CSS-first, no `tailwind.config.js`), TanStack Query 5, Vitest 4 + jsdom + Testing Library, `@hevdev7/protocol` for DPM and decimal conversion.
+**Tech Stack:** Next.js 16.3.3, React 19.2.8, TypeScript ^5, Tailwind v4 (CSS-first, no `tailwind.config.js`), TanStack Query 5, Vitest 4 + jsdom + Testing Library, `@0g-brier/protocol` for DPM and decimal conversion.
 
 **Spec:** `docs/superpowers/specs/2026-08-27-brier-frontend-design.md` (§1 F3, §2, §4.2, §4.3, §6)
 
@@ -19,7 +19,7 @@ Every task is subject to all of the following.
 - **Payout per share is `1/pᵢ`, not `1/Pᵢ`.** There must be no `1/probability` anywhere in the codebase.
 - **Every monetary value is a `bigint`.** No `Number()` on a monetary value, no `parseFloat` on a wad value. One explicit exception: the SVG coordinates in `ProbabilityChart` (Task 2), converted from `bigint` exactly once at the render boundary and never used to compute a displayed value.
 - **Components do not format numbers themselves.** Everything goes through `frontend/src/lib/format.ts`.
-- **Decimal conversion imports `@hevdev7/protocol`.** No `1e12`/`1e18` constant outside `lib/format.ts`.
+- **Decimal conversion imports `@0g-brier/protocol`.** No `1e12`/`1e18` constant outside `lib/format.ts`.
 - **`unavailable` is a member of the `Query<T>` union.** A component that does not handle it must not compile. Never render `0` or `—` for data the current mode cannot know.
 - **Availability is evaluated per row, not per panel** (spec §2). A panel with one unknown row still renders the others.
 - **Tailwind v4.** Theme tokens live in `@theme inline` inside `globals.css`. Do not create a `tailwind.config.js`.
@@ -152,7 +152,7 @@ describe("observation capabilities", () => {
 
 - [ ] **Step 2: Run the tests, confirm they fail**
 
-Run: `npm test -w @hevdev7/frontend -- mock-source`
+Run: `npm test -w @0g-brier/frontend -- mock-source`
 Expected: FAIL — `src.getPositions is not a function`.
 
 - [ ] **Step 3: Perbarui `types.ts`**
@@ -230,7 +230,7 @@ Add two methods to `DataSource`, **and the comment that explains why there is no
 /**
  * The read contract. Note there is no `buy`, no `sell`, no `redeem`, and no
  * `liquidate` here, and that is not an oversight: the human UI only observes
- * (spec §1 F3). All execution lives in `@hevdev7/agent-kit`. This boundary
+ * (spec §1 F3). All execution lives in `@0g-brier/agent-kit`. This boundary
  * is enforced by a test, not merely by convention — see test/write-boundary.test.ts.
  */
 export interface DataSource {
@@ -374,7 +374,7 @@ describe("the data layer does not write to the chain", () => {
 
 - [ ] **Step 7: Run the whole suite**
 
-Run: `npm test -w @hevdev7/frontend && npx tsc --noEmit -p frontend`
+Run: `npm test -w @0g-brier/frontend && npx tsc --noEmit -p frontend`
 Expected: all green. Older tests naming `QUOTE`/`EXECUTE` will fail to compile — fix them by deleting the references, not by restoring the union members.
 
 - [ ] **Step 8: Commit**
@@ -464,7 +464,7 @@ describe("xTicks", () => {
 
 - [ ] **Step 2: Run the tests, confirm they fail**
 
-Run: `npm test -w @hevdev7/frontend -- chart`
+Run: `npm test -w @0g-brier/frontend -- chart`
 Expected: FAIL — the `@/lib/chart` module does not exist.
 
 - [ ] **Step 3: Implementasikan `lib/chart.ts`**
@@ -568,7 +568,7 @@ export function xTicks(
 
 - [ ] **Step 4: Run the tests, confirm they pass**
 
-Run: `npm test -w @hevdev7/frontend -- chart`
+Run: `npm test -w @0g-brier/frontend -- chart`
 Expected: PASS, 7/7.
 
 - [ ] **Step 5: Commit**
@@ -648,7 +648,7 @@ describe("ProbabilityChart", () => {
 
 - [ ] **Step 2: Run the tests, confirm they fail**
 
-Run: `npm test -w @hevdev7/frontend -- probability-chart`
+Run: `npm test -w @0g-brier/frontend -- probability-chart`
 Expected: FAIL — the component does not exist yet.
 
 - [ ] **Step 3: Implementasikan `useCandles.ts`**
@@ -737,7 +737,7 @@ export function ProbabilityChart({candles}: {candles: Candle[]}) {
 
 - [ ] **Step 5: Run the tests, confirm they pass**
 
-Run: `npm test -w @hevdev7/frontend -- probability-chart`
+Run: `npm test -w @0g-brier/frontend -- probability-chart`
 Expected: PASS, 5/5.
 
 - [ ] **Step 6: Commit**
@@ -814,7 +814,7 @@ describe("MarketStats", () => {
 
 - [ ] **Step 2: Run the tests, confirm they fail**
 
-Run: `npm test -w @hevdev7/frontend -- market-stats`
+Run: `npm test -w @0g-brier/frontend -- market-stats`
 Expected: FAIL — the component does not exist yet.
 
 - [ ] **Step 3: Add `formatTimestamp` to `format.ts`**
@@ -834,7 +834,7 @@ export function formatTimestamp(unixSeconds: number): string {
 
 - [ ] **Step 4: Implementasikan `MarketStats.tsx`**
 
-Susun sebagai daftar baris `<Row>` lokal. Volume:
+Lay it out as a list of local `<Row>` lines. Volume:
 
 ```tsx
 function volumeRow(trades: Query<Trade[]>, m: MarketDetail) {
@@ -861,7 +861,7 @@ The other rows: Fee (`formatFeeRate(m.feeBps)`), Liquidity (`formatCollateral(po
 
 - [ ] **Step 5: Run the tests, confirm they pass**
 
-Run: `npm test -w @hevdev7/frontend -- market-stats`
+Run: `npm test -w @0g-brier/frontend -- market-stats`
 Expected: PASS, 4/4.
 
 - [ ] **Step 6: Commit**
@@ -947,7 +947,7 @@ describe("PositionsTable", () => {
 
 - [ ] **Step 2: Run the tests, confirm they fail**
 
-Run: `npm test -w @hevdev7/frontend -- positions-table`
+Run: `npm test -w @0g-brier/frontend -- positions-table`
 
 - [ ] **Step 3: Implementasikan `usePositions.ts`**
 
@@ -1070,7 +1070,7 @@ describe("ResolutionEvidence", () => {
 
 - [ ] **Step 2: Run the tests, confirm they fail**
 
-Run: `npm test -w @hevdev7/frontend -- settlement`
+Run: `npm test -w @0g-brier/frontend -- settlement`
 
 - [ ] **Step 3: Implementasikan `useReceipt.ts`, `FinalOutcome.tsx`, `ResolutionEvidence.tsx`**
 
@@ -1128,7 +1128,7 @@ it("explains an absent capability rather than rendering an empty table", async (
 
 - [ ] **Step 2: Run the tests, confirm they fail**
 
-Run: `npm test -w @hevdev7/frontend -- market-page`
+Run: `npm test -w @0g-brier/frontend -- market-page`
 
 - [ ] **Step 3: Move the quoting engine, do not discard it**
 
@@ -1148,10 +1148,10 @@ Every `Query<T>` is unwrapped through a `switch` function with an explicit retur
 - [ ] **Step 5: Run the whole suite and the build**
 
 ```bash
-npm test -w @hevdev7/frontend && npm test -w @hevdev7/protocol
-npx tsc --noEmit -p frontend && npm run build -w @hevdev7/frontend
+npm test -w @0g-brier/frontend && npm test -w @0g-brier/protocol
+npx tsc --noEmit -p frontend && npm run build -w @0g-brier/frontend
 ```
-Expected: semua hijau; build sukses.
+Expected: all green; the build succeeds.
 
 - [ ] **Step 6: Verify on the production server**
 
@@ -1168,4 +1168,4 @@ git commit -m "feat(frontend): the market page becomes an inspection page; the o
 
 ## Fase berikutnya
 
-F1 is done when the market detail page matches the Delphi reference, entirely from `MockSource`. Next, F2 (`ChainSource` + the market list) requires contract Task 17, which is already finished; F5 (`@hevdev7/agent-kit`) uses the `packages/protocol/src/quote.ts` moved in Task 7 as its reference implementation.
+F1 is done when the market detail page matches the design reference, entirely from `MockSource`. Next, F2 (`ChainSource` + the market list) requires contract Task 17, which is already finished; F5 (`@0g-brier/agent-kit`) uses the `packages/protocol/src/quote.ts` moved in Task 7 as its reference implementation.

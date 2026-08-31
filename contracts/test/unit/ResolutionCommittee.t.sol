@@ -52,7 +52,7 @@ contract ResolutionCommitteeTest is CommitteeFixtures {
 
     function _open() internal returns (Market m) {
         m = _closedMarket();
-        module.openResolution(address(m));
+        _openRound1(address(m));
     }
 
     // ── the ordinary path ─────────────────────────────────────────────────────
@@ -65,11 +65,15 @@ contract ResolutionCommitteeTest is CommitteeFixtures {
         assertEq(module.committeeOf(address(m)).length, 5, "wrong number sampled");
     }
 
+    /// @dev Bound to `requestResolution`, not to the `_openRound1` helper: the status
+    ///      gate lives at the REQUEST step now, and `vm.expectRevert` binds to the very
+    ///      next external call — through the helper it would be consumed there and the
+    ///      helper's remaining two calls would run unguarded.
     function test_aMarketThatHasNotClosedCannotBeResolved() public {
         Market m = _newMarket(SEED); // still Open
         address market = address(m);
         vm.expectRevert(abi.encodeWithSelector(ResolutionModule.MarketNotClosed.selector, market));
-        module.openResolution(market);
+        module.requestResolution(market);
     }
 
     function test_thresholdProposesAndFinalizeSettles() public {

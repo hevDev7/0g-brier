@@ -10,8 +10,8 @@
  * second is 27% higher, which is exactly the direction that hurts anyone who
  * trusted it. This project's own spec draft made that mistake once.
  */
-import {WAD} from "@hevdev7/protocol";
-import {loadDeployment} from "@hevdev7/protocol/node";
+import {WAD} from "@0g-brier/protocol";
+import {loadDeployment} from "@0g-brier/protocol/node";
 import {BrierClient} from "../src/index";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
@@ -51,6 +51,15 @@ if (view.status === "Failed" || view.status === "Voided") {
   console.log(`\nNobody won, so nobody was paid at 1/p. Each side was paid its own`);
   console.log(`marginal price — which is what makes an unanswerable question survivable.`);
   process.exit(0);
+}
+
+// Settled, so there IS a winner. The compound guard at the top cannot prove that to
+// the type checker, and an explicit check beats a cast: were it ever to fire, the
+// client had returned a settled market with no recorded outcome, and saying so is a
+// better answer than indexing a price array with null.
+if (view.winningOutcome === null) {
+  console.log(`  settled, but no outcome was recorded — refusing to guess which side won`);
+  process.exit(1);
 }
 
 const side = view.winningOutcome === 1 ? "YES" : "NO";

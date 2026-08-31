@@ -108,8 +108,6 @@ contract AgentRegistry is
     ///         rendered here any more.
     IAgentCard public card;
 
-
-
     /// @dev ERC-7857 lets a token carry SEVERAL pieces of data. Agents registered
     ///      before this existed carry one, in `Agent.metadataRoot`; `metadataRootOf`
     ///      reads whichever of the two a given agent actually has, so no migration is
@@ -646,8 +644,15 @@ contract AgentRegistry is
         return interfaceId == type(IERC7857).interfaceId || super.supportsInterface(interfaceId);
     }
 
-    /// @dev Both bases declare it; ERC-721's implementation is the one that answers.
-    function ownerOf(uint256 tokenId) public view override(ERC721Upgradeable, IERC7857) returns (address) {
+    /// @dev Three bases declare it now — ERC-721, ERC-7857 and IAgentRegistry, the
+    ///      last so the ResolutionModule can ask who may spend an agent's earnings.
+    ///      ERC-721's implementation is the one that answers all three.
+    function ownerOf(uint256 tokenId)
+        public
+        view
+        override(ERC721Upgradeable, IERC7857, IAgentRegistry)
+        returns (address)
+    {
         return super.ownerOf(tokenId);
     }
 

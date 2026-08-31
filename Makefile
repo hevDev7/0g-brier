@@ -10,5 +10,5 @@ vectors:    ; npm run gen:vectors
 demo:       ; bash scripts/demo-local.sh
 deploy-galileo: ; bash scripts/deploy-galileo.sh
 clean:      ; cd contracts && forge clean
-fe:       ; npm run dev -w @brier/frontend
-fe-build: ; npm run build -w @brier/frontend && npx tsc --noEmit -p frontend
+fe:       ; npm run dev -w @0g-brier/frontend
+fe-build: ; npm run build -w @0g-brier/frontend && npx tsc --noEmit -p frontend

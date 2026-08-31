@@ -73,6 +73,15 @@ contract MarketInvariantsTest is Fixtures {
     function setUp() public virtual {
         _deployBase();
         config.setParam(ConfigKeys.FEE_BPS, _campaignFeeBps());
+        // This campaign runs on a COMPRESSED CLOCK throughout — a 16-hour trading window
+        // where production uses days — so the two windows that gate resolution are
+        // compressed with it. Left at their deployed defaults (3 days and 7 days) the
+        // market could not be created at all, and the permissionless branch of `fail()`
+        // would sit outside every reachable sequence. The RELATION they encode is what
+        // matters and is preserved: a settlement window wide enough to resolve inside,
+        // and a grace period on top of it during which a proposed outcome still wins.
+        config.setParam(ConfigKeys.MIN_SETTLEMENT_WINDOW, 1 hours);
+        config.setParam(ConfigKeys.PROPOSED_FAIL_GRACE, 3 hours);
         m = _newShortWindowMarket();
         handler = new MarketHandler(m, usdc, shares, config, [alice, bob, carol], creator, SEED);
 
@@ -402,6 +411,14 @@ contract MarketInvariantsTest is Fixtures {
         _tradePhase();
         _warpPastTradingEnd();
         _advanceThroughProposedAndDisputed();
+        // A market resting at `Proposed` gets the grace period ON TOP of its deadline
+        // before anyone but the module may fail it, so the clock has to be taken past
+        // that too. Without this the call still lands — through the module-authorised
+        // branch — and the coverage assertion below would pass while covering the wrong
+        // path, which is exactly the failure it exists to catch.
+        if (m.status() == IMarket.Status.Proposed) {
+            vm.warp(m.settlementDeadline() + config.params(ConfigKeys.PROPOSED_FAIL_GRACE));
+        }
         handler.resolve(1); // 1 % 3 == 1 -> fail
         assertEq(uint256(m.status()), uint256(IMarket.Status.Failed), "fail did not happen");
 
@@ -414,9 +431,10 @@ contract MarketInvariantsTest is Fixtures {
 
         _assertTradingCoverage();
         assertGt(handler.callsFail(), 0, "fail never landed");
-        // `_warpPastTradingEnd` lands exactly on `settlementDeadline` (8h window + 4×3h), so this
-        // path takes the PERMISSIONLESS branch of `fail()` — the one a real deployment falls back
-        // on when the committee never reports. The module-authorised branch is covered by
+        // `_warpPastTradingEnd` lands exactly on `settlementDeadline` (8h window + 4×3h), and the
+        // warp above carries a proposed market past its grace period, so this path takes the
+        // PERMISSIONLESS branch of `fail()` — the one a real deployment falls back on when the
+        // committee never reports. The module-authorised branch is covered by
         // `MarketLifecycleTest.test_anyoneCanFailAfterSettlementDeadline` and by the random
         // campaign, which reaches `fail` before the deadline too.
         assertEq(handler.callsFailPermissionless(), handler.callsFail(), "fail did not take the permissionless path");

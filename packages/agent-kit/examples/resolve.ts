@@ -27,11 +27,11 @@
  * §7.4 it falls through to UNRESOLVABLE, because an unverified answer is not
  * evidence and guessing is worse than abstaining.
  */
-import {createPublicClient, createWalletClient, defineChain, http, keccak256, encodeAbiParameters} from "viem";
+import {createPublicClient, createWalletClient, defineChain, encodeAbiParameters, http, keccak256, parseAbiParameters} from "viem";
 import {privateKeyToAccount} from "viem/accounts";
-import {loadDeployment} from "@hevdev7/protocol/node";
-import {networkFor} from "@hevdev7/protocol";
-import {ZgStore} from "@hevdev7/zg-storage";
+import {loadDeployment} from "@0g-brier/protocol/node";
+import {networkFor} from "@0g-brier/protocol";
+import {ZgStore} from "@0g-brier/zg-storage";
 import {
   ZgInference,
   gatherEvidence,
@@ -67,7 +67,23 @@ const chain = defineChain({
 const pub = createPublicClient({chain, transport: http(net.rpcUrl)});
 
 const MODULE_ABI = [
+  {type: "function", name: "requestResolution", stateMutability: "nonpayable", inputs: [{type: "address"}], outputs: []},
   {type: "function", name: "openResolution", stateMutability: "nonpayable", inputs: [{type: "address"}], outputs: []},
+  {
+    type: "function",
+    name: "drawOf",
+    stateMutability: "view",
+    inputs: [{type: "address"}],
+    outputs: [
+      {
+        type: "tuple",
+        components: [
+          {name: "drawBlock", type: "uint64"},
+          {name: "index", type: "uint8"},
+        ],
+      },
+    ],
+  },
   {
     type: "function",
     name: "commitVote",
@@ -126,19 +142,26 @@ const committee: {agentId: number; operator: `0x${string}`; index: number}[] = J
 );
 
 /**
- * Derived exactly as `scripts/setup-committee.sh` derives them:
- * `keccak256(deployerKey ‖ bytes32(index))`.
+ * `keccak256(abi.encode(deployerKey, "brier-resolver", index))`.
  *
- * The subtlety is that `cast to-bytes32 1` yields `0x1000…0000`, RIGHT-padded — it
- * treats its argument as a hex string, not as a number. Left-padding it here, which
- * is what one writes by reflex, produces a different key and a different address,
- * and the failure surfaces as `NotOperator` on a committee whose members look
- * perfectly correct.
+ * ONE derivation, shared with `scripts/committee-run.mjs`. There used to be two:
+ * this file matched `setup-committee.sh` (`keccak256(deployerKey ‖ bytes32(i))`)
+ * while `committee-run.mjs` used the tagged form above. Both were internally
+ * consistent and mutually useless — resolvers registered by one script could
+ * not be signed for by the other, and the failure surfaced as a commit reverting
+ * on a committee whose members looked perfectly correct. The tagged form wins
+ * because it is domain-separated: a raw concatenation of a key and a counter is
+ * the kind of thing that collides with some other scheme derived from the same
+ * secret, and a tag costs nothing.
  */
 function operatorKey(index: number): `0x${string}` {
-  const hex = index.toString(16);
-  const padded = hex + "0".repeat(64 - hex.length);
-  return keccak256(`${KEY}${padded}` as `0x${string}`);
+  return keccak256(
+    encodeAbiParameters(parseAbiParameters("bytes32, string, uint256"), [
+      KEY as `0x${string}`,
+      "brier-resolver",
+      BigInt(index),
+    ]),
+  );
 }
 
 async function send(pk: `0x${string}`, functionName: string, args: readonly unknown[]) {
@@ -195,10 +218,35 @@ if (!spec?.question || !spec.rules) throw new Error(`no readable MarketSpec at $
 console.log(`market   ${MARKET}`);
 console.log(`question ${spec.question}`);
 
-if ((await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "status"})) === 1) {
-  console.log(`\nopening the resolution`);
-  await send(KEY, "openResolution", [MARKET]);
-}
+  // Closed, and possibly already opened by somebody else. The keeper opens a
+  // round the moment a market closes, so by the time a resolver arrives the
+  // committee is usually already sampled — and `openResolution` reverts with
+  // `RoundAlreadyOpen` rather than being idempotent. Joining is the normal path
+  // now; opening is the exception, for a market nothing else has reached.
+  //
+  // Opening is TWO CALLS: ask for a committee, wait for the block that seeds it to
+  // be mined, then draw. The wait is the security property — the seed is the hash of
+  // a block that does not exist when the request goes in, so nobody can look at the
+  // committee they are about to get and decide whether to accept it.
+  if ((await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "status"})) === 1) {
+    const round = await pub.readContract({address: MODULE, abi: MODULE_ABI, functionName: "roundOf", args: [MARKET]});
+    if (round.n === 0) {
+      let draw = await pub.readContract({address: MODULE, abi: MODULE_ABI, functionName: "drawOf", args: [MARKET]});
+      if (draw.drawBlock === 0n) {
+        console.log(`\nasking for a committee`);
+        await send(KEY, "requestResolution", [MARKET]);
+        draw = await pub.readContract({address: MODULE, abi: MODULE_ABI, functionName: "drawOf", args: [MARKET]});
+      }
+      while ((await pub.getBlockNumber()) <= draw.drawBlock) {
+        console.log(`  waiting for block ${draw.drawBlock} to seed the draw`);
+        await new Promise((r) => setTimeout(r, 2_000));
+      }
+      console.log(`drawing the committee from the hash of block ${draw.drawBlock}`);
+      await send(KEY, "openResolution", [MARKET]);
+    } else {
+      console.log(`\njoining the round already open (${round.commits} commits, ${round.reveals} reveals)`);
+    }
+  }
 
 const members = await pub.readContract({address: MODULE, abi: MODULE_ABI, functionName: "committeeOf", args: [MARKET]});
 console.log(`committee ${members.map(String).join(", ")}`);

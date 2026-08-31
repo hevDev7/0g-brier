@@ -71,6 +71,29 @@ abstract contract CommitteeFixtures is Fixtures, ERC721Holder {
         m.close();
     }
 
+    /// @dev The two-phase draw, as a keeper performs it: ask, wait out
+    ///      `RESOLUTION_DRAW_DELAY`, then open. Sampling cannot happen in one call —
+    ///      a seed the caller can read before it commits is a seed the caller chooses.
+    function _openRound1(address market) internal {
+        module.requestResolution(market);
+        _rollPastDraw(market);
+        module.openResolution(market);
+    }
+
+    function _openRound2(address market) internal {
+        _rollPastDraw(market);
+        module.openDisputeRound(market);
+    }
+
+    /// @dev Rolls to one block past the draw block, giving that block a hash. Foundry
+    ///      leaves `blockhash` zero for blocks it never mined, and a zero seed is the
+    ///      one value `_consumeDraw` refuses.
+    function _rollPastDraw(address market) internal {
+        uint64 drawBlock = module.drawOf(market).drawBlock;
+        vm.roll(drawBlock + 1);
+        vm.setBlockhash(drawBlock, keccak256(abi.encode("draw", market, drawBlock)));
+    }
+
     function _commitment(address market, uint8 outcome, bytes32 salt, bytes32 receipt, address who)
         internal
         pure

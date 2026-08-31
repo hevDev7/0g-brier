@@ -10,5 +10,9 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src", "test", "scripts"]
+  // `examples` is in here deliberately. The mainnet runbook tells operators to run
+  // `examples/keeper.ts`, so it is operational code, and leaving it outside the
+  // typecheck meant the one script a deployment actually depends on was the one
+  // nothing checked.
+  "include": ["src", "test", "scripts", "examples"]
 }

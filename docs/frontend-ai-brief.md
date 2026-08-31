@@ -126,7 +126,7 @@ All DPM math is wad (1e18). Collateral is 6 decimals. **No `Number()`, no `parse
 Double precision cannot represent a wad value, and a silent rounding on money is not acceptable.
 
 - Convert only at the token boundary, only with `toWad` / `toTokensFloor` / `toTokensCeil` from
-  `@hevdev7/protocol`. Never write a `1e12` or `10n ** 12n` of your own.
+  `@0g-brier/protocol`. Never write a `1e12` or `10n ** 12n` of your own.
 - Money **in** rounds up (`toTokensCeil`), money **out** rounds down (`toTokensFloor`). A pool
   depth reading is money out — it must never overstate what backs the market.
 - Every displayed number goes through `lib/format.ts`. If you need a format that does not exist
@@ -500,7 +500,7 @@ detail page's title should name the market.
   with `--bg`/`--text`/`--accent`), no Recharts or visx (they take `number`, and wad values must not
   become floats), no framer-motion, no icon package unless you inline the handful of SVGs you need.
   Charts are hand-rolled SVG built from `lib/chart.ts`, which is pure arithmetic and unit-tested.
-- **`@hevdev7/protocol` is the single copy of the DPM math**, pinned to `DPMMath.sol` by a
+- **`@0g-brier/protocol` is the single copy of the DPM math**, pinned to `DPMMath.sol` by a
   512-vector differential test and shared with the agent SDK. Import it. Adding modules to it is
   fine; **changing its arithmetic or reimplementing any of it in the frontend is not.** Two copies
   of the payout formula is the easiest way to make the screen and the agents disagree.
@@ -546,53 +546,31 @@ That enforces L3 at the level of behaviour, not just of types. Every route you b
   which is not assignable to `React.JSX.Element` — so deleting a `case` fails to compile (TS2366).
   Without the annotation TypeScript quietly infers `| undefined` and the guarantee evaporates.
 
-### 9.4 Language migration — do this deliberately, in one commit per surface
+### 9.4 Language — English throughout, and the migration that got it there
 
 Repo convention (`CLAUDE.md`) is **English throughout** — comments, JSDoc, test names, UI copy — and
-locale formatting is `en-US`. The frontend predates that decision and is still Indonesian. Anything
-you touch, you translate; you do **not** match the surrounding language.
+locale formatting is `en-US`.
 
-The catch: **several tests assert Indonesian UI strings.** Translating copy without updating them
-turns a green suite red for the wrong reason. Translate copy and its assertions in the same change.
+**This translation is done.** The frontend was Indonesian when this brief was written and was
+converted wholesale; as of 2026-08-31 no Indonesian string remains in `frontend/src` or
+`frontend/test`, `lang` is `"en"`, and every locale call is `en-US`. What used to stand here was an
+inventory of surfaces and of the tests that asserted Indonesian copy — a work order, kept in the
+present tense, which went on telling readers the UI "is still Indonesian" long after it was not.
 
-Surfaces still in Indonesian:
+The rule it existed to serve is the part worth keeping, and it still applies to anything you add:
+**write English, and translate copy and its assertions in the same change.** Several tests assert
+UI strings verbatim, so changing copy without them turns a green suite red for the wrong reason.
 
-| File | What |
-|---|---|
-| `src/app/layout.tsx` | `lang="id"` → `"en"`; metadata description |
-| `src/app/page.tsx` | all copy |
-| `src/app/market/[address]/MarketView.tsx` | loading/error strings, "Aturan penyelesaian", "tutup dalam" |
-| `src/components/primitives/Unavailable.tsx` | the `LABELS` map and the sentence |
-| `src/components/market/*.tsx` | table headers, panel headings, empty states |
-| `src/components/settlement/*.tsx` | headings, the simulated banner |
-| `src/lib/format.ts` | `toLocaleString("id-ID")` → `"en-US"`; `formatCountdown` units (`h`/`j`/`m` → `d`/`h`/`m`) and `"tutup"` → `"closed"` |
-| `src/lib/chart.ts` | `toLocaleDateString("id-ID")` → `"en-US"` |
-| `src/lib/data/types.ts` | `CapabilityUnavailableError` message; all doc comments |
-| `src/lib/data/mock.ts` | fixture questions, rules, resolver reasoning, comments |
-| `test/*.test.ts(x)` | `describe`/`it` names and every asserted string |
-
-Tests asserting Indonesian copy today — verified, not guessed:
-
-| Test | Asserted string |
-|---|---|
-| `market-page.test.tsx:48` | `/beli\|jual\|approve\|setujui/i` (the no-execution-controls guard) |
-| `market-page.test.tsx:66,73,81` | `/posisi agent.*tidak tersedia/i`, `/riwayat transaksi.*tidak tersedia/i`, `/riwayat harga.*tidak tersedia/i` |
-| `market-stats.test.tsx:26-28` | `/tidak tersedia/i` present on `stat-volume`, absent on `stat-fee` / `stat-liquidity` |
-| `positions-table.test.tsx:40,42` | `/tidak tersedia/i` present on `entry`, absent on `current` |
-| `market-panels.test.tsx:41` | `/jual kapan saja/i` — the dilution disclosure. Keep its meaning when translating |
-| `format.test.ts:89-91` | `formatCountdown(0) === "tutup"` |
-| `primitives.test.tsx:131-134` | `Countdown` renders `"tutup"` once elapsed |
-
-Keep the fixture *content* plausible when you translate it — the settled market's `criteria`,
-`reasoning`, and `sources` must keep referring to the euro-area HICP question they belong to. It is
-the only market whose receipt is reachable, so an off-topic receipt there will never be masked by
-another market.
+One thing the migration had to get right, and that any edit to the fixtures still has to: the
+settled market's `criteria`, `reasoning`, and `sources` must keep referring to the euro-area HICP
+question they belong to. It is the only market whose receipt is reachable, so an off-topic receipt
+there would never be masked by another market.
 
 ---
 
 ## 10. Self-check — numbers you must reproduce
 
-Computed from the live fixtures via `@hevdev7/protocol`. If your UI disagrees with any of these,
+Computed from the live fixtures via `@0g-brier/protocol`. If your UI disagrees with any of these,
 you have the probability/payout confusion described in L1.
 
 **Market 1 — `0x1111…1111`, Open, `q = [1000, 1200]` (NO, YES)**
@@ -635,7 +613,7 @@ your tape and your panel disagree, the bug is in your rendering, not in the data
 | Add a buy/sell/redeem/approve/connect control, even disabled | Violates the product's core separation; fails tests |
 | Add a signer, `wagmi`, or a `viem` write path | Same |
 | `Number()` / `parseFloat` / `.toFixed()` on money | wad is not representable in double |
-| Write your own `1e12` or decimal conversion | `@hevdev7/protocol` has the correct rounding directions |
+| Write your own `1e12` or decimal conversion | `@0g-brier/protocol` has the correct rounding directions |
 | Format a number inside a component | Formatting must be identical across screens |
 | Reimplement DPM math in the frontend | Two copies make the screen and the agents disagree |
 | Create `tailwind.config.js` | Tailwind v4 is CSS-first here |

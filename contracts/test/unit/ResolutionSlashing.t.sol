@@ -20,7 +20,7 @@ contract ResolutionSlashingTest is CommitteeFixtures {
 
     function _open() internal returns (Market m) {
         m = _closedMarket();
-        module.openResolution(address(m));
+        _openRound1(address(m));
     }
 
     function _commit(address market, uint256 id, uint8 outcome) internal {
@@ -86,6 +86,12 @@ contract ResolutionSlashingTest is CommitteeFixtures {
         usdc.approve(address(module), 50e6);
         module.dispute(address(m), keccak256("evidence"));
         vm.stopPrank();
+
+        // The dispute posts the bond and ASKS for a committee; the draw itself is a
+        // separate call at a block that did not exist yet. Sampling inside the
+        // challenger's own transaction is what let a challenger pick the round that
+        // would review the round it was challenging.
+        _openRound2(address(m));
     }
 
     /// @dev A cartel that could re-sample itself into the round reviewing its own work
@@ -112,7 +118,10 @@ contract ResolutionSlashingTest is CommitteeFixtures {
         uint256 aliceBefore = usdc.balanceOf(alice);
 
         _committeeAgrees(market, Outcomes.NO); // round 2 reverses round 1
-        vm.warp(module.roundOf(market).disputeDeadline + 1);
+        // The REVEAL deadline, not the dispute one: round 2 has no dispute window and
+        // now always waits its reveal window out, so that the tally is visible to
+        // everyone before it takes effect rather than only to the members casting it.
+        vm.warp(module.roundOf(market).revealDeadline + 1);
         module.finalize(market);
 
         assertEq(m.winningOutcome(), Outcomes.NO, "the reversed outcome did not stand");
@@ -130,7 +139,7 @@ contract ResolutionSlashingTest is CommitteeFixtures {
         uint256 aliceBefore = usdc.balanceOf(alice);
 
         _committeeAgrees(market, Outcomes.YES); // round 2 confirms round 1
-        vm.warp(module.roundOf(market).disputeDeadline + 1);
+        vm.warp(module.roundOf(market).revealDeadline + 1);
         module.finalize(market);
 
         assertEq(m.winningOutcome(), Outcomes.YES, "the confirmed outcome did not stand");

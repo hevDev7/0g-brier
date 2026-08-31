@@ -447,7 +447,15 @@ contract MarketHandler is CommonBase, StdCheats, StdUtils {
             // pranked the module, so the permissionless branch — the one a real deployment
             // relies on when the committee goes dark, and the one that snapshots the
             // liquidation prices and distributes the fees — was never executed statefully.
-            bool permissionless = block.timestamp >= market.settlementDeadline();
+            // A market whose committee has ALREADY proposed an outcome gets a grace
+            // period on top of its deadline, and only the module may fail it inside
+            // that window — see the note in `Market.fail`. The handler has to model
+            // that rule, or it predicts a landing the contract correctly refuses and
+            // `invariant_handlerCallsLandAsPredicted` fires on the handler's error
+            // rather than on the protocol's.
+            uint256 failOpensAt = market.settlementDeadline();
+            if (s == IMarket.Status.Proposed) failOpensAt += config.params(ConfigKeys.PROPOSED_FAIL_GRACE);
+            bool permissionless = block.timestamp >= failOpensAt;
             vm.prank(permissionless ? traders[seed % 3] : resolutionModule);
             try market.fail() {
                 ++callsFail;

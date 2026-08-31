@@ -41,9 +41,10 @@ export default function ParametersPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {[
-                ["FAST", "1 resolver", "24 hours"],
+                ["FAST", "3 of 5 must agree", "24 hours"],
                 ["VERIFIED", "3 of 5 must agree", "6 hours"],
                 ["DETERMINISTIC", "2 of 3 must agree", "2 hours"],
+                ["dispute round", "6 of 9 must agree", "—"],
               ].map(([tier, cttee, window]) => (
                 <tr key={tier}>
                   <td className="px-4 py-3 font-mono font-medium whitespace-nowrap text-text">{tier}</td>
@@ -57,9 +58,10 @@ export default function ParametersPage() {
 
         <Note kind="warn" title="The dispute window runs backwards from the obvious guess">
           FAST has the LONGEST window and VERIFIED the shortest, which reads wrong until you see what the
-          window is for. It is time to challenge a result, and the weakest evidence needs the most of it — a
-          single resolver with no attestation gets a full day to be contradicted, while a settlement carrying
-          TEE attestation from a committee of five needs six hours. Reading it the other way round would
+          window is for. It is time to challenge a result, and the weakest evidence needs the most of it — an
+          unattested settlement gets a full day to be contradicted, while one carrying TEE attestation needs
+          six hours. The two tiers seat the same committee; what separates them is the evidence behind the
+          answer and the time anyone gets to argue with it. Reading it the other way round would
           remove protection exactly where it is thinnest.
         </Note>
 

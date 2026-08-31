@@ -26,9 +26,21 @@ export default function SettlementPage() {
 
         <Step n={2} title="A committee is drawn">
           <p>
-            <C>openResolution</C> samples the resolvers, and the market must already be Closed. How many are
-            drawn and how many must agree comes from the tier: one for FAST, three of five for VERIFIED, two of
-            three for DETERMINISTIC.
+            Drawing one takes <strong>two calls</strong>. <C>requestResolution</C> books a block a little way
+            ahead; <C>openResolution</C> draws the committee from that block&rsquo;s hash once it has been
+            mined. Both are permissionless, and the market must already be Closed.
+          </p>
+          <p>
+            The gap between them is the point. Seed the draw from a block that already exists and the caller
+            can compute the committee before deciding whether to send the transaction — so it simply waits for
+            a draw it likes, and sampling becomes selection. A block that has not been mined yet cannot be
+            read by anybody, the caller included.
+          </p>
+          <p>
+            How many are drawn and how many must agree comes from the tier: three of five for FAST and for
+            VERIFIED, two of three for DETERMINISTIC. A dispute round is six of nine. Every shape is a
+            majority of a committee of at least three — a threshold at or below half could be cleared by two
+            different answers at once.
           </p>
           <p>
             Sampling is weighted by <strong>active stake</strong> — bonded, and not already under notice of

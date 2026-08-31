@@ -42,6 +42,10 @@ abstract contract Fixtures is Test {
     uint256 internal constant SEED = 1_000e6;
     uint256 internal constant DEPOSIT = 20e6;
     uint64 internal constant TRADING_WINDOW = 7 days;
+    /// @dev Wider than `MIN_SETTLEMENT_WINDOW` (3 days). The fixture used to leave one
+    ///      day, which `Market.initialize` now refuses: a market whose deadline falls
+    ///      before its own committee can finish is one that can only ever fail.
+    uint64 internal constant SETTLEMENT_WINDOW = 4 days;
 
     function _deployBase() internal {
         usdc = new MockUSDC();
@@ -69,7 +73,7 @@ abstract contract Fixtures is Test {
         p.creator = creator;
         p.creatorAgentId = 1;
         p.tradingEnd = uint64(block.timestamp) + TRADING_WINDOW;
-        p.settlementDeadline = uint64(block.timestamp) + TRADING_WINDOW + 1 days;
+        p.settlementDeadline = uint64(block.timestamp) + TRADING_WINDOW + SETTLEMENT_WINDOW;
         p.tier = 1;
         p.specRoot = keccak256("spec");
         p.category = bytes32("crypto");

@@ -4,9 +4,9 @@
 
 **Goal:** `npm run dev -w frontend` comes up and `/market/0x…` renders a complete, clickable market detail page — the probability panel, the running payout panel, the order ticket, the trade tape — entirely from fixtures, with no anvil and no deployed market needed.
 
-**Architecture:** A Next.js 16 (App Router) application as a third npm workspace. All data flows through a single `DataSource` interface; F0 implements only `MockSource`, and components never know which mode is active. The probability and payout maths comes from `@hevdev7/protocol` — the TypeScript mirror already pinned to `DPMMath.sol` by a 512-vector differential test — so the numbers on screen come from the same source as the numbers on chain.
+**Architecture:** A Next.js 16 (App Router) application as a third npm workspace. All data flows through a single `DataSource` interface; F0 implements only `MockSource`, and components never know which mode is active. The probability and payout maths comes from `@0g-brier/protocol` — the TypeScript mirror already pinned to `DPMMath.sol` by a 512-vector differential test — so the numbers on screen come from the same source as the numbers on chain.
 
-**Tech Stack:** Next.js 16.3.3 (App Router) · React 19.2.8 · TypeScript ^5 · Tailwind CSS v4 (CSS-first, `@theme inline`) · TanStack Query 5 · Vitest 4 + Testing Library · `@hevdev7/protocol` (workspace)
+**Tech Stack:** Next.js 16.3.3 (App Router) · React 19.2.8 · TypeScript ^5 · Tailwind CSS v4 (CSS-first, `@theme inline`) · TanStack Query 5 · Vitest 4 + Testing Library · `@0g-brier/protocol` (workspace)
 
 **Spec:** `docs/superpowers/specs/2026-08-27-brier-frontend-design.md`
 
@@ -18,7 +18,7 @@
 - **Tailwind v4 does not use a `tailwind.config.js`.** Theme tokens are defined in CSS through `@theme inline`, and dark mode through `@custom-variant`. Do not create a Tailwind JS config file.
 - **Probability is `pᵢ²`.** Every value labelled `%` comes from `dpm.probability`. No `dpm.price` may be labelled as a percentage.
 - **Payout per share is `1/pᵢ`, not `1/Pᵢ`.** Every value labelled `×` comes from `1/dpm.price`. **There must be no `1/probability` anywhere in the codebase.**
-- **Decimal conversion imports `@hevdev7/protocol`** (`WAD`, `scaleFor`, `toWad`, `toTokensFloor`, `toTokensCeil`). The frontend must not have its own `1e12` or `1e18` constants outside `lib/format.ts`.
+- **Decimal conversion imports `@0g-brier/protocol`** (`WAD`, `scaleFor`, `toWad`, `toTokensFloor`, `toTokensCeil`). The frontend must not have its own `1e12` or `1e18` constants outside `lib/format.ts`.
 - **Every number is held as a `bigint`.** No `Number()` on a monetary value, no `parseFloat` on a wad value. Formatting goes from `bigint` to string directly.
 - **`unavailable` is a member of the `Query<T>` union.** A component that does not handle it must not compile. Never render `0` or `—` for data the current mode cannot know.
 - All tests green before committing; `npx tsc --noEmit` clean; Conventional Commits; one commit per task.
@@ -37,7 +37,7 @@
 
 ```
 frontend/
-├─ package.json                    workspace ketiga: @hevdev7/frontend
+├─ package.json                    workspace ketiga: @0g-brier/frontend
 ├─ next.config.ts                  transpilePackages for the TS workspace package
 ├─ postcss.config.mjs              @tailwindcss/postcss
 ├─ tsconfig.json                   alias @/*
@@ -78,8 +78,8 @@ frontend/
 - Modify: `package.json` (root), `frontend/package.json`, `frontend/next.config.ts`, `.github/workflows/ci.yml`, `Makefile`
 
 **Interfaces:**
-- Consumes: `@hevdev7/protocol` (`WAD`, `toWad`, `toTokensFloor`, `toTokensCeil`, `dpm`)
-- Produces: the `@hevdev7/frontend` workspace with `dev`/`build`/`test`/`typecheck`; a cross-workspace import proven to work
+- Consumes: `@0g-brier/protocol` (`WAD`, `toWad`, `toTokensFloor`, `toTokensCeil`, `dpm`)
+- Produces: the `@0g-brier/frontend` workspace with `dev`/`build`/`test`/`typecheck`; a cross-workspace import proven to work
 
 - [ ] **Step 1: Scaffold aplikasi**
 
@@ -118,7 +118,7 @@ to:
 
 - [ ] **Step 3: Name the package and add the scripts**
 
-In `frontend/package.json`, change `"name"` to `"@hevdev7/frontend"` and replace the `"scripts"` block with:
+In `frontend/package.json`, change `"name"` to `"@0g-brier/frontend"` and replace the `"scripts"` block with:
 
 ```json
   "scripts": {
@@ -131,10 +131,10 @@ In `frontend/package.json`, change `"name"` to `"@hevdev7/frontend"` and replace
   },
 ```
 
-Add `@hevdev7/protocol` to `"dependencies"`:
+Add `@0g-brier/protocol` to `"dependencies"`:
 
 ```json
-    "@hevdev7/protocol": "*",
+    "@0g-brier/protocol": "*",
 ```
 
 and add to `"devDependencies"`:
@@ -150,15 +150,15 @@ and add to `"devDependencies"`:
 
 - [ ] **Step 4: Ajarkan Next mentranspilasi paket workspace**
 
-`@hevdev7/protocol` publishes raw TypeScript (`"main": "./src/index.ts"`), so Next must transpile it. Change `frontend/next.config.ts` to:
+`@0g-brier/protocol` publishes raw TypeScript (`"main": "./src/index.ts"`), so Next must transpile it. Change `frontend/next.config.ts` to:
 
 ```ts
 import type {NextConfig} from "next";
 
 const nextConfig: NextConfig = {
-  // @hevdev7/protocol exports raw .ts, not compiled JS. Without this, the
+  // @0g-brier/protocol exports raw .ts, not compiled JS. Without this, the
   // build fails when importing the DPM mirror.
-  transpilePackages: ["@hevdev7/protocol"],
+  transpilePackages: ["@0g-brier/protocol"],
 };
 
 export default nextConfig;
@@ -200,10 +200,10 @@ This is not a formality test. It proves the thing most likely to break in a mono
 
 ```ts
 import {describe, expect, it} from "vitest";
-import {WAD, dpm} from "@hevdev7/protocol";
+import {WAD, dpm} from "@0g-brier/protocol";
 
 describe("integrasi workspace", () => {
-  it("imports WAD from @hevdev7/protocol", () => {
+  it("imports WAD from @0g-brier/protocol", () => {
     expect(WAD).toBe(1_000_000_000_000_000_000n);
   });
 
@@ -226,7 +226,7 @@ describe("integrasi workspace", () => {
 
 ```bash
 npm install
-npm test -w @hevdev7/frontend
+npm test -w @0g-brier/frontend
 npx tsc --noEmit -p frontend
 ```
 Expected: 3 tests pass, tsc clean.
@@ -247,14 +247,14 @@ In `.github/workflows/ci.yml`, inside the `typescript` job, after the `npm test 
       - name: typecheck frontend
         run: npx tsc --noEmit -p frontend
       - name: build frontend
-        run: npm run build -w @hevdev7/frontend
+        run: npm run build -w @0g-brier/frontend
 ```
 
 In the `Makefile`, add the targets and include `fe fe-build` on the `.PHONY` line:
 
 ```makefile
-fe:       ; npm run dev -w @hevdev7/frontend
-fe-build: ; npm run build -w @hevdev7/frontend && npx tsc --noEmit -p frontend
+fe:       ; npm run dev -w @0g-brier/frontend
+fe-build: ; npm run build -w @0g-brier/frontend && npx tsc --noEmit -p frontend
 ```
 
 - [ ] **Step 10: Commit**
@@ -274,7 +274,7 @@ git commit -m "feat(frontend): Next.js 16 workspace with a proven cross-workspac
 - Test: `frontend/test/format.test.ts`
 
 **Interfaces:**
-- Consumes: `WAD` from `@hevdev7/protocol`
+- Consumes: `WAD` from `@0g-brier/protocol`
 - Produces: `formatProbability(probWad)`, `formatProbabilityDelta(fromWad, toWad)`, `formatPayout(payoutWad)`, `formatCollateral(amount, decimals)`, `formatShares(sharesWad)`, `formatPricePerShare(priceWad)`, `shortAddress(address)`, `formatCountdown(secondsRemaining)`; token CSS `--bg --bg-sunken --border --text --text-muted --text-faint --accent --pos --neg --warn --verified`
 
 - [ ] **Step 1: Write the failing tests**
@@ -365,7 +365,7 @@ describe("formatCountdown", () => {
 - [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
-npm test -w @hevdev7/frontend
+npm test -w @0g-brier/frontend
 ```
 Expected: FAIL — the `@/lib/format` module is not found.
 
@@ -449,7 +449,7 @@ export function formatCountdown(secondsRemaining: number): string {
 - [ ] **Step 4: Run them and confirm they pass**
 
 ```bash
-npm test -w @hevdev7/frontend
+npm test -w @0g-brier/frontend
 ```
 Expected: PASS — 14 lulus (3 asap + 11 format).
 
@@ -550,7 +550,7 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
 - [ ] **Step 7: Verify build masih bersih**
 
 ```bash
-npm run build -w @hevdev7/frontend && npx tsc --noEmit -p frontend
+npm run build -w @0g-brier/frontend && npx tsc --noEmit -p frontend
 ```
 Expected: the build succeeds, tsc clean. If Tailwind complains about `@custom-variant`, check that the `tailwindcss` version really is v4 — that syntax does not exist in v3.
 
@@ -570,7 +570,7 @@ git commit -m "feat(frontend): visual tokens and bigint-based number formatting"
 - Test: `frontend/test/dpm-view.test.ts`, `frontend/test/mock-source.test.ts`
 
 **Interfaces:**
-- Consumes: `WAD`, `dpm` from `@hevdev7/protocol`
+- Consumes: `WAD`, `dpm` from `@0g-brier/protocol`
 - Produces:
   - `probabilityWad(q, outcome)`, `payoutPerShareWad(q, outcome)`, `qAfterBuy(q, outcome, shares)`
   - `type Outcome = 0 | 1`, `DataMode`, `Capability`, `CapabilityUnavailableError`, `Query<T>`, `MarketStatus`, `Tier`, `CollateralInfo`, `MarketSummary`, `MarketDetail`, `Trade`, `Candle`, `DataSource`
@@ -586,7 +586,7 @@ These are the tests that guard the `1/P` versus `1/p` trap from spec §5.1.
 
 ```ts
 import {describe, expect, it} from "vitest";
-import {WAD, dpm} from "@hevdev7/protocol";
+import {WAD, dpm} from "@0g-brier/protocol";
 import {payoutPerShareWad, probabilityWad, qAfterBuy} from "@/lib/dpm-view";
 
 const q: readonly [bigint, bigint] = [1000n * WAD, 1200n * WAD];
@@ -637,7 +637,7 @@ describe("qAfterBuy", () => {
 - [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
-npm test -w @hevdev7/frontend
+npm test -w @0g-brier/frontend
 ```
 Expected: FAIL — the `@/lib/dpm-view` module is not found.
 
@@ -649,7 +649,7 @@ Its contents are in Step 6 below — write that file now, then carry on.
 - [ ] **Step 4: Implementasikan `frontend/src/lib/dpm-view.ts`**
 
 ```ts
-import {WAD, dpm} from "@hevdev7/protocol";
+import {WAD, dpm} from "@0g-brier/protocol";
 import type {Outcome} from "@/lib/data/types";
 
 type Q = readonly [bigint, bigint];
@@ -692,7 +692,7 @@ export function qAfterBuy(q: Q, outcome: Outcome, shares: bigint): Q {
 
 ```ts
 import {beforeEach, describe, expect, it} from "vitest";
-import {dpm} from "@hevdev7/protocol";
+import {dpm} from "@0g-brier/protocol";
 import {MockSource} from "@/lib/data/mock";
 import {CapabilityUnavailableError} from "@/lib/data/types";
 
@@ -879,7 +879,7 @@ export interface DataSource {
 - [ ] **Step 7: Implementasikan `frontend/src/lib/data/mock.ts`**
 
 ```ts
-import {WAD, dpm} from "@hevdev7/protocol";
+import {WAD, dpm} from "@0g-brier/protocol";
 import {
   CapabilityUnavailableError,
   type Candle,
@@ -1066,7 +1066,7 @@ export * from "./types";
 - [ ] **Step 9: Run them and confirm they pass**
 
 ```bash
-npm test -w @hevdev7/frontend && npx tsc --noEmit -p frontend
+npm test -w @0g-brier/frontend && npx tsc --noEmit -p frontend
 ```
 Expected: PASS — 29 lulus (3 asap + 11 format + 7 dpm-view + 8 mock).
 
@@ -1164,7 +1164,7 @@ describe("Stat", () => {
 - [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
-npm test -w @hevdev7/frontend
+npm test -w @0g-brier/frontend
 ```
 Expected: FAIL — the component modules are not found.
 
@@ -1208,7 +1208,7 @@ export function Unavailable({capability, mode}: {capability: Capability; mode: D
 }
 ```
 
-- [ ] **Step 4: Implementasikan empat primitif sisanya**
+- [ ] **Step 4: Implement the four remaining primitives**
 
 `Badge.tsx`:
 
@@ -1295,7 +1295,7 @@ export function Stat({label, value, hint}: {label: string; value: ReactNode; hin
 - [ ] **Step 5: Run them and confirm they pass**
 
 ```bash
-npm test -w @hevdev7/frontend && npx tsc --noEmit -p frontend
+npm test -w @0g-brier/frontend && npx tsc --noEmit -p frontend
 ```
 Expected: PASS — 36 lulus.
 
@@ -1337,7 +1337,7 @@ then `npm install` from the repo root.
 import {renderHook, waitFor} from "@testing-library/react";
 import type {ReactNode} from "react";
 import {describe, expect, it} from "vitest";
-import {WAD} from "@hevdev7/protocol";
+import {WAD} from "@0g-brier/protocol";
 import {AppProviders} from "@/hooks/provider";
 import {useMarket} from "@/hooks/useMarket";
 import {useQuote} from "@/hooks/useQuote";
@@ -1530,7 +1530,7 @@ export function useTrades(address: `0x${string}`, limit: number): Query<Trade[]>
 ```ts
 "use client";
 
-import {WAD, dpm} from "@hevdev7/protocol";
+import {WAD, dpm} from "@0g-brier/protocol";
 import {useMemo} from "react";
 import {payoutPerShareWad, probabilityWad, qAfterBuy} from "@/lib/dpm-view";
 import type {Outcome} from "@/lib/data/types";
@@ -1602,7 +1602,7 @@ export function useQuote(input: {
 - [ ] **Step 6: Run them and confirm they pass**
 
 ```bash
-npm test -w @hevdev7/frontend && npx tsc --noEmit -p frontend
+npm test -w @0g-brier/frontend && npx tsc --noEmit -p frontend
 ```
 Expected: PASS — 43 lulus.
 
@@ -1634,7 +1634,7 @@ git commit -m "feat(frontend): the provider, the data hooks, and local quoting w
 ```tsx
 import {render, screen} from "@testing-library/react";
 import {describe, expect, it} from "vitest";
-import {WAD} from "@hevdev7/protocol";
+import {WAD} from "@0g-brier/protocol";
 import {PayoutPanel} from "@/components/market/PayoutPanel";
 import {ProbabilityPanel} from "@/components/market/ProbabilityPanel";
 
@@ -1680,7 +1680,7 @@ describe("PayoutPanel", () => {
 - [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
-npm test -w @hevdev7/frontend
+npm test -w @0g-brier/frontend
 ```
 Expected: FAIL — the panel modules are not found.
 
@@ -1731,7 +1731,7 @@ export function PayoutPanel({q}: {q: readonly [bigint, bigint]}) {
         {([1, 0] as const).map((outcome) => (
           <div key={outcome} className="flex items-baseline justify-between">
             <span className="text-[13px] text-text-muted">
-              Payout jika {outcome === 1 ? "YES" : "NO"} menang
+              Payout if {outcome === 1 ? "YES" : "NO"} wins
             </span>
             <span className="text-[15px] text-text">
               {formatPayout(payoutPerShareWad(q, outcome))} per share
@@ -1751,7 +1751,7 @@ export function PayoutPanel({q}: {q: readonly [bigint, bigint]}) {
 - [ ] **Step 5: Run them and confirm they pass**
 
 ```bash
-npm test -w @hevdev7/frontend && npx tsc --noEmit -p frontend
+npm test -w @0g-brier/frontend && npx tsc --noEmit -p frontend
 ```
 Expected: PASS — 48 lulus.
 
@@ -1868,7 +1868,7 @@ Add `@testing-library/user-event` to the frontend's `devDependencies`:
 - [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
-npm install && npm test -w @hevdev7/frontend
+npm install && npm test -w @0g-brier/frontend
 ```
 Expected: FAIL — the `OrderTicket` module is not found.
 
@@ -1878,7 +1878,7 @@ Expected: FAIL — the `OrderTicket` module is not found.
 "use client";
 
 import {useState} from "react";
-import {toTokensCeil, toWad} from "@hevdev7/protocol";
+import {toTokensCeil, toWad} from "@0g-brier/protocol";
 import {useDataSource} from "@/hooks/provider";
 import {useQuote} from "@/hooks/useQuote";
 import {
@@ -1973,7 +1973,7 @@ export function OrderTicket({market}: {market: MarketDetail}) {
             </span>
           </div>
 
-          <Row label="Payout jika menang">
+          <Row label="Payout if it wins">
             <span>
               <span data-testid="payout-before">{formatPayout(quote.payoutBeforeWad)}</span>
               <span className="mx-1.5 text-text-faint">→</span>
@@ -2020,7 +2020,7 @@ function Row({label, children}: {label: string; children: React.ReactNode}) {
 - [ ] **Step 4: Run them and confirm they pass**
 
 ```bash
-npm test -w @hevdev7/frontend && npx tsc --noEmit -p frontend
+npm test -w @0g-brier/frontend && npx tsc --noEmit -p frontend
 ```
 Expected: PASS — 55 lulus.
 
@@ -2096,7 +2096,7 @@ describe("MarketView", () => {
 - [ ] **Step 2: Run them and confirm they fail**
 
 ```bash
-npm test -w @hevdev7/frontend
+npm test -w @0g-brier/frontend
 ```
 Expected: FAIL — the `MarketView` module is not found.
 
@@ -2308,14 +2308,14 @@ export function AppShell({children}: {children: React.ReactNode}) {
 - [ ] **Step 6: Run them and confirm they pass**
 
 ```bash
-npm test -w @hevdev7/frontend && npx tsc --noEmit -p frontend
+npm test -w @0g-brier/frontend && npx tsc --noEmit -p frontend
 ```
 Expected: PASS — 58 lulus.
 
 - [ ] **Step 7: Verify end to end on a real server**
 
 ```bash
-npm run build -w @hevdev7/frontend
+npm run build -w @0g-brier/frontend
 cd frontend && timeout 90 npx next start --port 3100 &
 sleep 20
 curl -s http://127.0.0.1:3100/market/0x1111111111111111111111111111111111111111 > /tmp/market.html
@@ -2348,7 +2348,7 @@ git commit -m "feat(frontend): the complete market page in mock mode"
 | §4.2 the market detail page | 6, 7, 8 |
 | §5.1 probability `pᵢ²`, payout `1/pᵢ` | 3 (the trap tests), 6 (the negative tests in the panels) |
 | §5.2 estimated quotes, binding slippage | 7 (`max-paid`, 0.5%) |
-| §5.3 decimals through `@hevdev7/protocol` | 1 (the import test), 2, 7 |
+| §5.3 decimals through `@0g-brier/protocol` | 1 (the import test), 2, 7 |
 | §6 the anatomy of the order ticket | 7 |
 | §7 sistem visual | 2 |
 | §8 file structure | 1–8 |
@@ -2361,7 +2361,7 @@ git commit -m "feat(frontend): the complete market page in mock mode"
 
 | Command | Must |
 |---|---|
-| `npm test -w @hevdev7/frontend` | 58 lulus |
+| `npm test -w @0g-brier/frontend` | 58 lulus |
 | `npx tsc --noEmit -p frontend` | bersih |
-| `npm run build -w @hevdev7/frontend` | sukses |
+| `npm run build -w @0g-brier/frontend` | sukses |
 | `make fe` | the dev server comes up on :3000 |

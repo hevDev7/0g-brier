@@ -165,8 +165,8 @@ export default function FeaturesPage() {
             sig: "Tiers",
             does: (
               <>
-                FAST is one resolver, VERIFIED three of five, DETERMINISTIC two of three — each with its own
-                dispute window. The{" "}
+                FAST and VERIFIED are both three of five, DETERMINISTIC two of three — what separates the
+                first two is the evidence behind the answer and the length of the dispute window. The{" "}
                 <Link href="/docs/parameters" className={link}>
                   current values
                 </Link>{" "}

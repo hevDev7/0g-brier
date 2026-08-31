@@ -14,7 +14,7 @@ Three choices shape this system:
 2. **Settlement is performed by a staked committee of agents** running inference on 0G Compute with mandatory TeeML attestation, storing the complete receipt on 0G Storage, through commit–reveal with a dispute window and slashing.
 3. **Agent risk limits are enforced in the contracts**, not in agent code. Every user has their own `AgentAccount`; an agent never holds the user's wallet key and cannot exceed the policy that was set.
 
-The main differentiator against Delphi (Gensyn), the closest existing reference: **Delphi forbids agents from creating markets** — "Agents cannot create markets. Markets must be created through the Delphi UI." In Brier, market creation is a first-class agent action.
+The main differentiator against the closest existing agent-trading venue: **it forbids agents from creating markets** — agents may only trade, and markets must be created through its own web UI. In Brier, market creation is a first-class agent action.
 
 ---
 
@@ -29,7 +29,7 @@ The main differentiator against Delphi (Gensyn), the closest existing reference:
 | D5 | Target: **a serious product heading for 0G mainnet** | Split into P0–P7, each phase with its own spec and plan |
 | D6 | 0G testnet funds are available (>5 0G) | The `INFERENCE_MODE=compute` (TEE) path is tested live from P4 rather than deferred |
 
-**Adopted from Delphi:** DPM (not LMSR/CLOB), tiered settlement, creators writing their own settlement prompt, `failed` status → liquidation (not redemption), SDK ergonomics.
+**Adopted from prior art:** DPM (not LMSR/CLOB), tiered settlement, creators writing their own settlement prompt, `failed` status → liquidation (not redemption), SDK ergonomics.
 **Not adopted:** the ban on agents creating markets, and the dependency on a managed subgraph.
 
 ---
@@ -174,7 +174,7 @@ served for free.
 
 **Payout dilution.** The payout per winning share `= C(q)/q_win` **floats until the market closes**: later YES buyers raise `q_YES` faster than `C(q)`, which lowers the payout of earlier YES holders. LMSR locks the payout at 1.0 at purchase time; DPM does not. This is an unavoidable consequence of "the pool funds its own payouts".
 
-Mitigation: `sell` is continuously available so a holder can exit and lock in a price, and the UI **must** display the running payout (not a locked one) together with its warning. This is a deliberate decision, and the same one Delphi made.
+Mitigation: `sell` is continuously available so a holder can exit and lock in a price, and the UI **must** display the running payout (not a locked one) together with its warning. This is a deliberate decision, and the same one the prior art made.
 
 ---
 
@@ -185,7 +185,7 @@ Mitigation: `sell` is continuously available so a holder can exit and lock in a 
 ```
                        ┌──────── void() [guardian, pra-tutup] ────────┐
                        │                                              ▼
-Draft ──approve──▶  Open ──tradingEnd──▶ Closed ──≥k reveal sepakat──▶ Proposed ──finalize──▶ Settled
+Draft ──approve──▶  Open ──tradingEnd──▶ Closed ──≥k reveals agree──▶ Proposed ──finalize──▶ Settled
 (off-chain)            │                    │                             │                    (redeem)
                        │                    │                        dispute(bond)
                        │              settlementDeadline                  ▼
@@ -240,7 +240,7 @@ the root the chain holds.
 
 | Contract | Responsibility | Pattern | Upgradeable |
 |---|---|---|---|
-| `DPMMath` | cost/price/probability, semua wad, pure | library | — |
+| `DPMMath` | cost/price/probability, all wad, pure | library | — |
 | `Market` | `q`, `poolBalance`, buy/sell/liquidity/exit, the lifecycle | an EIP-1167 clone | **No** (it holds funds) |
 | `OutcomeShares` | ERC-1155 tradable positions, `id = uint160(market)<<8 \| outcome` — a market can only touch its own ids | singleton | No |
 | `MarketFactory` | clone + registry + versi implementasi + parameter default | — | UUPS + timelock |
@@ -358,7 +358,7 @@ Withdrawal is split into two classes, and this distinction is **mandatory** — 
 
 **Fee accounting.** `feeAccrued` is a separate variable from `poolBalance` and is **never** part of `C(q)`.
 `buy`: the user pays `ΔC + fee`. `sell`: the user receives `ΔC − fee`. Distribution at `Settled`/`Failed`:
-`creatorFeeShareBps` → creator, `resolverFeeShareBps` → kas hadiah resolver, sisanya → `Treasury`.
+`creatorFeeShareBps` → creator, `resolverFeeShareBps` → the resolver reward pool, the remainder → `Treasury`.
 
 **Guardian & pause.** `ConfigRegistry.paused()` blocks `createMarket`, `buy`, and `addLiquidity`.
 It **never** blocks `sell`, `redeem`, `liquidate`, or `AgentAccount.withdraw` — a user can always exit. This is an explicit test, not merely a convention.
@@ -450,11 +450,11 @@ interface IResolutionModule {
                                    commitDeadline = now + commitWindow
 2. commitVote()                  → the hash only; nobody can copy anyone
 3. revealVote()                  → outcome + salt + receiptRoot; validateReveal() dipanggil
-4. ≥ k reveal sepakat            → Status=Proposed, disputeDeadline = now + disputeWindow(tier)
+4. ≥ k reveals agree            → Status=Proposed, disputeDeadline = now + disputeWindow(tier)
    (if the outcome that reaches the threshold is UNRESOLVABLE, finalize() calls Market.fail()
     rather than Market.settle() — the exit path is liquidation)
 5a. no dispute    → finalize()   → Market.settle(outcome)
-                                   resolver sepakat: bagi kas hadiah
+                                   resolvers who agreed: split the reward pool
                                    resolver beda   : slash disagreeSlashBps
                                    no reveal       : slash noShowSlashBps
 5b. dispute(bond)                → Status=Disputed, round 2 (n=9,k=5), excluding round-1 members
@@ -462,7 +462,7 @@ interface IResolutionModule {
                                    challenger: bond returned + 50% of the slashed amount
       round 2 = round 1          → the challenger's bond → the resolver reward pool
       round 2 without threshold  → Market.fail()
-6. settlementDeadline lewat      → markFailed() → Market.fail() → likuidasi
+6. settlementDeadline passes     → markFailed() → Market.fail() → liquidation
 ```
 
 **Committee sampling.** `seed = keccak256(market, blockhash(closeBlock), roundIndex)`, then stake-weighted selection without replacement from the list of active resolvers.
@@ -480,7 +480,7 @@ interface IResolutionModule {
       POST {endpoint}/chat/completions  { messages, model, temperature: 0 }
       chatID = header ZG-Res-Key
       verified = await broker.inference.processResponse(provider, chatID)
-      if (!verified) → JANGAN commit; coba provider lain; setelah semua gagal → commit UNRESOLVABLE
+      if (!verified) → do NOT commit; try another provider; once all have failed → commit UNRESOLVABLE
     TIER FAST: the Compute Router, verified = false (recorded as such in the receipt).
 5.  Parse keluaran terstruktur: { outcome: "YES"|"NO"|"UNRESOLVABLE", confidence, rationale, citations[] }
 6.  Assemble the receipt (§7.5), upload it to 0G Storage → receiptRoot.
@@ -637,13 +637,13 @@ The product consequence: every trade and every settlement in the UI can be trace
 
 ## 9. Indexer & API
 
-0G has no managed subgraph service (Delphi uses Goldsky). Our own indexer is therefore a **mandatory component**, not an optimization.
+0G has no managed subgraph service of the kind comparable venues rely on. Our own indexer is therefore a **mandatory component**, not an optimization.
 
 ### 9.1 Design
 
 - **Tailer**: `eth_getLogs` over block ranges from `deploymentBlock`, a checkpoint per block, `CONFIRMATIONS=8`.
 - **Reorg**: store the `blockHash` of every processed block; when a parent does not match → roll back to the fork point and replay. Every derived table is `ON DELETE CASCADE` on `blocks`.
-- **Penyimpanan**: PostgreSQL (produksi), SQLite (lokal/CI) lewat satu lapisan query.
+- **Storage**: PostgreSQL (production), SQLite (local/CI) behind a single query layer.
 - **Penyajian**: REST + WebSocket.
 
 ### 9.2 Schema
@@ -696,9 +696,9 @@ subscribe { channel: "agent", agentId }      → action, trade
 
 ---
 
-## 10. SDK — `@hevdev7/agent-kit`
+## 10. SDK — `@0g-brier/agent-kit`
 
-The ergonomics deliberately follow the Delphi SDK so a Delphi user understands it immediately, **plus** what they do not have.
+The ergonomics deliberately follow the conventions of existing agent-trading SDKs so their users understand this one immediately, **plus** what they do not have.
 
 ```ts
 const client = new BrierClient({
@@ -725,7 +725,7 @@ client.addLiquidity({ address, tokensIn, minSharesOut });
 client.redeem({ address }); client.liquidate({ address });
 client.ensureTokenApproval({ address, minimumAmount });
 
-// what Delphi does not have
+// what the existing SDKs do not have
 client.proposeMarket({ question, rules, sources, settlementPrompt, category, tradingEnd, tier, seed });
 client.getResolution({ address });          // receipt + TEE status per resolver
 
@@ -789,7 +789,7 @@ ZG_ROUTER_API_KEY=
 ZG_COMPUTE_MIN_LEDGER=3                    # 0G; alarm when below this
 ZG_COMPUTE_MIN_PER_PROVIDER=1              # 0G
 
-DEPLOYER_KEY=                              # deploy kontrak
+DEPLOYER_KEY=                              # deploys the contracts
 CURATOR_OPERATOR_KEY=
 RESOLVER_OPERATOR_KEYS=                    # comma-separated, one per resolver agent
 TRADER_OPERATOR_KEY=
@@ -844,7 +844,7 @@ npm workspaces at the root, following the `0g-Umbra` pattern.
 | Risk | Handling |
 |---|---|
 | Reentrancy | CEI + `ReentrancyGuard` on every fund-moving function; `safeTransfer` (SafeERC20) |
-| Fee-on-transfer / rebasing tokens | rejected: `ConfigRegistry` holds a collateral allowlist; balances are measured as before/after deltas |
+| Fee-on-transfer / rebasing tokens | rejected by the `ConfigRegistry` collateral allowlist, and by that alone. `Market.buy` transfers the amount it priced and trusts it; only `initialize` checks a balance. An earlier version of this line claimed before/after deltas were measured, which is not what the code does — the allowlist is the whole defence, so allowlisting such a token would break solvency |
 | Precision & rounding | everything out is rounded down, everything in is rounded up; the pool is set to `costUp(q)` (§4.4) |
 | `q²` overflow | `require(qᵢ <= MAX_Q)` on every mutation |
 | `q_i = 0` at settle | the creator seed floor ⇒ `qᵢ ≥ seedSupplyᵢ ≥ creatorSeedᵢ > 0` (§6.3) |
@@ -855,22 +855,24 @@ npm workspaces at the root, following the `0g-Umbra` pattern.
 
 ### 13.2 The economic security of resolution
 
-| Serangan | Pertahanan |
+| Attack | Defence |
 |---|---|
-| Resolver menyalin jawaban resolver lain | commit–reveal, commitment terikat `msg.sender` |
+| A resolver copying another's answer | commit–reveal, with the commitment bound to `msg.sender` |
 | A lazy or absent resolver | slash `noShowSlashBps`; reputation falls; repeated → struck from sampling |
 | A resolver cartel | stake-weighted sampling + exclusion of round-1 participants from the dispute round + a heavy `overturnSlashBps` |
-| Sampling manipulation by a validator | ⚠️ **open in v1** (`blockhash`); mitigation: a long commit window makes prediction expensive; the upgrade path to VRF lands in P7 |
-| Spam disputes | the `disputeBond` is forfeited when round 2 confirms round 1 |
-| A creator writing a misleading prompt | the curator pipeline §7.6; the `settlementDeposit` is slashed on void |
-| Biaya inferensi mengeringkan ledger | `settlementDeposit` mendanai hadiah resolver; `ZG_COMPUTE_MIN_LEDGER` mengalarm sebelum kering |
+| **A caller shopping for its own committee** | the draw is **deferred**: `requestResolution` books a future block and `openResolution` samples from that block's hash. Until 2026-08-31 the seed was `blockhash(block.number - 1)` — readable a block ahead — and since both entry points are permissionless and undeadlined, the caller could simulate the sample off-chain and only transact on a committee it liked. Measured: an attacker holding 4 of 24 equally-staked resolvers waited 185 blocks to take 3 of 5 seats, exactly the threshold; holding 8 of 24 it took **one block** to take the dispute round and flip a settled outcome |
+| Sampling manipulation by a validator | ⚠️ **still open**, and now much narrower: a proposer who wins the specific `drawBlock` chooses between the hash it produces and no block at all. One re-roll, on one block it must be scheduled for, rather than unlimited free ones. The upgrade to a randomness beacon remains P7 |
+| Spam disputes | the `disputeBond` is forfeited when round 2 confirms round 1 — **and when round 2 never concludes.** Refunding a stalled dispute made griefing free: the challenger got its bond back, round 1 was slashed at the cartel rate for an answer nobody had reviewed, and the market failed, which pays the losing side pᵢ where settling pays it nothing |
+| A committee small enough for one agent to carry | `n ≥ 3` and `k · 2 > n` for every tier, enforced by `ConfigRegistry` bounds and again by `ResolutionModule._shapeOf` at read time. FAST shipped as 1-of-1 |
+| A stranger discarding a verdict at the deadline | a market resting at `Proposed` gets `PROPOSED_FAIL_GRACE` on top of `settlementDeadline` before anyone but the module may fail it, and `Market.initialize` refuses a settlement window too narrow to resolve inside |
+| Inference costs draining the ledger | the `settlementDeposit` funds the resolver reward; `ZG_COMPUTE_MIN_LEDGER` alarms before it runs dry |
 
 ### 13.3 Upgrades & governance
 
-- Kontrak pemegang dana (`Market`, `OutcomeShares`, `AgentAccount`) **immutable**.
-- Koordinasi (`MarketFactory`, `ResolutionModule`, `AgentRegistry`, `Treasury`, `ConfigRegistry`) UUPS, admin = multisig 3/5, **semua upgrade lewat timelock 48 jam**.
-- Parameter changes (fees, windows, slash thresholds) also go through the timelock, with hard bounds in code (e.g. `feeBps ≤ 300`).
-- The `Guardian` (a single key, for fast action) may only: `pause()` and `void()` a pre-`Closed` market. It cannot move funds and cannot change an outcome.
+- The contracts that hold funds (`Market`, `OutcomeShares`, `AgentAccount`) are **immutable**. `Market` in particular is an EIP-1167 clone: a market already created can never receive a fix, which is why every change to it has to land *before* a deployment rather than after.
+- The coordinating contracts (`MarketFactory`, `ResolutionModule`, `AgentRegistry`, `Treasury`, `ConfigRegistry`) are UUPS, with the admin a 3/5 multisig and **every upgrade going through a 48-hour timelock**. Nothing in the contracts can check that the admin is in fact a multisig — `DeployLib.resolveRoles` only enforces that the roles are distinct and none is the deployer.
+- Parameter changes (fees, windows, slash thresholds) also go through the timelock, with hard bounds in code (e.g. `feeBps ≤ 300`). Bounds lock the first time they are set and no upgrade-free path widens them.
+- The `Guardian` (a single key, for fast action) may only `pause()` and `void()` a pre-`Closed` market. It cannot move funds and cannot change an outcome.
 
 ### 13.4 Regulatory factors
 
@@ -932,15 +934,15 @@ whole design sets out to prevent.
 |---|---|---|
 | L1 Solidity | unit tests per contract + INV-1..10 + reentrancy/access tests | `forge test` green, line coverage ≥ 90% on `core/` |
 | L2 Diferensial | DPM Solidity vs TS vs referensi Python, 10⁵ input acak | paritas ≤ 2 wei |
-| L3 Service | unit + integrasi terhadap anvil (indexer reorg, klien inferensi, klien storage) | semua hijau |
-| L4 e2e lokal | `scripts/e2e-workflow.mts`, `anvil` + `stub` + `file` | lihat §14.3 |
+| L3 Service | unit + integration against anvil (indexer reorg, inference client, storage client) | all green |
+| L4 e2e local | `scripts/e2e-workflow.mts`, `anvil` + `stub` + `file` | see §14.3 |
 | L5 e2e Galileo | skrip sama, `galileo` + `compute` + `real` | ⛔ butuh deploy |
 | L6 Chaos | an absent resolver, a 429 from a provider, a failed storage upload, a 12-block reorg, a stale oracle | the system degrades in a controlled way, with no loss of funds |
 
 ### 14.3 The e2e scenario (`scripts/e2e-workflow.mts`)
 
 ```
- 1. Deploy semua kontrak; daftarkan 1 creator, 1 curator, 5 resolver, 3 trader agent; danai stake.
+ 1. Deploy every contract; register 1 creator, 1 curator, 5 resolver and 3 trader agents; fund the stake.
  2. The Creator Agent designs a market → the Curator rejects it once (ambiguous) → revision → approved.
  3. createMarket(seed=1000 mUSDC) → cek q₀=q₁=707.11, P(YES)=50%.
  4. Three trader agents trade for 20 ticks → check INV-1..2 every tick.

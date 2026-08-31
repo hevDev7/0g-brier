@@ -118,6 +118,16 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
 
         if (!config.allowedCollateral(p.collateral)) revert CollateralNotAllowed();
         if (p.tradingEnd <= block.timestamp || p.settlementDeadline <= p.tradingEnd) revert BadDeadlines();
+        // AND wide enough for the resolution to finish inside it: commit + reveal + the
+        // longest dispute window, plus the dispute round, as governance sizes it. The
+        // line above asks only that the deadline be LATER than `tradingEnd`, which one
+        // second satisfies — and a market whose deadline falls before its own committee
+        // can conclude is one that can only ever FAIL. Failing pays both sides pᵢ where
+        // settling pays the loser nothing, so that is not a harmless misconfiguration;
+        // it is a market built to hand the losing side a refund.
+        if (uint256(p.settlementDeadline) < uint256(p.tradingEnd) + config.params(ConfigKeys.MIN_SETTLEMENT_WINDOW)) {
+            revert BadDeadlines();
+        }
         if (seedTokens < config.params(ConfigKeys.MIN_SEED)) revert SeedTooSmall();
         if (depositTokens < config.params(ConfigKeys.MIN_SETTLEMENT_DEPOSIT)) revert DepositTooSmall();
 
@@ -499,10 +509,39 @@ contract Market is IMarket, Initializable, ReentrancyGuard {
     }
 
     /// @notice No outcome could be established → every party is liquidated at pᵢ.
+    ///
+    /// @dev THE CLOCK GUARD IS LORE-BEARING. Without it the module branch could fail a
+    ///      market that was still mid-trading, and that was not merely premature — it was
+    ///      profitable. `_snapshotLiquidation` freezes the MARGINAL price pᵢ, while a buyer
+    ///      pays the integral under the cost curve, which convexity makes strictly smaller.
+    ///      So buy-then-fail returned more than it cost — measured at +3.4% on a single
+    ///      5,000-share trade — and by Euler's identity (Σpᵢ·qᵢ = C(q)) every unit of that
+    ///      came straight out of the other holders' and the seeder's liquidation payouts.
+    ///      An allowlisted resolver could therefore rob the pool it was trusted to judge.
+    ///
+    ///      A WHITELIST HERE WOULD BE A REGRESSION, which is why this is a clock check and
+    ///      not `settle()`'s shape. `fail()` past the settlement deadline is the rescue for
+    ///      a market nobody ever called `close()` on, and such a market is still `Open`.
+    ///      Refusing `Open` outright would strand its collateral permanently — trading the
+    ///      theft for a lock-up. `initialize` guarantees `settlementDeadline > tradingEnd`,
+    ///      so the rescue path always satisfies this check and only the live market fails it.
     function fail() external {
         bool byModule = msg.sender == config.addresses(ConfigKeys.RESOLUTION_MODULE);
-        bool pastDeadline = block.timestamp >= settlementDeadline;
+        // A market the committee HAS already answered is not one nobody answered, and
+        // the permissionless rescue must not be able to throw that answer away. It gets
+        // a grace period on top of the deadline, and inside it only the module may act.
+        // `finalize` is permissionless and free to run throughout, so the grace is the
+        // window in which the committee's verdict beats a stranger's `fail()`.
+        //
+        // Before this, the two raced at the deadline — and the party motivated to win
+        // that race is whoever holds the LOSING side, because `fail` pays them pᵢ per
+        // share where `settle` pays them nothing. At a 90/10 market that is 0.316 per
+        // share conjured out of the winners' pool.
+        uint256 openAt = settlementDeadline;
+        if (status == Status.Proposed) openAt += config.params(ConfigKeys.PROPOSED_FAIL_GRACE);
+        bool pastDeadline = block.timestamp >= openAt;
         if (!byModule && !pastDeadline) revert BadTransition();
+        if (block.timestamp < tradingEnd) revert TradingNotEnded();
         if (status == Status.Settled || status == Status.Failed || status == Status.Voided) revert BadTransition();
 
         _snapshotLiquidation();
