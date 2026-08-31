@@ -31,8 +31,13 @@ COMPROMISED="0x71a89a7e692dac4d6bd7c3f1cca9155592d87bae"
 # `.env` holds a deployer key that was burned into a transcript, and a mainnet key
 # has no business sitting in the same file as one that must never touch this chain.
 # Keeping them apart also means the testnet tooling keeps working untouched.
-ENV_FILE="$ROOT/.env"
-[[ -f "$ROOT/.env.mainnet" ]] && ENV_FILE="$ROOT/.env.mainnet"
+# .env.mainnet wins over .env so that mainnet keys never sit beside the testnet
+# ones. ENV_FILE overrides both, which is how the checks below get exercised
+# against a synthetic config without touching the real file.
+if [[ -z "${ENV_FILE:-}" ]]; then
+  ENV_FILE="$ROOT/.env"
+  [[ -f "$ROOT/.env.mainnet" ]] && ENV_FILE="$ROOT/.env.mainnet"
+fi
 if [[ -f "$ENV_FILE" ]]; then
   perms="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || echo '')"
   if [[ -n "$perms" && "${perms:1}" != "00" ]]; then
@@ -110,6 +115,29 @@ DEC="$(cast call "$COLLATERAL" 'decimals()(uint8)' --rpc-url "$RPC" 2>/dev/null 
 [[ -n "$DEC" ]] || die "COLLATERAL does not answer decimals()."
 (( DEC <= 18 )) || die "COLLATERAL reports $DEC decimals. Market refuses anything above 18 (UnsupportedDecimals)."
 SYM="$(cast call "$COLLATERAL" 'symbol()(string)' --rpc-url "$RPC" 2>/dev/null | tr -d '"' || echo '?')"
+
+# ── RESOLVER: refused on mainnet, and refused HERE rather than in forge ──────
+# Deploy.s.sol requires `block.chainid != MAINNET_CHAIN_ID` when RESOLVER is set,
+# because a direct-settlement resolver is a key that can settle any market to any
+# outcome without a committee. That guard is correct, but it fires deep inside the
+# simulation, minutes in, as a require string. Catching it here costs nothing and
+# says what to do about it.
+if [[ -n "${RESOLVER:-}" ]]; then
+  die "RESOLVER is set to ${RESOLVER}, and mainnet refuses a direct-settlement resolver.
+  That address could settle any market to any outcome on its own signature, with no
+  committee, no commit-reveal and no dispute round. It exists for local demos.
+  Leave RESOLVER empty; the committee is what settles markets on mainnet."
+fi
+
+# GOVERNANCE_KEY is not needed to deploy and is not wanted on this machine. Say so
+# once, without refusing — the choice is the operator's, but it should be a choice.
+if [[ -n "${GOVERNANCE_KEY:-}" ]]; then
+  echo "⚠  GOVERNANCE_KEY is set. The deploy does not use it, and handover.sh can print"
+  echo "   unsigned calldata for a multisig instead (--unsigned). A governance key held"
+  echo "   as a hot key on a build machine owns every upgradeable contract after the"
+  echo "   cliff closes; the 48-hour timelock is then the only thing between a stolen"
+  echo "   key and the protocol."
+fi
 
 # ── ERC-8004, which is optional but must be deliberate ───────────────────────
 # Until 2026-08-31 these were wired only by an upgrade script, so every fresh
