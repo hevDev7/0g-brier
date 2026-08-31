@@ -87,8 +87,20 @@ if [[ -n "${CURATOR_KEY:-}" ]]; then
   [[ "$CK" =~ ^[0-9a-fA-F]{64}$ ]] && CK="0x$CK"
   [[ "$CK" =~ ^0x[0-9a-fA-F]{64}$ ]] || die "CURATOR_KEY is set but is not a 32-byte hex key."
   CURATOR_FROM_KEY="$(cast wallet address --private-key "$CK")"
-  [[ "${CURATOR_FROM_KEY,,}" == "${CURATOR_SIGNER,,}" ]] \
-    || die "CURATOR_SIGNER is $CURATOR_SIGNER but CURATOR_KEY derives $CURATOR_FROM_KEY. No market could ever be created: the contract checks the signature against CURATOR_SIGNER."
+  if [[ "${CURATOR_FROM_KEY,,}" != "${CURATOR_SIGNER,,}" ]]; then
+    # Two wallets, not one. Both remedies are legitimate and they are not the same
+    # decision: the first puts the curator's power on THIS machine, the second keeps
+    # it on whatever wallet already holds CURATOR_SIGNER.
+    die "CURATOR_SIGNER and CURATOR_KEY are different wallets.
+    CURATOR_SIGNER  $CURATOR_SIGNER
+    CURATOR_KEY is  $CURATOR_FROM_KEY
+  The contract checks every market-creation signature against CURATOR_SIGNER, so as
+  written no market could ever be created. Pick one:
+    (a) set CURATOR_SIGNER=$CURATOR_FROM_KEY — the curator becomes the key held here;
+    (b) put the private key for $CURATOR_SIGNER in CURATOR_KEY, if that wallet is the
+        one you meant to hold the power to approve markets.
+  CURATOR_SIGNER is the whole of your exposure control: no market exists without it."
+  fi
 else
   echo "⚠  CURATOR_KEY is not set. The deploy does not need it, but no market can be created until whoever holds CURATOR_SIGNER signs an approval."
 fi
