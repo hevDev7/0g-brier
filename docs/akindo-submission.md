@@ -272,7 +272,7 @@ Contracts, live on Galileo (16602). Fourteen deployed addresses, all fourteen VE
 the README:
 https://github.com/hevDev7/0g-brier#live-on-galileo-chain-16602 — the entry point is
 MarketFactory at
-https://chainscan-galileo.0g.ai/address/0xd6F9aE316ef729C6c79fbC8684a2b0e4B76D4133
+https://chainscan-galileo.0g.ai/address/0x62A0f066d032F631876e70562FDc38070a090202
 
 Eleven source contracts, ~3,000 lines: DPM pricing, a curator-gated factory, commit–reveal
 settlement with slashing, and every economic parameter bounded at deployment.

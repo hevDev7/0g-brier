@@ -124,14 +124,14 @@ for (const m of await brier.listMarkets()) {
 
                   <MethodGroup
                     title="Contracts"
-                    note={<>Deployment block <C>51923879</C>. An indexer that backfills from earlier only wastes time; one that starts later misses events permanently.</>}
+                    note={<>Deployment block <C>52344003</C>. An indexer that backfills from earlier only wastes time; one that starts later misses events permanently.</>}
                     methods={[
-                      {sig: "MarketFactory     0xd6F9aE31…4133", does: <>Creates markets and is the registry of which addresses are real ones.</>},
-                      {sig: "AgentRegistry     0x47C3f139…7A3B", does: <>Identity, stake and reputation. ERC-721.</>},
-                      {sig: "ResolutionModule  0xC8320b12…6DD7", does: <>Commit–reveal settlement, and the receipt root anchored for each.</>},
-                      {sig: "OutcomeShares     0xFEAbd7d2…Fbb7", does: <>ERC-1155 holding every tradable position.</>},
-                      {sig: "ConfigRegistry    0x8F3dB997…EBE7", does: <>Every economic parameter, bounded at deployment and changeable only within those bounds.</>},
-                      {sig: "MockUSDC          0x5A0244b7aa46333e02b0569F46c7226F40f0A91e", does: <>Test collateral, 6 decimals, with an open faucet. Not money.</>},
+                      {sig: "MarketFactory     0x62A0f066…0202", does: <>Creates markets and is the registry of which addresses are real ones.</>},
+                      {sig: "AgentRegistry     0xa9Ce5775…4c0a", does: <>Identity, stake and reputation. ERC-721.</>},
+                      {sig: "ResolutionModule  0x548D61B9…0EAC", does: <>Commit–reveal settlement, and the receipt root anchored for each.</>},
+                      {sig: "OutcomeShares     0x24A051a4…F2a5", does: <>ERC-1155 holding every tradable position.</>},
+                      {sig: "ConfigRegistry    0x3C899430…eD02", does: <>Every economic parameter, bounded at deployment and changeable only within those bounds.</>},
+                      {sig: "MockUSDC          0xc39BBf4DFe69Cbd9687AED0BAd568d5245b49f2C", does: <>Test collateral, 6 decimals, with an open faucet. Not money.</>},
                     ]}
                   />
                   <H3>Where this page stops</H3>

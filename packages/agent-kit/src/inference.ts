@@ -65,12 +65,152 @@ const CATEGORY_TEMPLATES: Record<Category, string> = {
 /** NO, YES, or "this question cannot be answered". */
 export type SettlementOutcome = 0 | 1 | 2;
 
-export interface Judgement extends Attestation {
+/** How a settlement judgement was reached. */
+export type JudgementRoute = "model" | "arithmetic";
+
+export interface Judgement {
   outcome: SettlementOutcome;
   confidence: number | null;
   rationale: string;
   raw: string;
+  /**
+   * `arithmetic` — decided by comparing a number against the rules' own
+   * threshold, with no model consulted. `model` — decided by the enclave.
+   */
+  route: JudgementRoute;
+  /**
+   * The enclave that produced this, or NULL when no model was consulted.
+   *
+   * Null rather than a zeroed Attestation, and that is the whole point: an
+   * arithmetic decision has no model, no provider and no chat to attest, and a
+   * struct full of empty strings claiming `teeVerified: false` reads like a
+   * failed attestation rather than an absent one. A caller that wants to know
+   * whether an enclave stood behind an answer must ask, and gets null when none
+   * did.
+   */
+  attestation: Attestation | null;
 }
+
+/** A decision reached by comparing an observation against the rules' threshold. */
+export interface ThresholdDecision {
+  outcome: SettlementOutcome;
+  reading: number;
+  threshold: number;
+  comparison: ">" | "<";
+  rationale: string;
+}
+
+/**
+ * Decide a numeric-threshold question WITHOUT a model, or decline.
+ *
+ * WHY THIS EXISTS, precisely. On 2026-08-31 a market asked whether a Coinbase
+ * close was above $2,425.00. The close was $2,450.66. The evidence pipeline
+ * delivered that number correctly — right URL, http 200, sha256 recorded,
+ * selector applied. Three resolvers each ran `qwen/qwen2.5-omni-7b` in a
+ * verified enclave, each wrote the rationale "was $2450.66, which is above
+ * $2,425.00", and each emitted `"outcome": "NO"` with confidence 0.9. At
+ * temperature 0 that is one deterministic function evaluated three times, so
+ * the committee could not disagree, the threshold was met, and the market
+ * settled wrong on chain.
+ *
+ * The premise was right and the label was wrong. That final step — turning
+ * "2450.66 > 2425.00" into YES — is arithmetic, and arithmetic does not belong
+ * in a 7B model when the same comparison is three lines of code.
+ *
+ * DECLINES LOUDLY RATHER THAN GUESSING. A regex that mis-reads a threshold
+ * would be worse than the model it replaces: confidently, deterministically
+ * wrong every time, with no rationale a reader could catch it by. So this
+ * returns null unless the question is unambiguous:
+ *
+ *   - exactly ONE observation, and it must have been read successfully,
+ *     unclipped, and parse whole as a finite number;
+ *   - the rules must state exactly ONE threshold, using the explicit phrasing
+ *     `strictly greater than N` or `strictly less than N`, never both.
+ *
+ * Anything else — two sources, a clipped value, "at least", a bare "above", no
+ * threshold at all — falls through to the model, which is what it is for.
+ */
+export function decideByThreshold(
+  rules: string,
+  observations: readonly Observation[],
+): ThresholdDecision | null {
+  if (observations.length !== 1) return null;
+  const only = observations[0];
+  if (!only || !only.ok || only.clipped) return null;
+
+  // `Number()` and not `parseFloat`: parseFloat("2450.66 USD") is 2450.66, and a
+  // value with a unit stuck to it is a value this function has not understood.
+  const reading = Number(only.value.trim());
+  if (!Number.isFinite(reading) || only.value.trim() === "") return null;
+
+  // ONE SENTENCE MAY DECIDE, and it must be the one that says YES.
+  //
+  // An earlier draft matched the comparison phrase anywhere in the rules and
+  // assumed satisfying it meant YES. Both halves were wrong, and an adversarial
+  // review caught them before they shipped:
+  //
+  //   "Resolves NO if the close is strictly greater than 2425.00. Otherwise YES."
+  //
+  // returned YES for 2450.66 — exactly inverted, on the same numbers as the
+  // incident this function exists to fix. Polarity is not decoration: a rule may
+  // be written from either side, and a resolver that assumes one settles the
+  // other backwards while quoting the rules it just contradicted.
+  //
+  // So: the phrase must sit in a sentence that grants YES, before which no
+  // negation appears. Everything else declines to the model.
+  const sentences = rules.split(/(?<=[.;])\s+/);
+  const candidates = sentences.filter((x) => /strictly\s+(greater|less)\s+than/i.test(x));
+  if (candidates.length !== 1) return null;
+  const sentence = candidates[0]!;
+
+  const yesAt = sentence.search(/resolves?\s+yes\s+if/i);
+  const cmpAt = sentence.search(/strictly\s+(greater|less)\s+than/i);
+  if (yesAt < 0 || yesAt > cmpAt) return null;
+  // Any negation at all, anywhere in the deciding sentence. Blunt on purpose:
+  // "not", "unless", "except", "other than" and "no longer" all flip a clause,
+  // and telling apart the ones that do from the ones that do not is the reading
+  // comprehension this function exists to avoid.
+  if (/\b(not|n't|unless|except|never|neither|nor|other than)\b/i.test(sentence)) return null;
+
+  // THE WHOLE NUMBER, or nothing. `([0-9]+(?:\.[0-9]+)?)` matches a PREFIX, so
+  // "100,000" yielded 100 and "1e9" yielded 1 — a threshold three orders of
+  // magnitude out, with the length guard below still seeing exactly one match.
+  // The lookaheads refuse a match that stopped in the middle of a number: a
+  // following digit, decimal point, comma, underscore, exponent, or a space then
+  // a digit all mean this is a numeral written in a grouping style that cannot
+  // be read unambiguously here — a comma is a thousands separator in en-US and a
+  // decimal separator across most of Europe, and nothing in the rules says which.
+  // Counted as PHRASES first, and only then as numbers. Counting the numbers
+  // alone let "strictly greater than 2425.00 and strictly less than 2500.00."
+  // through: the second threshold ends the sentence, so the completeness check
+  // below rejected it, one match survived, and the guard read that as an
+  // unambiguous rule. A sentence naming two bounds is a range, and a range is
+  // not this function's to decide.
+  const phrases = [...sentence.matchAll(/strictly\s+(greater|less)\s+than/gi)];
+  if (phrases.length !== 1) return null;
+
+  const NUMBER = /strictly\s+(greater|less)\s+than\s+([0-9]+(?:\.[0-9]+)?)(?![0-9.,_eE])(?!\s+[0-9])/gi;
+  const matches = [...sentence.matchAll(NUMBER)];
+  if (matches.length !== 1) return null;
+  const m = matches[0]!;
+  const comparison: ">" | "<" = m[1]!.toLowerCase() === "greater" ? ">" : "<";
+  const threshold = Number(m[2]);
+  if (!Number.isFinite(threshold)) return null;
+
+  const yes = comparison === ">" ? reading > threshold : reading < threshold;
+  return {
+    outcome: yes ? 1 : 0,
+    reading,
+    threshold,
+    comparison,
+    rationale:
+      `The observation read ${reading}. The rules resolve YES when it is strictly ` +
+      `${comparison === ">" ? "greater" : "less"} than ${threshold}; ${reading} is ` +
+      `${yes ? "" : "not "}${comparison === ">" ? "greater" : "less"} than ${threshold}, so ${yes ? "YES" : "NO"}. ` +
+      `Compared in code, with no model consulted.`,
+  };
+}
+
 
 /** Thrown when a reply cannot be read as a probability. Never defaulted. */
 export class UnreadableBeliefError extends Error {
@@ -257,6 +397,32 @@ export class ZgInference {
      */
     observations?: readonly Observation[];
   }): Promise<Judgement> {
+    // ARITHMETIC FIRST, and only then the model. A threshold question the rules
+    // state unambiguously is decided by comparing two numbers; asking an enclave
+    // to do it spends money to introduce a failure mode that code does not have.
+    // `decideByThreshold` declines on anything it cannot read exactly, so the
+    // model still handles every question that needs judgement.
+    const arithmetic = decideByThreshold(spec.rules, spec.observations ?? []);
+    if (arithmetic) {
+      return {
+        outcome: arithmetic.outcome,
+        confidence: 1,
+        rationale: arithmetic.rationale,
+        // The same JSON shape the model is asked for, so a receipt written from
+        // either route reads alike — with `route` the field that tells them apart.
+        raw: JSON.stringify({
+          outcome: arithmetic.outcome === 1 ? "YES" : "NO",
+          confidence: 1,
+          rationale: arithmetic.rationale,
+          reading: arithmetic.reading,
+          threshold: arithmetic.threshold,
+          comparison: arithmetic.comparison,
+        }),
+        route: "arithmetic",
+        attestation: null,
+      };
+    }
+
     const prompt = [
       "You are a settlement resolver. Answer ONLY with a JSON object of the form",
       '{"outcome": "YES"|"NO"|"UNRESOLVABLE", "confidence": <0..1>, "rationale": "<one or two sentences>"}',
@@ -280,7 +446,13 @@ export class ZgInference {
     ].join("\n");
 
     const answer = await this.ask(prompt);
-    return {...answer, ...parseJudgement(answer.content), raw: answer.content};
+    const {content, ...attestation} = answer;
+    return {
+      ...parseJudgement(content),
+      raw: content,
+      route: "model",
+      attestation,
+    };
   }
 
   /**

@@ -133,36 +133,36 @@ where a venue that has never heard of Brier can read it.
 ## Live on Galileo (chain 16602)
 
 **All fourteen are verified on the explorer** — the links open readable Solidity, not
-bytecode. Deployed at block `51923879`.
+bytecode. Deployed at block `52344003`.
 
 **Call these.** Four UUPS proxies — the addresses that stay the same across upgrades.
 
 | Contract | Address | What it is |
 |---|---|---|
-| MarketFactory | [`0xd6F9aE316ef729C6c79fbC8684a2b0e4B76D4133`](https://chainscan-galileo.0g.ai/address/0xd6F9aE316ef729C6c79fbC8684a2b0e4B76D4133) | Creates markets, and the registry of which addresses are real ones |
-| ConfigRegistry | [`0x8F3dB997a4247DF089B6FdB8C43E14d9A245EBE7`](https://chainscan-galileo.0g.ai/address/0x8F3dB997a4247DF089B6FdB8C43E14d9A245EBE7) | Every economic parameter, bounded at deployment |
-| AgentRegistry | [`0x47C3f13935d28749E13c97246c12B33a45A37A3B`](https://chainscan-galileo.0g.ai/address/0x47C3f13935d28749E13c97246c12B33a45A37A3B) | Identity and stake. ERC-721, ERC-7857, ERC-8004 link |
-| ResolutionModule | [`0xC8320b12796de4387742dAFf71eaF013E2fB6DD7`](https://chainscan-galileo.0g.ai/address/0xC8320b12796de4387742dAFf71eaF013E2fB6DD7) | Commit–reveal settlement, sampling and slashing |
+| MarketFactory | [`0x62A0f066d032F631876e70562FDc38070a090202`](https://chainscan-galileo.0g.ai/address/0x62A0f066d032F631876e70562FDc38070a090202) | Creates markets, and the registry of which addresses are real ones |
+| ConfigRegistry | [`0x3C899430a3781f5b0123247B5D0d073Ae020eD02`](https://chainscan-galileo.0g.ai/address/0x3C899430a3781f5b0123247B5D0d073Ae020eD02) | Every economic parameter, bounded at deployment |
+| AgentRegistry | [`0xa9Ce57757B07fdf10A9e181436d76C33005E4c0a`](https://chainscan-galileo.0g.ai/address/0xa9Ce57757B07fdf10A9e181436d76C33005E4c0a) | Identity and stake. ERC-721, ERC-7857, ERC-8004 link |
+| ResolutionModule | [`0x548D61B9A372cBa05407087eF0eD29B92D340EAC`](https://chainscan-galileo.0g.ai/address/0x548D61B9A372cBa05407087eF0eD29B92D340EAC) | Commit–reveal settlement, sampling and slashing |
 
 **Also live.** Not upgradeable, and not meant to be.
 
 | Contract | Address | What it is |
 |---|---|---|
-| OutcomeShares | [`0xFEAbd7d2f4e9A390d0Ca1d3A8C47C3a0557CFbb7`](https://chainscan-galileo.0g.ai/address/0xFEAbd7d2f4e9A390d0Ca1d3A8C47C3a0557CFbb7) | ERC-1155 holding every tradable position |
-| MarketImplementation | [`0x1eA48B2adE1cf82523c5D4d154ff5c4B36EC702e`](https://chainscan-galileo.0g.ai/address/0x1eA48B2adE1cf82523c5D4d154ff5c4B36EC702e) | The EIP-1167 template every market is cloned from |
-| ZgDataVerifier | [`0x4f86e3DA3412F37C19D8F6aBdfcb02eC28397Edc`](https://chainscan-galileo.0g.ai/address/0x4f86e3DA3412F37C19D8F6aBdfcb02eC28397Edc) | ERC-7857 verifier; recomputes 0G Storage's Merkle root on chain |
-| AgentCard | [`0x51e06fCCC0b5c66A41856b620C826e4f83512911`](https://chainscan-galileo.0g.ai/address/0x51e06fCCC0b5c66A41856b620C826e4f83512911) | Renders the Agentic ID's tokenURI |
-| Timelock | [`0xEa448432A56B0a447a4b84a1fDD932aAaDfF135f`](https://chainscan-galileo.0g.ai/address/0xEa448432A56B0a447a4b84a1fDD932aAaDfF135f) | 48-hour delay, for governance once ownership is handed over |
-| Collateral (mUSDC) | [`0x5A0244b7aa46333e02b0569F46c7226F40f0A91e`](https://chainscan-galileo.0g.ai/token/0x5A0244b7aa46333e02b0569F46c7226F40f0A91e) | Test collateral, 6 decimals, open faucet. Not money |
+| OutcomeShares | [`0x24A051a42EC3963d7998682e52697fCb3F77F2a5`](https://chainscan-galileo.0g.ai/address/0x24A051a42EC3963d7998682e52697fCb3F77F2a5) | ERC-1155 holding every tradable position |
+| MarketImplementation | [`0x83d6ACf5c70882c70d02f1133D2199EB0a101e2c`](https://chainscan-galileo.0g.ai/address/0x83d6ACf5c70882c70d02f1133D2199EB0a101e2c) | The EIP-1167 template every market is cloned from |
+| ZgDataVerifier | [`0x3080772F00b6aDFadeb915BdD5a442F1043c6D5D`](https://chainscan-galileo.0g.ai/address/0x3080772F00b6aDFadeb915BdD5a442F1043c6D5D) | ERC-7857 verifier; recomputes 0G Storage's Merkle root on chain |
+| AgentCard | [`0x85fE61E652f8347A08a966775f02606572E3b890`](https://chainscan-galileo.0g.ai/address/0x85fE61E652f8347A08a966775f02606572E3b890) | Renders the Agentic ID's tokenURI |
+| Timelock | [`0xDF1482EC379D9D12307796897dD39fc54E4192Be`](https://chainscan-galileo.0g.ai/address/0xDF1482EC379D9D12307796897dD39fc54E4192Be) | 48-hour delay, for governance once ownership is handed over |
+| Collateral (mUSDC) | [`0xc39BBf4DFe69Cbd9687AED0BAd568d5245b49f2C`](https://chainscan-galileo.0g.ai/token/0xc39BBf4DFe69Cbd9687AED0BAd568d5245b49f2C) | Test collateral, 6 decimals, open faucet. Not money |
 
 **Behind the proxies.** Listed so an upgrade can be checked rather than trusted.
 
 | Implementation | Address |
 |---|---|
-| MarketFactory | [`0xf9b34Cf3CE9cF025BcaA3b7835e241C948A05692`](https://chainscan-galileo.0g.ai/address/0xf9b34Cf3CE9cF025BcaA3b7835e241C948A05692) |
-| ConfigRegistry | [`0x5109d0064AEeAE1A637af499409a78E8665ABEC3`](https://chainscan-galileo.0g.ai/address/0x5109d0064AEeAE1A637af499409a78E8665ABEC3) |
-| AgentRegistry | [`0xaf91856605d768E4A4eaD37dAeFb4B960e0eb2E2`](https://chainscan-galileo.0g.ai/address/0xaf91856605d768E4A4eaD37dAeFb4B960e0eb2E2) |
-| ResolutionModule | [`0x92E7A8f07B1dF633e36D0379238b6B31DD3ef6B0`](https://chainscan-galileo.0g.ai/address/0x92E7A8f07B1dF633e36D0379238b6B31DD3ef6B0) |
+| MarketFactory | [`0xCc1cF73CD9B0DA9D2974782643C05c70eA180eF9`](https://chainscan-galileo.0g.ai/address/0xCc1cF73CD9B0DA9D2974782643C05c70eA180eF9) |
+| ConfigRegistry | [`0xCB2753447763B30df1697AE675044d51a9b5dFD7`](https://chainscan-galileo.0g.ai/address/0xCB2753447763B30df1697AE675044d51a9b5dFD7) |
+| AgentRegistry | [`0x09b8a49D5B645769e97c89252d4D8311703E9AC3`](https://chainscan-galileo.0g.ai/address/0x09b8a49D5B645769e97c89252d4D8311703E9AC3) |
+| ResolutionModule | [`0xE35e94aA42B9AAF1dd421bec046Ec2f12d174cF6`](https://chainscan-galileo.0g.ai/address/0xE35e94aA42B9AAF1dd421bec046Ec2f12d174cF6) |
 
 The authoritative copy is `deployments/16602.json`. Trust the chain over that
 file: it is written from the deploy *simulation*, and a run cut off mid-broadcast

@@ -230,13 +230,41 @@ between the hash it produces and producing nothing. That is one re-roll, on one
 block it has to be scheduled for, rather than unlimited free ones — a much
 narrower lever, and not zero. The randomness beacon remains the P7 upgrade.
 
-**Resolver independence is thinner than the design implies.** A committee's
-value is that its members judged separately. Today 0G Compute serves one text
-model, so a five-member committee is five runs of the same model with the same
-evidence — correlated in exactly the way the committee exists to avoid. The
-receipts record this honestly (each names its model), and it is a reason to
-prefer the DETERMINISTIC tier for questions with a mechanical answer until a
-second model is available.
+**The committee settled a market wrong, and nothing stopped it.** This is no
+longer a risk to reason about. On 2026-08-31, market
+`0xC5B6db9a7342Ff0F414ef524460078cddEaf16EE` asked whether the Coinbase ETH-USD
+close for a pinned minute was above $2,425.00. The close was **$2,450.66**. The
+rules say YES. All three sampled resolvers answered **NO** — each running
+`qwen/qwen2.5-omni-7b` inside a TEE, each attestation verified, each giving the
+same rationale:
+
+> "The Coinbase ETH-USD close ... was $2450.66, which is above $2,425.00."
+
+The sentence states the premise correctly and emits the opposite label. Three
+times, identically. The threshold of two was met and the market settled NO on
+chain, `viaCommittee: true`.
+
+Everything the protocol enforces worked. The draw was fair, the commitments bound
+their senders, the reveals matched, the threshold counted, the receipts are on 0G
+Storage and readable. The mechanism carried a wrong answer faithfully to
+settlement, because a committee of one model is a committee of one — and TeeML
+attests that an enclave ran the model, never that the model was right.
+
+Two things follow for a deployment carrying value:
+
+- **Correlated resolvers are not a footnote.** 0G Compute serves one text model,
+  and `examples/resolve.ts` reads the evidence once and shares it, so a
+  "committee" is one judgement counted N times. A second model, or a
+  deterministic non-model resolver for questions with a mechanical answer, is the
+  difference between a committee and a quorum of copies.
+- **The dispute round is the only correction, and it costs a bond.** Nobody
+  disputed this one because nobody was watching. On mainnet, whoever holds the
+  losing side is the party who must notice within the window — a security model
+  rather than an accident, and one to state to users rather than assume.
+
+`scripts/committee-run.mjs` decides the same class of question deterministically
+from the source and got it right on the market before this one. That is the
+comparison worth keeping in view: the arithmetic is not what failed.
 
 **Resolver registration is permissionless.** Anyone may register as a Resolver
 and become eligible by staking `MIN_RESOLVER_STAKE`. The committee's security is

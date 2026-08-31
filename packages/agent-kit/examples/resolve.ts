@@ -57,6 +57,7 @@ if (!MARKET) throw new Error("set MARKET");
 
 const manifest = loadDeployment(CHAIN_ID, `${REPO}deployments`);
 const MODULE = manifest.contracts.ResolutionModule as `0x${string}`;
+const REGISTRY = manifest.contracts.AgentRegistry as `0x${string}`;
 const net = networkFor(CHAIN_ID === 16602 ? "galileo" : "anvil");
 const chain = defineChain({
   id: net.chainId,
@@ -131,6 +132,16 @@ const MODULE_ABI = [
   },
 ] as const;
 
+const REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "operatorOf",
+    stateMutability: "view",
+    inputs: [{type: "uint256"}],
+    outputs: [{type: "address"}],
+  },
+] as const;
+
 const MARKET_ABI = [
   {type: "function", name: "specRoot", stateMutability: "view", inputs: [], outputs: [{type: "bytes32"}]},
   {type: "function", name: "status", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
@@ -162,6 +173,40 @@ function operatorKey(index: number): `0x${string}` {
       BigInt(index),
     ]),
   );
+}
+
+/**
+ * Every operator key this deployer could hold, indexed by the address it makes.
+ *
+ * THE INDEX IN THE MANIFEST IS NOT ENOUGH, and the comment above explains why it
+ * looked like it was: two derivations have been in use, and a deployment can hold
+ * agents from both — `setup-committee.sh` wrote the untagged form for its first
+ * ten agents, then the padded-left variant that replaced it, while this file and
+ * `committee-run.mjs` use the tagged form. Deriving from `entry.index` alone
+ * produces a key for the wrong scheme, and the failure is a commit reverting
+ * `NotOperator` on a member the manifest describes perfectly.
+ *
+ * Worse, the committee is DRAWN from every eligible resolver — including ones
+ * registered by a script that never wrote to this manifest at all, for which
+ * `find` returns nothing and the run dies with "no operator key".
+ *
+ * So the address on chain is the key, not the file. All three derivations are
+ * computed and matched against `operatorOf`; a member none of them produces is
+ * named rather than guessed at.
+ */
+function operatorCandidates(): Map<string, `0x${string}`> {
+  const byAddress = new Map<string, `0x${string}`>();
+  const add = (k: `0x${string}`) => {
+    const a = privateKeyToAccount(k).address.toLowerCase();
+    if (!byAddress.has(a)) byAddress.set(a, k);
+  };
+  const bare = KEY.slice(2);
+  for (let i = 0; i < 32; i++) {
+    add(operatorKey(i));
+    add(keccak256(`0x${bare}${i.toString(16).padEnd(64, "0")}` as `0x${string}`));
+    add(keccak256(`0x${bare}${i.toString(16).padStart(64, "0")}` as `0x${string}`));
+  }
+  return byAddress;
 }
 
 async function send(pk: `0x${string}`, functionName: string, args: readonly unknown[]) {
@@ -279,11 +324,11 @@ if (observations.length > 0 && observations.every((o) => !o.ok)) {
 const inference = await ZgInference.connect({network: "galileo", privateKey: KEY, provider: ZG_PROVIDER});
 const votes: {agentId: bigint; pk: `0x${string}`; j: Judgement | null; outcome: number; salt: `0x${string}`; receipt: `0x${string}`}[] = [];
 
+const candidates = operatorCandidates();
 for (const agentId of members) {
-  const entry = committee.find((c) => BigInt(c.agentId) === agentId);
-  if (!entry) throw new Error(`no operator key for agent ${agentId}`);
-  const pk = operatorKey(entry.index);
-  const op = privateKeyToAccount(pk).address;
+  const op = await pub.readContract({address: REGISTRY, abi: REGISTRY_ABI, functionName: "operatorOf", args: [agentId]});
+  const pk = candidates.get(op.toLowerCase());
+  if (!pk) throw new Error(`no operator key for agent ${agentId} (operator ${op}) — not derivable from this DEPLOYER_KEY`);
   console.log(`\nagent ${agentId} (operator ${op})`);
 
   const j = await inference.settle({
@@ -294,9 +339,19 @@ for (const agentId of members) {
     observations,
   });
   // §7.4: an unattested answer is not evidence. Do not commit it.
-  const attested = j.teeVerified;
+  //
+  // An ARITHMETIC judgement is not unattested — it is unmodelled, which is a
+  // different thing and a stronger one. There is no enclave to vouch for it
+  // because no model was asked; what stands behind it is the observation's own
+  // digest and a comparison anyone can repeat. Abstaining on that would be
+  // abstaining because the answer was too certain.
+  const attested = j.route === "arithmetic" || j.attestation?.teeVerified === true;
   const outcome = attested ? j.outcome : 2;
-  console.log(`  model ${j.model}  TEE ${attested ? "verified" : "NOT VERIFIED → abstaining as UNRESOLVABLE"}`);
+  console.log(
+    j.route === "arithmetic"
+      ? `  decided in code — no model consulted`
+      : `  model ${j.attestation?.model ?? "(none)"}  TEE ${attested ? "verified" : "NOT VERIFIED → abstaining as UNRESOLVABLE"}`,
+  );
   console.log(`  says  ${OUTCOME_NAMES[outcome]}  — ${j.rationale}`);
 
   const receipt = storeReceipt({
@@ -305,15 +360,30 @@ for (const agentId of members) {
     specRoot,
     round: 1,
     resolver: {agentId: Number(agentId), address: op},
-    inference: {
-      route: "broker",
-      providerAddress: ZG_PROVIDER,
-      model: j.model,
-      chatID: j.chatId,
-      teeVerified: j.teeVerified,
-      temperature: 0,
-      simulated: false,
-    },
+    // `route` is the field a reader checks first. "arithmetic" means the numbers
+    // were compared in code and every model field below is null BECAUSE there was
+    // no model — not because one failed. Writing the provider address here anyway
+    // would claim an enclave took part in something it never saw.
+    inference:
+      j.route === "arithmetic"
+        ? {
+            route: "arithmetic",
+            providerAddress: null,
+            model: null,
+            chatID: null,
+            teeVerified: false,
+            temperature: null,
+            simulated: false,
+          }
+        : {
+            route: "broker",
+            providerAddress: ZG_PROVIDER,
+            model: j.attestation?.model ?? null,
+            chatID: j.attestation?.chatId ?? null,
+            teeVerified: j.attestation?.teeVerified ?? false,
+            temperature: 0,
+            simulated: false,
+          },
     // What was READ, not where it lives: the value, its digest, the status, and
     // the instant — enough for a stranger holding this receipt to repeat the read.
     evidence: receiptEvidence(observations),

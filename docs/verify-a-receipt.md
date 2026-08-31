@@ -24,7 +24,7 @@ AGENT=2
 ROOT=$(curl -s -X POST https://evmrpc-testnet.0g.ai \
   -H 'content-type: application/json' \
   -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_call\",\"params\":[{
-        \"to\":\"0xC8320b12796de4387742dAFf71eaF013E2fB6DD7\",
+        \"to\":\"0x548D61B9A372cBa05407087eF0eD29B92D340EAC\",
         \"data\":\"0x036f5057000000000000000000000000${MARKET}$(printf '%064x' $AGENT)\"
       },\"latest\"]}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["result"])')
 

@@ -137,8 +137,15 @@ advance_to() {
     fi
     return
   fi
-  while (( $(now) < target )); do
+  # The clock is read ONCE per turn and the loop breaks on the same value it
+  # sleeps on. The previous form read it twice — once in the `while` test and
+  # again for `left` — so a block landing between the two made `left` negative
+  # and the sleep became `sleep -2`, which bash rejects as an option. The script
+  # then died here, one call short of `close()`, leaving a market Open that every
+  # later step assumed was Closed. Seen on Galileo, 2026-08-31.
+  while :; do
     left=$(( target - $(now) ))
+    (( left <= 0 )) && break
     echo "   chain clock $left s short of tradingEnd..."
     sleep $(( left > 15 ? 15 : left ))
   done

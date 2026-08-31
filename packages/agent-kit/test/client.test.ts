@@ -3,7 +3,7 @@ import {custom, decodeFunctionData, encodeFunctionResult, type Transport} from "
 import {WAD, dpm} from "@0g-brier/protocol";
 import {BrierClient} from "../src/client";
 import {ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "../src/abi";
-import {UnreadableBeliefError, parseBelief, parseJudgement} from "../src/inference";
+import {UnreadableBeliefError, decideByThreshold, parseBelief, parseJudgement} from "../src/inference";
 import {decodeAgentName, encodeAgentName} from "../src/client";
 
 const FACTORY = "0xfacadefacadefacadefacadefacadefacadefac0" as const;
@@ -435,5 +435,149 @@ describe("a client built without a private key", () => {
     });
     expect(c.canWrite).toBe(true);
     expect(c.address).not.toBe(`0x${"0".repeat(40)}`);
+  });
+});
+
+
+/**
+ * The market this exists because of: 0xC5B6db9a…, Galileo, 2026-08-31. The close
+ * was 2450.66 against a threshold of 2425.00, so the rules said YES. Three
+ * resolvers each ran the same model in a verified enclave, each wrote "which is
+ * above $2,425.00" in its rationale, and each returned NO. At temperature 0 they
+ * could not disagree, the threshold was met on identical answers, and the market
+ * settled wrong on chain.
+ *
+ * These tests pin the two halves of the fix: it must decide that case correctly,
+ * and it must REFUSE every case it cannot read exactly — because a regex that
+ * mis-reads a threshold is worse than the model it replaces. A model that is
+ * wrong leaves a rationale a reader can catch it by; a bad comparison is
+ * confidently, silently, deterministically wrong every single time.
+ */
+describe("deciding a threshold question without a model", () => {
+  const observed = (value: string, over: Partial<{clipped: boolean}> = {}) => [
+    {
+      index: 0,
+      url: "https://api.exchange.coinbase.com/products/ETH-USD/candles",
+      kind: "http",
+      selector: "$[0][4]",
+      ok: true as const,
+      fetchedAt: 1788181902,
+      fetch: {
+        finalUrl: "https://api.exchange.coinbase.com/products/ETH-USD/candles",
+        httpStatus: 200,
+        contentType: "application/json",
+        bytes: 57,
+        sha256: "10614f3717d8c8fde0e24f2613c9bd9d93ea3c12836e07479d3909597178bda5",
+        truncated: false,
+      },
+      via: "selector" as const,
+      hint: null,
+      value,
+      clipped: false,
+      ...over,
+    },
+  ];
+
+  const GREATER =
+    "Resolves YES if the Coinbase ETH-USD candle for the minute beginning 1788181080 " +
+    "(unix seconds) has a close strictly greater than 2425.00 USD. Resolves NO if it is " +
+    "2425.00 or below.";
+
+  it("gets right the case the model got wrong", () => {
+    const d = decideByThreshold(GREATER, observed("2450.66"));
+    expect(d).not.toBeNull();
+    expect(d!.outcome).toBe(1); // YES
+    expect(d!.reading).toBe(2450.66);
+    expect(d!.threshold).toBe(2425);
+  });
+
+  it("is strict at the boundary, because the rules say strictly", () => {
+    expect(decideByThreshold(GREATER, observed("2425.00"))!.outcome).toBe(0);
+    expect(decideByThreshold(GREATER, observed("2425.01"))!.outcome).toBe(1);
+  });
+
+  it("reads the other direction without inverting it", () => {
+    const less = "Resolves YES if the close is strictly less than 2425.00 USD.";
+    expect(decideByThreshold(less, observed("2400.00"))!.outcome).toBe(1);
+    expect(decideByThreshold(less, observed("2450.66"))!.outcome).toBe(0);
+  });
+
+  it.each([
+    ["no observation at all", GREATER, []],
+    ["two observations, so which one is the reading?", GREATER, [...observed("1"), ...observed("2")]],
+    ["a value that is not a whole number", GREATER, observed("2450.66 USD")],
+    ["an empty value", GREATER, observed("   ")],
+    ["a value cut at the character bound", GREATER, observed("2450.66", {clipped: true})],
+    ["rules that stated no threshold", "Resolves YES if the election is held.", observed("2450.66")],
+    ["a threshold this phrasing does not commit to", "Resolves YES if the close is above 2425.00.", observed("2450.66")],
+    [
+      "two thresholds, so which one governs?",
+      "Resolves YES if strictly greater than 2425.00 and strictly less than 2500.00.",
+      observed("2450.66"),
+    ],
+  ])("declines rather than guessing: %s", (_why, rules, observations) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fixtures are structurally Observations
+    expect(decideByThreshold(rules, observations as any)).toBeNull();
+  });
+
+  /**
+   * Both of these were found by an adversarial review of the FIRST draft of this
+   * function, by running it rather than reading it. Each was a way to be silently,
+   * deterministically wrong — strictly worse than the model being replaced, which
+   * at least leaves a rationale a reader can catch it by.
+   */
+  it.each([
+    ["a thousands separator, en-US", "Resolves YES if it is strictly greater than 100,000 USD.", "95000"],
+    ["a thousands separator, spaced", "Resolves YES if it is strictly greater than 100 000 USD.", "95000"],
+    ["an underscore separator", "Resolves YES if it is strictly greater than 1_000_000.", "5"],
+    ["exponent notation", "Resolves YES if it is strictly greater than 1e9 USD.", "5"],
+    ["a decimal comma", "Resolves YES if it is strictly greater than 2425,50 EUR.", "2450.66"],
+    ["dotted grouping", "Resolves YES if it is strictly greater than 21.000.000.", "5"],
+  ])("declines a threshold it cannot read whole: %s", (_why, rules, value) => {
+    // The first draft read "100,000" as 100 and answered YES for 95000 — a
+    // creator could have written the strike with a comma, sold the cheap side,
+    // and been paid at any price above one hundred.
+    expect(decideByThreshold(rules, observed(value))).toBeNull();
+  });
+
+  it.each([
+    ["the rule is written from the NO side", "Resolves NO if the close is strictly greater than 2425.00 USD. Otherwise it resolves YES."],
+    ["a negation inside the YES clause", "Resolves YES only if the close is not strictly greater than 2425.00 USD."],
+    ["a carve-out", "Resolves YES if the close is strictly greater than 2425.00 USD, unless the exchange halts."],
+    ["no YES clause at all", "The close must be strictly greater than 2425.00 USD."],
+    ["YES stated after the comparison", "A close strictly greater than 2425.00 USD means this resolves YES."],
+  ])("declines rather than assuming polarity: %s", (_why, rules) => {
+    expect(decideByThreshold(rules, observed("2450.66"))).toBeNull();
+  });
+
+  it("still decides the shape market-spec.py actually writes", () => {
+    // Verbatim from the spec of market 0xC5B6db9a…, fetched from 0G Storage.
+    const real =
+      "Resolves YES if the Coinbase ETH-USD candle for the minute beginning 1788181080 " +
+      "(unix seconds) has a close strictly greater than 2425.00 USD. Resolves NO if it is " +
+      "2425.00 or below. Deemed UNRESOLVABLE only if Coinbase publishes no candle for that " +
+      "exact minute. The source URL pins that minute at both ends, so it returns one candle " +
+      "and the same one on every later request.";
+    const d = decideByThreshold(real, observed("2450.66"));
+    expect(d).not.toBeNull();
+    expect(d!.outcome).toBe(1);
+    expect(d!.threshold).toBe(2425);
+  });
+
+  it("refuses a source that was never read", () => {
+    const unobserved = [
+      {
+        index: 0,
+        url: "https://example.invalid",
+        kind: "http",
+        selector: null,
+        ok: false as const,
+        attemptedAt: 1788181902,
+        reason: "network" as const,
+        detail: "connection refused",
+      },
+    ];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fixture is structurally an Observation
+    expect(decideByThreshold(GREATER, unobserved as any)).toBeNull();
   });
 });
