@@ -69,12 +69,67 @@ react to a proposal; a proposal nobody is watching for is just a slower theft.
 ## 2. Deploy
 
 ```bash
+bash scripts/deploy-mainnet.sh              # SIMULATES. Sends nothing.
+bash scripts/deploy-mainnet.sh --broadcast  # actually deploys
+```
+
+Simulation is the default, and that is the one place this differs from the
+Galileo script on purpose. On a testnet a wrong deploy costs a redeploy; here the
+bounds set in the first transaction are permanent and the money is real, so
+sending has to be something you asked for rather than something you got.
+
+Everything it refuses, it refuses before a single transaction: the compromised
+Galileo deployer **by address**, any role left unset or held by the deployer,
+governance equal to guardian, a `COLLATERAL` with no code on 16661 or more than
+eighteen decimals, an ERC-8004 pair half-configured, a balance too thin, and a
+dirty working tree — because a mainnet manifest must correspond to a commit you
+can point at. `DeployLib.resolveRoles` refuses most of it too; refusing it twice
+is the point, since here it costs nothing and names the variable rather than a
+Solidity selector.
+
+Underneath it is the same script the runbook used to invoke directly:
+
+```bash
 forge script script/Deploy.s.sol --rpc-url "$MAINNET_RPC" --broadcast
 ```
 
 In one transaction sequence this deploys the contracts, applies the bounds and
 parameters, seeds the six categories, deploys the timelock, and calls
 `transferOwnership` on four contracts.
+
+### Which token to settle in
+
+Read off chain on 2026-08-31 by scanning sixteen thousand blocks of `Transfer`
+events — not from a token list, because a token list cannot tell you which chain
+an address belongs to.
+
+| token | address | dec | verdict |
+|---|---|---|---|
+| **W0G** | `0x1cd0690ff9a693f5ef2dd976660a8dafc81a109c` | 18 | **use this** |
+| USDC.e | `0x1f3aa82227281ca364bfb3d253b0f1af1da6473e` | 6 | only with eyes open |
+| USDT | — | — | not deployed |
+
+**W0G is wrapped native 0G and it is backed exactly.** Its native balance equals
+its `totalSupply` to the wei — 14,288,755.6399 of each at the time of reading.
+`deposit()`/`withdraw()` in the WETH9 shape, `mint()` permissioned (it reverts
+for an arbitrary caller), and no `upgradeTo`, no `pause`, no blacklist and no
+`owner` anywhere in its bytecode. Nothing can change what it does, which is the
+property that matters most for a token an unaudited protocol holds.
+
+**USDC.e is upgradeable and carries a blacklist.** `upgradeTo(address)` is in the
+bytecode and `owner()` answers `0xecf08409A5e35aA58A887Cf892c6Af6648727281`. The
+blacklist bites harder here than it looks: `Market._distributeFees` **pushes** to
+the creator, the resolver pool and the treasury inside `settle`, `fail` and
+`void`. Blacklist any one of those three and the settlement reverts and that
+market's collateral is stuck for good. That is a wedge rather than a theft, and
+it has no cure short of governance.
+
+**Do not reach for the ones that look native.** `a0G` (Ascend Staked 0G) and
+`st0G` (Gimo Staked 0G) are staking derivatives holding no native 0G at all;
+their value accrues. Reward-bearing or rebasing collateral breaks the pool's
+accounting silently, which is the one failure mode that arrives without an error
+message. The `zv*` tokens are LP shares. `AGENT`, `UNI-V3-POS`, `0GL` and `NSC`
+are not fungible tokens and have no `decimals()`.
 
 Bounds are set **before** the values and are permanent. `FEE_BPS` gets a 3.00%
 ceiling; nothing later — no governance vote, no upgrade — raises it. Getting a
