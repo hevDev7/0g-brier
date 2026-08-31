@@ -131,6 +131,45 @@ accounting silently, which is the one failure mode that arrives without an error
 message. The `zv*` tokens are LP shares. `AGENT`, `UNI-V3-POS`, `0GL` and `NSC`
 are not fungible tokens and have no `decimals()`.
 
+**The trap: `0x4B948d64dE1F71fCd12fB586f4c776421a35b3eE`.** 0G's own docs give
+this as the official bridged 0G on Ethereum and BNB, and it also carries 12,611
+bytes of code on 16661 — so it looks live, and a `cast code` check passes. It is
+not an ERC-20 there: `symbol()`, `name()`, `decimals()` and `totalSupply()` all
+revert. `Market.initialize` would revert inside `IERC20Metadata.decimals()`, and
+by then the market has already taken the creator's collateral. This is the single
+most plausible way a wrong address reaches the allowlist, which is why
+`deploy-mainnet.sh` calls `decimals()` rather than trusting `code.length`.
+
+**If you do choose USDC.e, one invariant stops being true.** It is Circle's
+Bridged USDC Standard (`FiatTokenV2`, `currency()` = "USD"), bridged by XSwap over
+Chainlink CCIP — the route 0G Labs announced, though no address is published in
+the docs. Its `pauser()` and `blacklister()` are the same key,
+`0x1E344B7d221E8d9b34Ec8Eb6aE5A0b772A4bB316`, and both powers were exercised on a
+fork: after `pause()` every transfer reverts, after `blacklist(addr)` that
+address's transfers revert.
+
+Brier promises that **the pause never blocks an exit** — `sell`, `redeem` and
+`liquidate` stay open while the protocol is paused, and a test enforces it. That
+promise is enforced at the Market layer and no ERC-20 with a pauser can honour it
+end to end: if the token is paused, the exit reverts inside `safeTransfer` where
+Brier has no say. This is true of canonical USDC on every chain, so it is a thing
+to state rather than a disqualifier — but it must be stated, because the spec
+currently reads as though exits are unconditionally safe.
+
+**Liquidity bounds a sensible market size.** The deepest pool is W0G/USDC.e at
+`0x23336572435ec92d25ef0dd2d468b2a1abf7bb4f`, holding 165,973 USDC.e against
+429,963 W0G; USDC.e's entire supply on the chain is 1.63M. The only DEX is a
+Uniswap V3 fork (factory `0x6F3945Ab27296D1D66D8EEB042ff1B4fb2E0CE70`) with 22
+pools ever created, three of them throwaway test tokens. Size the seed against
+that, not against the token's market cap elsewhere.
+
+**A note for anyone repeating this.** `chainscan.0g.ai` runs ConfluxScan software
+and returns CIP-37 base32 addresses (`net16661:aatxzmbce…`), not hex — addresses
+copied from its API are unusable without decoding. Its `/v1/token` endpoint
+answers 200 with an empty list; the working one is
+`/stat/tokens/list?transferType=ERC20`. There is no token list to import, which
+is why everything above was found by scanning `Transfer` and `PoolCreated` logs.
+
 Bounds are set **before** the values and are permanent. `FEE_BPS` gets a 3.00%
 ceiling; nothing later — no governance vote, no upgrade — raises it. Getting a
 bound wrong is the one mistake on this page that a redeploy is the only cure for.

@@ -98,6 +98,12 @@ if [[ -n "${ERC8004_IDENTITY:-}" || -n "${ERC8004_REPUTATION:-}" ]]; then
     [[ -n "${!v:-}" ]] || die "$v is unset while the other is set. Wire both or neither."
     C="$(cast code "${!v}" --rpc-url "$RPC")"
     [[ -n "$C" && "$C" != "0x" ]] || die "$v ${!v} has no code on chain $CHAIN_ID."
+    # Code is not enough. On 0G mainnet both canonical ERC-8004 addresses hold an
+    # ERC-1967 proxy with an EMPTY implementation slot: 130 bytes of bytecode and
+    # every call through it reverts. `name()` is the cheapest proof that anything
+    # is actually behind the address.
+    cast call "${!v}" 'name()(string)' --rpc-url "$RPC" >/dev/null 2>&1 \
+      || die "$v ${!v} has code but answers nothing — an uninitialised proxy. Leave both ERC8004_* unset rather than wiring a dead registry."
   done
   ERC8004_NOTE="$ERC8004_IDENTITY / $ERC8004_REPUTATION"
 else
@@ -105,7 +111,13 @@ else
 fi
 
 BALANCE="$(cast balance "$DEPLOYER" --rpc-url "$RPC")"
-MIN_WEI=$(( 25000000 * $(cast gas-price --rpc-url "$RPC") ))
+# 45M gas, not the 25M the Galileo script uses. MEASURED, not guessed: a dry run
+# of Deploy.s.sol against live 16661 state on 2026-08-31 estimated 36,787,692 gas
+# — 0.1472 0G at the 4 gwei the node was quoting. The 25M inherited from the
+# testnet wrapper would have waved through a deployer that runs dry two thirds of
+# the way in, which on this chain means a half-wired protocol and a manifest
+# pointing at contracts that were never configured.
+MIN_WEI=$(( 45000000 * $(cast gas-price --rpc-url "$RPC") ))
 (( BALANCE >= MIN_WEI )) \
   || die "deployer $DEPLOYER holds $(cast from-wei "$BALANCE") 0G; needs about $(cast from-wei "$MIN_WEI")"
 

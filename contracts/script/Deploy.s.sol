@@ -215,6 +215,17 @@ contract Deploy is Script {
      * so this is configuration rather than deployment — which is exactly why it can
      * be passed in rather than deployed here.
      */
+    /// @dev Reverts unless `target` holds code AND answers a call. See the note in
+    ///      `_wireErc8004`: an uninitialised proxy has code and answers nothing.
+    function _requireLive(address target, string memory name) internal view {
+        require(target.code.length > 0, string.concat("Deploy: ", name, " has no code on this chain"));
+        (bool ok, bytes memory out) = target.staticcall(abi.encodeWithSignature("name()"));
+        require(
+            ok && out.length > 0,
+            string.concat("Deploy: ", name, " has code but does not answer; an uninitialised proxy?")
+        );
+    }
+
     function _wireErc8004(ConfigRegistry config) internal {
         address identity = vm.envOr("ERC8004_IDENTITY", address(0));
         address reputation = vm.envOr("ERC8004_REPUTATION", address(0));
@@ -222,8 +233,19 @@ contract Deploy is Script {
             console2.log("ERC-8004:            not configured (publishing is off)");
             return;
         }
-        require(identity.code.length > 0, "Deploy: ERC8004_IDENTITY has no code on this chain");
-        require(reputation.code.length > 0, "Deploy: ERC8004_REPUTATION has no code on this chain");
+        // CODE IS NOT ENOUGH, and 0G mainnet is the reason. Both canonical
+        // ERC-8004 addresses hold an ERC-1967 proxy there whose implementation
+        // slot is empty: 130 bytes of bytecode, `code.length > 0` perfectly
+        // satisfied, and every call through it reverts. A deployment wired to
+        // that would pass here and then fail at `linkErc8004`, which is exactly
+        // the shape of failure this whole function was added to prevent.
+        //
+        // So the registry has to ANSWER, not merely exist. `name()` is the
+        // cheapest question that proves something is behind the address — on
+        // Galileo it returns "AgentIdentity"; on a proxy pointing at nothing it
+        // reverts.
+        _requireLive(identity, "ERC8004_IDENTITY");
+        _requireLive(reputation, "ERC8004_REPUTATION");
         config.setAddress(ConfigKeys.ERC8004_IDENTITY, identity);
         config.setAddress(ConfigKeys.ERC8004_REPUTATION, reputation);
         console2.log("ERC8004_IDENTITY:   ", identity);
