@@ -85,8 +85,12 @@ CHAIN_ID="$(cast chain-id --rpc-url "$RPC")"
 
 BALANCE="$(cast balance "$DEPLOYER" --rpc-url "$RPC")"
 # ~18M gas for seven contracts plus the configuration transactions, with headroom.
-MIN_WEI=$(( 25000000 * $(cast gas-price --rpc-url "$RPC") ))
-if (( BALANCE < MIN_WEI )); then
+# python3, not $(( )): bash arithmetic is 64-bit signed and tops out at 9.22 0G in
+# wei, so a well-funded deployer read as a negative number and was refused. The
+# mainnet wrapper had the identical bug, found 2026-09-01 on a deployer holding
+# 12.3 0G.
+MIN_WEI=$(python3 -c "print(25000000 * $(cast gas-price --rpc-url "$RPC"))")
+if [ "$(python3 -c "print(1 if $BALANCE < $MIN_WEI else 0)")" = "1" ]; then
   die "deployer $DEPLOYER holds $(cast from-wei "$BALANCE") 0G; needs about $(cast from-wei "$MIN_WEI")"
 fi
 

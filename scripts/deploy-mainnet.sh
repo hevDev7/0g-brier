@@ -179,9 +179,18 @@ BALANCE="$(cast balance "$DEPLOYER" --rpc-url "$RPC")"
 # testnet wrapper would have waved through a deployer that runs dry two thirds of
 # the way in, which on this chain means a half-wired protocol and a manifest
 # pointing at contracts that were never configured.
-MIN_WEI=$(( 45000000 * $(cast gas-price --rpc-url "$RPC") ))
-(( BALANCE >= MIN_WEI )) \
-  || die "deployer $DEPLOYER holds $(cast from-wei "$BALANCE") 0G; needs about $(cast from-wei "$MIN_WEI")"
+#
+# `python3`, NOT `$(( ))`, and this is not caution — it is a bug this check HAD.
+# Bash arithmetic is 64-bit signed and stops at 9223372036854775807, which is 9.22
+# 0G in wei. A deployer holding 12.3 0G read as -6145183701597500030 and was told
+# it needed 0.18, so the check refused every deployer funded well enough to use it
+# and passed the ones that were nearly empty. Observed on 2026-09-01 against a real
+# .env.mainnet. The same overflow was found and fixed in setup-committee.sh the day
+# before; this is the second place it lived.
+MIN_WEI=$(python3 -c "print(45000000 * $(cast gas-price --rpc-url "$RPC"))")
+if [ "$(python3 -c "print(1 if $BALANCE < $MIN_WEI else 0)")" = "1" ]; then
+  die "deployer $DEPLOYER holds $(cast from-wei "$BALANCE") 0G; needs about $(cast from-wei "$MIN_WEI")"
+fi
 
 if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]]; then
   die "working tree is dirty. A mainnet manifest must correspond to a commit you can point at."
