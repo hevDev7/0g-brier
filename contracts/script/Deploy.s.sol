@@ -96,6 +96,7 @@ contract Deploy is Script {
         );
         m.configProxy = address(config);
         DeployLib.applyDefaults(config, m.usdc);
+        _applyMoneyOverrides(config);
 
         m.outcomeShares = address(new OutcomeShares("https://brier.0g/{id}.json"));
         m.marketImplementation = address(new Market());
@@ -373,6 +374,68 @@ contract Deploy is Script {
         }
         config.setAddress(ConfigKeys.RESOLUTION_MODULE, address(deployed));
         return (address(deployed), address(impl));
+    }
+
+    /// @notice The money parameters an operator may choose at deploy time, in the
+    ///         collateral's own base units. Zero means "keep the default".
+    struct Money {
+        uint256 stake;
+        uint256 bond;
+        uint256 seed;
+        uint256 deposit;
+        uint256 minTrade;
+    }
+
+    /// @notice Let the operator choose the money parameters at deploy time.
+    /// @dev The defaults are 100/50/100/20/1 WHOLE TOKENS of the collateral, which is
+    ///      the right long-run policy and the wrong launch cost: fourteen resolvers at
+    ///      a hundred-token stake lock 2,800 of them before a single market exists.
+    ///
+    ///      These could be set with `setParam` after the deploy — the deployer owns the
+    ///      registry until the cliff — but then there is a window in which the registry
+    ///      says one thing and the operator means another, and a step that can be
+    ///      forgotten. Setting them in the same broadcast removes both.
+    ///
+    ///      Values are in the collateral's OWN BASE UNITS: one W0G is
+    ///      1000000000000000000. The wrapper echoes them back in whole tokens before it
+    ///      broadcasts, so a wrong exponent is something you SEE rather than something
+    ///      you discover.
+    function _applyMoneyOverrides(ConfigRegistry config) internal {
+        _applyMoney(config, _moneyFromEnv());
+    }
+
+    /// @dev Reading the environment is kept apart from applying the values, and not for
+    ///      tidiness. `vm.setEnv` mutates the PROCESS environment, which every test
+    ///      running in parallel shares, so a test that set a variable was seen by tests
+    ///      that never set one — five of them failed on values they had not chosen.
+    ///      Values arrive as an argument; only this function touches the environment.
+    function _moneyFromEnv() internal view returns (Money memory m) {
+        m.stake = vm.envOr("MIN_RESOLVER_STAKE", uint256(0));
+        m.bond = vm.envOr("DISPUTE_BOND", uint256(0));
+        m.seed = vm.envOr("MIN_SEED", uint256(0));
+        m.deposit = vm.envOr("MIN_SETTLEMENT_DEPOSIT", uint256(0));
+        m.minTrade = vm.envOr("MIN_TRADE_TOKENS", uint256(0));
+    }
+
+    /// @dev `setParam` enforces the bounds, which `applyDefaults` already locked at one
+    ///      whole token. The floor cannot be argued away here.
+    function _applyMoney(ConfigRegistry config, Money memory m) internal {
+        if (m.stake != 0) config.setParam(ConfigKeys.MIN_RESOLVER_STAKE, m.stake);
+        if (m.bond != 0) config.setParam(ConfigKeys.DISPUTE_BOND, m.bond);
+        if (m.seed != 0) config.setParam(ConfigKeys.MIN_SEED, m.seed);
+        if (m.deposit != 0) config.setParam(ConfigKeys.MIN_SETTLEMENT_DEPOSIT, m.deposit);
+        if (m.minTrade != 0) config.setParam(ConfigKeys.MIN_TRADE_TOKENS, m.minTrade);
+
+        // A minimum trade at or above the seed forbids every trade smaller than the
+        // entire book. The market still functions and the bounds still pass, which is
+        // exactly why this has to be checked here: nothing else would notice, and the
+        // first trader would meet a floor as large as the liquidity they were quoting
+        // against. Lowering MIN_SEED and forgetting MIN_TRADE_TOKENS is the natural way
+        // to arrive here.
+        require(
+            config.params(ConfigKeys.MIN_TRADE_TOKENS) < config.params(ConfigKeys.MIN_SEED),
+            "Deploy: MIN_TRADE_TOKENS is not below MIN_SEED, so no trade smaller than the whole book would be allowed"
+        );
     }
 
     function _writeManifest(Manifest memory m) internal {

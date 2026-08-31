@@ -215,21 +215,54 @@ function mint(address recipient, uint wad) external {
 }
 ```
 
-`mint` is callable by ANYONE. It is not access-controlled in this contract at all.
-The only thing standing between an arbitrary caller and unlimited W0G is that
-`WRAPPED_A0GI_BASE` — `0x0000000000000000000000000000000000001002`, a chain
-precompile with no published source — rejects them. Probed from the zero address,
-from a random EOA and from the wrapper itself, all three revert `wrapped a0gi base
-mint failed`, so today it does reject them.
+`mint` is callable by ANYONE and has no caller check in this contract at all. An
+earlier reading of this file said it "reverts for an arbitrary caller", and that is
+not what it does. From an unauthorised EOA:
 
-Notice what the guard is made of, though. A low-level `.call` to an address with no
-code returns `success = true`, and this code checks `success` without checking
-`returndatasize`. If that precompile were ever removed by a client upgrade, `mint`
-would begin succeeding for everybody and W0G would become infinitely mintable
-against a fixed pool of native 0G. That is a 0G-consensus trust assumption rather
-than a token-issuer one — roughly the trust you extend by holding native 0G at all
-— but it is not the same thing as "nothing can inflate the supply", and the earlier
-wording implied it was.
+```
+mint(0xdead…, 0)     -> 0x        SUCCEEDS
+mint(0xdead…, 1)     -> reverted: wrapped a0gi base mint failed
+mint(0xdead…, 1e18)  -> reverted: wrapped a0gi base mint failed
+```
+
+The zero-amount call **succeeds**. Execution passes every check in the wrapper and
+every check in the precompile; only a comparison against an amount stops it. Probing
+`0x0000000000000000000000000000000000001002` directly tells you what the two guards
+actually are: from an EOA it answers `sender is not WA0GI`, and from the wrapper it
+answers `insufficient mint cap`. So the wrapper is the only permitted caller, and
+each address the wrapper forwards carries a **quota**. 0G's own precompile
+documentation describes exactly this — quota-based mint and burn on top of a
+conventional wrapper, with each address's quota set by the chain.
+
+The honest statement is therefore not "nothing can inflate the supply". It is: **any
+address 0G governance grants a nonzero mint quota can mint W0G permissionlessly**,
+and today no ordinary address has one — no `Transfer` from the zero address appears
+in the last 200,000 blocks. That is a consensus-layer capability, roughly the trust
+you already extend by holding native 0G, and it is not the same as immutability.
+
+Note too what `totalSupply()` cannot tell you. It compiles to `SELFBALANCE`, so it
+reports the native currency held and nothing about `balanceOf` at all. A mint
+credits `balanceOf[recipient]` directly. Whether the precompile also moves native
+into the wrapper — the source comment says it does — is not verifiable from the EVM,
+because the precompile has no bytecode and no published source. So the check that
+was cited as proof of solvency is structurally incapable of detecting the one thing
+that would break it.
+
+**And there is a look-alike on this chain.** `0x7f73a890f0f608fa32e1dd29a5f552bc7dda0e01`
+also answers `name()` "Wrapped 0G" and `symbol()` "W0G" on 16661. It is not
+canonical — unverified source, 4 holders against 2,297, 344 transfers against
+627,650 — but name and symbol are free to set, and copying an address out of a
+search result is how the wrong one gets deployed. The address in this file is the
+canonical wrapper, and the way you know is usage and the `WRAPPED_A0GI_BASE()`
+getter, not the name.
+
+**Two more things about W0G worth knowing before you settle in it.** Supply is
+concentrated: a single EOA holds 66.9% of it, with no code and five nonces. And
+`withdraw()` pays out through `payable(msg.sender).transfer(wad)` with its 2300-gas
+stipend, so a *contract* holding W0G whose `receive()` does real work cannot unwrap.
+Neither touches Brier — the Market never unwraps, and concentration is a liquidity
+fact rather than a control one — but an agent whose address is a contract should
+know the second one.
 
 *One more thing the explorer will tell you, and it is not a forgery.* The verified
 source declares `name = "Wrapped A0GI"` and `symbol = "WA0GI"`; the chain answers
@@ -268,6 +301,17 @@ the creator, the resolver pool and the treasury inside `settle`, `fail` and
 `void`. Blacklist any one of those three and the settlement reverts and that
 market's collateral is stuck for good. That is a wedge rather than a theft, and
 it has no cure short of governance.
+
+**Two things about USDC.e that an independent re-check added.** Its upgrade admin
+is `0xc97a437cf5e495df5f1153b07dc3b179f33b52a8` and it is an EOA, not a multisig —
+one key can replace the implementation and rewrite every balance, with no timelock.
+And **a second, different token on 0G also carries the symbol `USDC.e`**:
+`0x8a2b28364102bea189d99a475c494330ef2bdd0b`, "Bridged USDC (Stargate)", also 6
+decimals, also a FiatToken proxy, under a different admin. Choosing this collateral
+by symbol rather than by address picks one of two tokens at random. Settleable depth
+is also thinner than the supply suggests: about 608,000 USDC.e across three Uniswap
+V3 0.30% pools, and concentrated liquidity means usable depth at any given price is
+a fraction of that.
 
 **Do not reach for the ones that look native.** `a0G` (Ascend Staked 0G) and
 `st0G` (Gimo Staked 0G) are staking derivatives holding no native 0G at all;

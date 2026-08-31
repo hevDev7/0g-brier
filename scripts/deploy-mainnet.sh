@@ -175,6 +175,28 @@ if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]]; then
   die "working tree is dirty. A mainnet manifest must correspond to a commit you can point at."
 fi
 
+# Echo a money parameter in WHOLE TOKENS. The env values are raw base units, which
+# is unambiguous for a machine and easy to get wrong by three digits for a person;
+# printing them back scaled is what turns a wrong exponent into something seen
+# before the broadcast rather than found after it.
+money(){
+  local raw="${!1:-}" fallback="$2"
+  if [[ -z "$raw" || "$raw" == "0" ]]; then
+    echo "$fallback $SYM (default)"
+  elif [[ ! "$raw" =~ ^[0-9]+$ ]]; then
+    die "$1 must be a whole number in ${SYM}'s base units, not '$raw'."
+  else
+    printf '%s %s\n' "$(python3 -c "print(f'{$raw/10**$DEC:,.6f}'.rstrip('0').rstrip('.'))")" "$SYM"
+  fi
+}
+# What building the committee actually costs: setup-committee.sh stakes twice the
+# floor per member, and a disputed VERIFIED market needs fourteen.
+roster(){
+  local raw="${MIN_RESOLVER_STAKE:-}"
+  [[ -z "$raw" || "$raw" == "0" ]] && raw="$(python3 -c "print(100 * 10**$DEC)")"
+  python3 -c "print(f'{$raw * 2 * 14/10**$DEC:,.2f}')"
+}
+
 cat <<EOF
 
 ▶ chain        $CHAIN_ID via $RPC
@@ -182,9 +204,10 @@ cat <<EOF
 ▶ env file     $ENV_FILE
 ▶ deployer     $DEPLOYER ($(cast from-wei "$BALANCE") 0G)
 ▶ collateral   $COLLATERAL  $SYM, $DEC decimals
-▶ money        seed 100 $SYM · deposit 20 $SYM · stake 100 $SYM · bond 50 $SYM
-               (whole tokens, scaled to $DEC decimals at deploy — read them, they are
-                policy, not plumbing: a $SYM is not a dollar)
+▶ money        stake $(money MIN_RESOLVER_STAKE 100) · bond $(money DISPUTE_BOND 50)
+               seed $(money MIN_SEED 100) · deposit $(money MIN_SETTLEMENT_DEPOSIT 20)
+               min trade $(money MIN_TRADE_TOKENS 1) · roster of 14 locks $(roster) $SYM
+               (read these: they are policy, not plumbing, and a $SYM is not a dollar)
 ▶ governance   $GOVERNANCE
 ▶ guardian     $GUARDIAN
 ▶ treasury     $TREASURY
