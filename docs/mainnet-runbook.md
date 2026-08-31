@@ -346,11 +346,32 @@ attests that an enclave ran the model, never that the model was right.
 
 Two things follow for a deployment carrying value:
 
-- **Correlated resolvers are not a footnote.** 0G Compute serves one text model,
-  and `examples/resolve.ts` reads the evidence once and shares it, so a
-  "committee" is one judgement counted N times. A second model, or a
-  deterministic non-model resolver for questions with a mechanical answer, is the
-  difference between a committee and a quorum of copies.
+- **Correlated resolvers were a TESTNET limitation, and mainnet lifts it.** On
+  Galileo 0G Compute serves two services, one of them image editing — so a
+  committee there is one text model, `qwen/qwen2.5-omni-7b`, counted N times,
+  which is exactly how the wrong settlement above happened. Mainnet lists
+  **twelve services, seven of them TeeML-attested text models**: `GLM-5-FP8`,
+  `qwen3.7-plus`, `gpt-5.4-mini`, `glm-5.2`, `0GM-1.0-35B-A3B`, `MiniMax-H3` and
+  `0GM-1.0-35B-A3B-SIA`. (`claude-opus-5` and `claude-fable-5` are listed as
+  `standard` verifiability rather than TeeML, so `resolve.ts` will refuse their
+  answers and abstain — do not count them.) List them yourself with
+  `CHAIN_ID=16661 npx tsx examples/providers.ts`.
+
+  `examples/resolve.ts` now takes `ZG_PROVIDERS` — a comma-separated list handed
+  out round-robin across the sampled committee, so five members across five
+  providers is five different models judging the same evidence. That is the
+  configuration in which the threshold means something and a dissent is a real
+  signal rather than an impossibility. It is opt-in because it costs: each
+  provider needs its own sub-account and TEE acknowledgement, so run
+  `scripts/setup-compute.mjs --provider 0x…` once per address, at 1 0G each on
+  top of the 3 0G ledger.
+
+  Two caveats worth carrying. The evidence is still read ONCE and shared, by
+  design — three fetches of the same candle seconds apart would produce three
+  legitimately different readings and a split vote nothing was wrong with. And a
+  numeric-threshold question no longer reaches a model at all; `decideByThreshold`
+  settles it in code. Model diversity is what protects the questions that need
+  judgement, not the ones that need arithmetic.
 - **The dispute round is the only correction, and it costs a bond.** Nobody
   disputed this one because nobody was watching. On mainnet, whoever holds the
   losing side is the party who must notice within the window — a security model

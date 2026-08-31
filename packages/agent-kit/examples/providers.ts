@@ -16,10 +16,17 @@ const raw = process.env.DEPLOYER_KEY ?? process.env.AGENT_KEY;
 if (!raw) throw new Error("set DEPLOYER_KEY or AGENT_KEY — listing reads the registry through a wallet");
 const KEY = (raw.startsWith("0x") ? raw : `0x${raw}`) as `0x${string}`;
 
-const services = await ZgInference.listServices({
-  network: (process.env.CHAIN_ID ?? "16602") === "16602" ? "galileo" : "anvil",
-  privateKey: KEY,
-});
+// THREE networks, not two. This read `=== "16602" ? "galileo" : "anvil"`, so
+// CHAIN_ID=16661 fell silently to anvil and pointed the listing at localhost —
+// which fails as a connection error and reads like the mainnet catalogue being
+// unreachable. It matters more than a typo usually would: mainnet carries twelve
+// services where Galileo carries two, and the difference is the whole argument
+// for a committee whose members do not all run the same model.
+const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
+const NETWORK = CHAIN_ID === 16661 ? "mainnet" : CHAIN_ID === 16602 ? "galileo" : "anvil";
+console.log(`catalogue on ${NETWORK} (chain ${CHAIN_ID})\n`);
+
+const services = await ZgInference.listServices({network: NETWORK, privateKey: KEY});
 
 if (services.length === 0) {
   console.log("no inference services are listed on this network");

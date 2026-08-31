@@ -46,7 +46,27 @@ import {execFileSync} from "node:child_process";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
 const ZG_INDEXER = process.env.ZG_INDEXER ?? "https://indexer-storage-testnet-turbo.0g.ai";
-const ZG_PROVIDER = (process.env.ZG_PROVIDER ?? "0xa48f01287233509FD694a22Bf840225062E67836") as `0x${string}`;
+/**
+ * The provider(s) whose enclaves judge this market.
+ *
+ * ONE PER MEMBER WHERE THERE ARE ENOUGH, and this is the difference between a
+ * committee and a quorum of copies. 0G Compute serves ONE text model on Galileo
+ * and twelve services on mainnet, of which seven are TeeML-attested text models.
+ * With one model at temperature 0 over evidence read once and shared, N
+ * resolvers are one deterministic function evaluated N times: they cannot
+ * disagree, the threshold is met on identical answers, and on 2026-08-31 that
+ * carried a wrong settlement to the chain three votes to nil.
+ *
+ * `ZG_PROVIDERS` takes a comma-separated list and hands them out round-robin
+ * across the sampled committee. Each needs its own funded sub-account and its
+ * own TEE acknowledgement — `scripts/setup-compute.mjs --provider` per address,
+ * 1 0G apiece — so this is opt-in rather than assumed. Falls back to the single
+ * `ZG_PROVIDER`, which is the old behaviour and says so in the output.
+ */
+const ZG_PROVIDERS = (process.env.ZG_PROVIDERS ?? process.env.ZG_PROVIDER ?? "0xa48f01287233509FD694a22Bf840225062E67836")
+  .split(",")
+  .map((x) => x.trim())
+  .filter(Boolean) as `0x${string}`[];
 const REPO = new URL("../../../", import.meta.url).pathname;
 
 const key = process.env.DEPLOYER_KEY!;
@@ -321,7 +341,25 @@ if (observations.length > 0 && observations.every((o) => !o.ok)) {
   console.log(`  no source could be read; the committee will be asked to judge on that`);
 }
 
-const inference = await ZgInference.connect({network: "galileo", privateKey: KEY, provider: ZG_PROVIDER});
+// `network` from CHAIN_ID, not hardcoded. This said "galileo" outright, so on
+// mainnet the inference client talked to the testnet RPC while every other call
+// in this file talked to 16661 — a split-brain that surfaces as an attestation
+// against a chain the market does not live on.
+const NETWORK = CHAIN_ID === 16661 ? "mainnet" : CHAIN_ID === 16602 ? "galileo" : "anvil";
+const brokers = new Map<string, ZgInference>();
+async function inferenceFor(provider: `0x${string}`): Promise<ZgInference> {
+  let b = brokers.get(provider.toLowerCase());
+  if (!b) {
+    b = await ZgInference.connect({network: NETWORK, privateKey: KEY, provider});
+    brokers.set(provider.toLowerCase(), b);
+  }
+  return b;
+}
+console.log(
+  ZG_PROVIDERS.length > 1
+    ? `\n${ZG_PROVIDERS.length} providers, handed out round-robin — the committee will not all be running one model`
+    : `\none provider for the whole committee: every member runs the same model over the same evidence, so they cannot disagree`,
+);
 const votes: {agentId: bigint; pk: `0x${string}`; j: Judgement | null; outcome: number; salt: `0x${string}`; receipt: `0x${string}`}[] = [];
 
 const candidates = operatorCandidates();
@@ -331,6 +369,10 @@ for (const agentId of members) {
   if (!pk) throw new Error(`no operator key for agent ${agentId} (operator ${op}) — not derivable from this DEPLOYER_KEY`);
   console.log(`\nagent ${agentId} (operator ${op})`);
 
+  // Round-robin over the sampled order, so a committee of five across three
+  // providers is 2/2/1 rather than 5/0/0.
+  const provider = ZG_PROVIDERS[votes.length % ZG_PROVIDERS.length]!;
+  const inference = await inferenceFor(provider);
   const j = await inference.settle({
     question: spec.question,
     rules: spec.rules,
@@ -377,7 +419,7 @@ for (const agentId of members) {
           }
         : {
             route: "broker",
-            providerAddress: ZG_PROVIDER,
+            providerAddress: provider,
             model: j.attestation?.model ?? null,
             chatID: j.attestation?.chatId ?? null,
             teeVerified: j.attestation?.teeVerified ?? false,

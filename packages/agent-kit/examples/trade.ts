@@ -35,7 +35,7 @@ const KEY = (key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`;
 
 const manifest = loadDeployment(CHAIN_ID, new URL("../../../deployments", import.meta.url).pathname);
 const client = new BrierClient({
-  network: CHAIN_ID === 16602 ? "galileo" : "anvil",
+  network: CHAIN_ID === 16661 ? "mainnet" : CHAIN_ID === 16602 ? "galileo" : "anvil",
   privateKey: KEY,
   factory: manifest.contracts.MarketFactory as `0x${string}`,
   outcomeShares: manifest.contracts.OutcomeShares as `0x${string}`,
@@ -82,7 +82,11 @@ if (!spec?.question || !spec.rules) {
 }
 console.log(`\nquestion  ${spec.question}`);
 
-const inference = await ZgInference.connect({network: "galileo", privateKey: KEY, provider: ZG_PROVIDER});
+// From CHAIN_ID, not hardcoded — see the same note in examples/resolve.ts. A
+// literal "galileo" here pointed the inference client at the testnet RPC while
+// the trading client talked to whatever CHAIN_ID said.
+const ZG_NETWORK = CHAIN_ID === 16661 ? "mainnet" : CHAIN_ID === 16602 ? "galileo" : "anvil";
+const inference = await ZgInference.connect({network: ZG_NETWORK, privateKey: KEY, provider: ZG_PROVIDER});
 console.log(`asking 0G Compute…`);
 const judgement = await inference.believe({
   question: spec.question,
