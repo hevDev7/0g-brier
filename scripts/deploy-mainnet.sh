@@ -144,11 +144,29 @@ fi
 # GOVERNANCE_KEY is not needed to deploy and is not wanted on this machine. Say so
 # once, without refusing — the choice is the operator's, but it should be a choice.
 if [[ -n "${GOVERNANCE_KEY:-}" ]]; then
-  echo "⚠  GOVERNANCE_KEY is set. The deploy does not use it, and handover.sh can print"
-  echo "   unsigned calldata for a multisig instead (--unsigned). A governance key held"
-  echo "   as a hot key on a build machine owns every upgradeable contract after the"
-  echo "   cliff closes; the 48-hour timelock is then the only thing between a stolen"
-  echo "   key and the protocol."
+  GK="$GOVERNANCE_KEY"
+  [[ "$GK" =~ ^[0-9a-fA-F]{64}$ ]] && GK="0x$GK"
+  [[ "$GK" =~ ^0x[0-9a-fA-F]{64}$ ]] || die "GOVERNANCE_KEY is set but is not a 32-byte hex key."
+  GOV_FROM_KEY="$(cast wallet address --private-key "$GK")"
+  # The timelock grants PROPOSER and EXECUTOR to the GOVERNANCE address and to nothing
+  # else, and handover.sh signs with GOVERNANCE_KEY. A key for a different wallet is
+  # not a second governance — it is no governance, and you find out at `handover.sh
+  # schedule`, which is AFTER the deploy. Recoverable, because the deployer still owns
+  # everything until the cliff closes, but it is the worst moment to discover it.
+  if [[ "${GOV_FROM_KEY,,}" != "${GOVERNANCE,,}" ]]; then
+    die "GOVERNANCE and GOVERNANCE_KEY are different wallets.
+    GOVERNANCE      $GOVERNANCE
+    GOVERNANCE_KEY  $GOV_FROM_KEY
+  Only GOVERNANCE holds the timelock's proposer and executor roles, so the handover
+  signed by this key would be rejected. Either set GOVERNANCE=$GOV_FROM_KEY, or clear
+  GOVERNANCE_KEY and hand over with 'handover.sh --unsigned' from the wallet that
+  actually is $GOVERNANCE."
+  fi
+  echo "⚠  GOVERNANCE_KEY is set and matches GOVERNANCE. The deploy does not use it, and"
+  echo "   handover.sh can print unsigned calldata for a multisig instead (--unsigned)."
+  echo "   A governance key held as a hot key on a build machine owns every upgradeable"
+  echo "   contract after the cliff closes; the 48-hour timelock is then the only thing"
+  echo "   between a stolen key and the protocol."
 fi
 
 # ── ERC-8004, which is optional but must be deliberate ───────────────────────
