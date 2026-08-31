@@ -107,6 +107,17 @@ export const FACTORY_ABI = [
   },
 ] as const;
 
+/**
+ * The two functions a wrapped-native token adds to ERC-20: `deposit()` takes the
+ * chain's own currency and credits a token balance one-for-one, `withdraw()`
+ * reverses it. WETH9 and every wrapper modelled on it — W0G included — expose
+ * exactly this pair.
+ */
+export const WRAPPED_NATIVE_ABI = [
+  {type: "function", name: "deposit", stateMutability: "payable", inputs: [], outputs: []},
+  {type: "function", name: "withdraw", stateMutability: "nonpayable", inputs: [{type: "uint256"}], outputs: []},
+] as const;
+
 export const ERC20_ABI = [
   {type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{type: "string"}]},
   {type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},

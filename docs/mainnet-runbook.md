@@ -175,12 +175,91 @@ an address belongs to.
 | USDC.e | `0x1f3aa82227281ca364bfb3d253b0f1af1da6473e` | 6 | only with eyes open |
 | USDT | — | — | not deployed |
 
-**W0G is wrapped native 0G and it is backed exactly.** Its native balance equals
-its `totalSupply` to the wei — 14,288,755.6399 of each at the time of reading.
-`deposit()`/`withdraw()` in the WETH9 shape, `mint()` permissioned (it reverts
-for an arbitrary caller), and no `upgradeTo`, no `pause`, no blacklist and no
-`owner` anywhere in its bytecode. Nothing can change what it does, which is the
-property that matters most for a token an unaudited protocol holds.
+**W0G is wrapped native 0G.** `deposit()`/`withdraw()` in the WETH9 shape, no
+`upgradeTo`, no `pause`, no blacklist and no `owner` anywhere in its bytecode, and
+not a proxy — all three ERC-1967 slots read zero. Nothing can change what it does,
+which is the property that matters most for a token an unaudited protocol holds.
+
+*A correction to an earlier reading of this file.* It said the token was "backed
+exactly" because its native balance equalled `totalSupply` to the wei. That
+comparison proves nothing: the contract is verified on chainscan as `WrappedA0GI`,
+and
+
+```solidity
+function totalSupply() public view returns (uint) {
+    return address(this).balance;
+}
+```
+
+so the check compared the balance against itself. It could not have come out any
+other way, on any wrapper of this shape, in any state.
+
+What actually holds the backing up is the arithmetic, which is worth more than the
+tautology was. `deposit()` credits `balanceOf[msg.sender] += msg.value` and
+`withdraw()` debits exactly `wad` before sending exactly `wad`, so every path an
+ordinary user can reach moves both sides together. There is no fee on transfer, no
+rebase, and `transferFrom` moves precisely the amount asked for — which is the
+property the pool's accounting depends on, since a market credits a trader with the
+amount it requested rather than the amount that arrived.
+
+**The one thing that could break it is `mint`, and it deserves reading closely:**
+
+```solidity
+function mint(address recipient, uint wad) external {
+    (bool success, ) = address(WRAPPED_A0GI_BASE).call(
+        abi.encodeWithSignature("mint(address,uint256)", msg.sender, wad)
+    );
+    require(success, "wrapped a0gi base mint failed");
+    balanceOf[recipient] += wad;
+    ...
+}
+```
+
+`mint` is callable by ANYONE. It is not access-controlled in this contract at all.
+The only thing standing between an arbitrary caller and unlimited W0G is that
+`WRAPPED_A0GI_BASE` — `0x0000000000000000000000000000000000001002`, a chain
+precompile with no published source — rejects them. Probed from the zero address,
+from a random EOA and from the wrapper itself, all three revert `wrapped a0gi base
+mint failed`, so today it does reject them.
+
+Notice what the guard is made of, though. A low-level `.call` to an address with no
+code returns `success = true`, and this code checks `success` without checking
+`returndatasize`. If that precompile were ever removed by a client upgrade, `mint`
+would begin succeeding for everybody and W0G would become infinitely mintable
+against a fixed pool of native 0G. That is a 0G-consensus trust assumption rather
+than a token-issuer one — roughly the trust you extend by holding native 0G at all
+— but it is not the same thing as "nothing can inflate the supply", and the earlier
+wording implied it was.
+
+*One more thing the explorer will tell you, and it is not a forgery.* The verified
+source declares `name = "Wrapped A0GI"` and `symbol = "WA0GI"`; the chain answers
+"Wrapped 0G" and "W0G". Both are true. Those are storage variables written by the
+constructor, so they live in the creation code and never appear in the runtime,
+and verification compares runtime — which is why a source carrying the pre-rebrand
+literals still verifies. The deployed runtime is byte-identical to the runtime
+embedded in the creation transaction, the creation code plants `"Wrapped 0G"` and
+`"W0G"`, and storage slots 0 and 1 hold exactly those. Every line of logic in the
+published source is the logic that is deployed.
+
+**Settling in W0G means every agent must wrap before it can trade.** Native 0G is
+not an ERC-20 — it has no `transferFrom`, so no market can ever hold it — and an
+agent arriving with a funded wallet owns nothing a market will accept. On Galileo
+this never came up, because `MockUSDC` had an open `mintTo` and collateral was
+free. It is the first thing that will surprise a trader on mainnet.
+
+The SDK had no wrap path at all until this was found; it now does:
+
+```ts
+await client.wrapNative(collateral, parseEther("10"));   // 10 0G  -> 10 W0G, 1:1
+await client.ensureAllowance(market, collateral, amount); // wrapping is not approving
+```
+
+`wrapNative` reads the token's bytecode first and refuses anything without
+`deposit()` and `withdraw(uint256)`. That guard is not ceremony: sending native
+currency to a plain ERC-20 with a payable fallback would be accepted, mint nothing,
+and there is no second attempt at it. `unwrapNative` reverses the trade, with the
+WETH9 caveat that it pays out through a bare `transfer` and its 2300-gas stipend —
+ample for a key, not necessarily for a contract that does work in `receive()`.
 
 **USDC.e is upgradeable and carries a blacklist.** `upgradeTo(address)` is in the
 bytecode and `owner()` answers `0xecf08409A5e35aA58A887Cf892c6Af6648727281`. The

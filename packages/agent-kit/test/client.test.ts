@@ -37,10 +37,13 @@ function stub(overrides: Record<string, unknown> = {}): Transport {
     allowance: 0n,
     balanceOfOutcome: 0n,
     quoteBuy: [100_000_000n, 1_000_000n],
+    // eth_getCode's answer. "0x" — no code — unless a test says otherwise.
+    code: "0x",
     ...overrides,
   };
   return custom({
     request: async ({method, params}) => {
+      if (method === "eth_getCode") return answers.code ?? "0x";
       if (method !== "eth_call") throw new Error(`unexpected RPC ${method}`);
       const {to, data} = (params as [{to: `0x${string}`; data: `0x${string}`}])[0];
       const abi =
@@ -133,6 +136,56 @@ describe("what a trade would do", () => {
     const no = await client().previewBuy(MARKET, 0, 300n * WAD);
     expect(no.impliedProbabilityAfterWad).toBeGreaterThan(no.impliedProbabilityBeforeWad);
     expect(no.impliedProbabilityBeforeWad).not.toBe(yes.impliedProbabilityBeforeWad);
+  });
+});
+
+describe("wrapping the chain's own currency", () => {
+  // A market's collateral is an ERC-20 and native currency is not one, so on a
+  // W0G deployment an agent holding only 0G owns nothing a market will take.
+  // These tests are about the refusals, because sending native currency to the
+  // wrong contract is the one mistake here with no second chance.
+
+  // Real W0G runtime contains both: deposit() and withdraw(uint256).
+  const WRAPPER = "0x60806040...d0e30db0...2e1a7d4d...f3fe" as const;
+  // A plain ERC-20 has neither.
+  const PLAIN = "0x6080604052a9059cbb23b872dd70a08231f3fe" as const;
+
+  it("refuses a token that has no code at all", async () => {
+    await expect(client().wrapNative(TOKEN, 1n)).rejects.toThrow(/has no code on this chain/);
+  });
+
+  it("refuses a plain ERC-20, rather than sending it currency it cannot return", async () => {
+    const c = client({code: PLAIN});
+    await expect(c.wrapNative(TOKEN, 10n ** 18n)).rejects.toThrow(/is not a wrapped-native token/);
+  });
+
+  it("names the selector it could not find, so the refusal is diagnosable", async () => {
+    const c = client({code: PLAIN});
+    await expect(c.wrapNative(TOKEN, 1n)).rejects.toThrow(/0xd0e30db0/);
+  });
+
+  it("refuses to wrap nothing", async () => {
+    await expect(client({code: WRAPPER}).wrapNative(TOKEN, 0n)).rejects.toThrow(/must be positive/);
+    await expect(client({code: WRAPPER}).unwrapNative(TOKEN, -1n)).rejects.toThrow(/must be positive/);
+  });
+
+  it("lets a real wrapper through the guard", async () => {
+    // It cannot go on to broadcast against a stub that only answers reads, so
+    // the assertion is that it fails LATER: past the guard, in the transport.
+    // Without this the guard could reject everything and the tests above would
+    // all still pass.
+    const c = client({code: WRAPPER});
+    await expect(c.wrapNative(TOKEN, 1n)).rejects.not.toThrow(/wrapped-native|has no code/);
+  });
+
+  it("refuses to sign when the client has no key", async () => {
+    const readOnly = new BrierClient({
+      network: "anvil",
+      factory: FACTORY,
+      outcomeShares: SHARES,
+      transport: stub({code: WRAPPER}),
+    });
+    await expect(readOnly.wrapNative(TOKEN, 1n)).rejects.toThrow(/no private key|cannot wrapNative/);
   });
 });
 

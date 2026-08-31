@@ -12,7 +12,15 @@ import {
 import {privateKeyToAccount} from "viem/accounts";
 import {keccak256, stringToHex, toBytes, pad} from "viem";
 import {WAD, dpm, quote, toWad, networkFor, type ChainMode} from "@0g-brier/protocol";
-import {AGENT_REGISTRY_ABI, CONFIG_ABI, ERC20_ABI, FACTORY_ABI, MARKET_ABI, SHARES_ABI} from "./abi.js";
+import {
+  AGENT_REGISTRY_ABI,
+  CONFIG_ABI,
+  ERC20_ABI,
+  FACTORY_ABI,
+  MARKET_ABI,
+  SHARES_ABI,
+  WRAPPED_NATIVE_ABI,
+} from "./abi.js";
 import {suggestFees} from "./fees.js";
 import type {Claim, Fill, MarketView, Outcome, Preview, Tier, MarketStatus} from "./types.js";
 
@@ -576,6 +584,68 @@ export class BrierClient {
   }
 
   /**
+   * Turn the chain's own currency into the wrapped token a market settles in.
+   *
+   * A market's collateral is an ERC-20, and the chain's native currency is not
+   * one — it has no `transferFrom`, so no market can ever hold it. On a
+   * deployment whose collateral is the wrapped native token (W0G on 0G), an
+   * agent that arrives holding only native currency owns nothing a market will
+   * accept until it calls this. The exchange is one-for-one and carries no fee.
+   *
+   * Wrapping is not approving. Follow this with `ensureAllowance` before trading.
+   *
+   * @param collateral the wrapped-native token, which MUST be the collateral of
+   *   the market being traded — this does not check that for you.
+   * @param amount in wei of the native currency.
+   */
+  async wrapNative(collateral: `0x${string}`, amount: bigint): Promise<`0x${string}`> {
+    this.requireSigner("wrapNative");
+    if (amount <= 0n) throw new Error("wrapNative: amount must be positive");
+    await this.requireWrapper(collateral, "wrapNative");
+    return this.send(collateral, WRAPPED_NATIVE_ABI, "deposit", [], amount);
+  }
+
+  /**
+   * Reverse `wrapNative`, turning the wrapped token back into native currency.
+   *
+   * WETH9-derived wrappers pay out with a bare `transfer`, which forwards only
+   * 2300 gas. That is ample for an externally owned account and not enough for a
+   * contract that does real work in `receive()`. An agent signing with a plain
+   * key is fine; an agent whose address is a contract should check its own
+   * fallback before relying on this.
+   */
+  async unwrapNative(collateral: `0x${string}`, amount: bigint): Promise<`0x${string}`> {
+    this.requireSigner("unwrapNative");
+    if (amount <= 0n) throw new Error("unwrapNative: amount must be positive");
+    await this.requireWrapper(collateral, "unwrapNative");
+    return this.send(collateral, WRAPPED_NATIVE_ABI, "withdraw", [amount]);
+  }
+
+  /**
+   * Refuse to send native currency to a token that cannot give it back.
+   *
+   * `deposit()` is not part of ERC-20, so most collateral tokens do not have it.
+   * Calling it on one usually reverts and costs only gas — but a token with a
+   * payable fallback would ACCEPT the currency and mint nothing, and there is no
+   * second chance at that. One `eth_getCode` is cheaper than finding out.
+   */
+  private async requireWrapper(token: `0x${string}`, called: string): Promise<void> {
+    const code = await this.publicClient.getCode({address: token});
+    if (code === undefined || code === "0x") {
+      throw new Error(`cannot ${called}: ${token} has no code on this chain.`);
+    }
+    // deposit() and withdraw(uint256), as they appear in a dispatch table.
+    const missing = ["d0e30db0", "2e1a7d4d"].filter((sel) => !code.includes(sel));
+    if (missing.length > 0) {
+      throw new Error(
+        `cannot ${called}: ${token} is not a wrapped-native token — its bytecode has no ` +
+          `${missing.map((m) => `0x${m}`).join(" and no ")}. On a deployment whose collateral is a ` +
+          "plain ERC-20 there is nothing to wrap; acquire the collateral itself.",
+      );
+    }
+  }
+
+  /**
    * @param maxTokensIn the most the agent will pay. REQUIRED: see the class note.
    */
   async buyShares(args: {
@@ -789,6 +859,7 @@ export class BrierClient {
     abi: any,
     functionName: string,
     args: readonly unknown[],
+    value?: bigint,
   ): Promise<`0x${string}`> {
     if (this.wallet === null || this.account === null) {
       // Named at the point of use rather than at construction: a read-only
@@ -807,6 +878,7 @@ export class BrierClient {
       args,
       account: this.account,
       chain: this.wallet.chain,
+      ...(value === undefined ? {} : {value}),
       ...fees,
     });
     const receipt = await this.awaitReceipt(hash, functionName);
