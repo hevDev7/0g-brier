@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {ConfigRegistry} from "../src/core/ConfigRegistry.sol";
 import {ConfigKeys} from "../src/core/ConfigKeys.sol";
 
@@ -66,13 +67,27 @@ library DeployLib {
         config.addCategory("culture");
     }
 
+    /// @notice One whole token of `token`, as its own contract counts them.
+    /// @dev Every money-denominated default below is written in WHOLE TOKENS and scaled
+    ///      by this. Writing them as literals instead is a mistake this deployment came
+    ///      within one broadcast of shipping: the literals were `100e6`, correct for the
+    ///      6-decimal testnet stablecoin and wrong by twelve orders of magnitude for an
+    ///      18-decimal collateral. `MIN_RESOLVER_STAKE` would have been 1e-10 W0G — a
+    ///      stake anyone can post, which is the same as no stake at all, which leaves the
+    ///      committee with nothing to slash and no cost to sybil.
+    function unitOf(address token) internal view returns (uint256) {
+        uint8 d = IERC20Metadata(token).decimals();
+        require(d <= 18, "DeployLib: collateral has more than 18 decimals");
+        return 10 ** uint256(d);
+    }
+
     /// @notice The resolution parameters, separated from `applyDefaults` so that a
     ///         registry deployed BEFORE the committee existed can be brought up to date
     ///         without redeploying it.
     /// @dev Bounds lock the first time they are set, so this can only run once against a
     ///      given registry — which is the intended shape: parameters move afterwards,
     ///      their limits do not.
-    function applyResolutionDefaults(ConfigRegistry config) internal {
+    function applyResolutionDefaults(ConfigRegistry config, uint256 unit) internal {
         // The committee shapes come straight from the tier table and are packed as
         // n * 256 + k so that a size and its threshold cannot be changed out of step.
         config.setBounds(ConfigKeys.COMMIT_WINDOW, 60, 7 days);
@@ -141,8 +156,8 @@ library DeployLib {
         config.setParam(ConfigKeys.NO_SHOW_SLASH_BPS, 500);
         config.setParam(ConfigKeys.DISAGREE_SLASH_BPS, 100);
         config.setParam(ConfigKeys.OVERTURN_SLASH_BPS, 2_000);
-        config.setParam(ConfigKeys.DISPUTE_BOND, 50e6);
-        config.setParam(ConfigKeys.MIN_RESOLVER_STAKE, 100e6);
+        config.setParam(ConfigKeys.DISPUTE_BOND, 50 * unit);
+        config.setParam(ConfigKeys.MIN_RESOLVER_STAKE, 100 * unit);
         config.setParam(ConfigKeys.UNSTAKE_COOLDOWN, 7 days);
         config.setParam(ConfigKeys.REQUIRE_REGISTERED_TRADER, 0);
         // Commit (1h) + reveal (1h) + the longest dispute window (24h) + the dispute
@@ -212,24 +227,26 @@ library DeployLib {
     }
 
     function applyDefaults(ConfigRegistry config, address collateral) internal {
+        uint256 unit = unitOf(collateral);
+
         // Bounds are set first and locked forever; the values follow.
         config.setBounds(ConfigKeys.FEE_BPS, 0, 300); // 3.00% ceiling
         config.setBounds(ConfigKeys.CREATOR_FEE_SHARE_BPS, 0, 10_000);
         config.setBounds(ConfigKeys.RESOLVER_FEE_SHARE_BPS, 0, 10_000);
-        config.setBounds(ConfigKeys.MIN_SEED, 1e6, UNBOUNDED);
-        config.setBounds(ConfigKeys.MIN_SETTLEMENT_DEPOSIT, 1e6, UNBOUNDED);
+        config.setBounds(ConfigKeys.MIN_SEED, uint128(unit), UNBOUNDED);
+        config.setBounds(ConfigKeys.MIN_SETTLEMENT_DEPOSIT, uint128(unit), UNBOUNDED);
         config.setBounds(ConfigKeys.MIN_TRADE_TOKENS, 1, UNBOUNDED);
         config.setBounds(ConfigKeys.SWEEP_UNCLAIMED_AFTER, 180 days, 3650 days);
 
         config.setParam(ConfigKeys.FEE_BPS, 100);
         config.setParam(ConfigKeys.CREATOR_FEE_SHARE_BPS, 4000);
         config.setParam(ConfigKeys.RESOLVER_FEE_SHARE_BPS, 3000);
-        config.setParam(ConfigKeys.MIN_SEED, 100e6);
-        config.setParam(ConfigKeys.MIN_SETTLEMENT_DEPOSIT, 20e6);
-        config.setParam(ConfigKeys.MIN_TRADE_TOKENS, 1e6);
+        config.setParam(ConfigKeys.MIN_SEED, 100 * unit);
+        config.setParam(ConfigKeys.MIN_SETTLEMENT_DEPOSIT, 20 * unit);
+        config.setParam(ConfigKeys.MIN_TRADE_TOKENS, 1 * unit);
         config.setParam(ConfigKeys.SWEEP_UNCLAIMED_AFTER, 365 days);
 
-        applyResolutionDefaults(config);
+        applyResolutionDefaults(config, unit);
         applyCategories(config);
 
         config.setCollateralAllowed(collateral, true);

@@ -154,6 +154,9 @@ cat <<EOF
 ▶ env file     $ENV_FILE
 ▶ deployer     $DEPLOYER ($(cast from-wei "$BALANCE") 0G)
 ▶ collateral   $COLLATERAL  $SYM, $DEC decimals
+▶ money        seed 100 $SYM · deposit 20 $SYM · stake 100 $SYM · bond 50 $SYM
+               (whole tokens, scaled to $DEC decimals at deploy — read them, they are
+                policy, not plumbing: a $SYM is not a dollar)
 ▶ governance   $GOVERNANCE
 ▶ guardian     $GUARDIAN
 ▶ treasury     $TREASURY

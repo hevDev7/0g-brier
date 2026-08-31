@@ -78,6 +78,60 @@ react to a proposal; a proposal nobody is watching for is just a slower theft.
 
 ---
 
+## 1a. What each wallet has to hold
+
+Gas on 0G mainnet was **4.0 gwei** when this was measured, the same as Galileo, so
+the gas figures below are the measured ones and not a conversion. Everything in the
+first table is **native 0G**.
+
+| wallet | needs | why |
+|---|---|---|
+| **deployer** | **4 0G** | 0.15 to deploy (37.5M gas measured), 0.02 to register and stake fourteen resolvers, 0.07 handed on to their operator wallets, and **3 0G for the 0G Compute ledger** — that last item is the bulk of it and is easy to forget |
+| **keeper** | **0.5 0G** | 0.008 per market settled, 0.016 if disputed. Half a token is about thirty disputed markets. It is the one wallet that runs unattended, so give it a margin you are not watching |
+| **uploader** | **0.05 0G** | 0G Storage charged 2.5e-7 0G per upload; the flow transaction's gas dominates it and is still tiny |
+| **guardian** | **0.05 0G** | `pause()` costs about 0.0002 0G. The amount is irrelevant; the point is that a guardian with an empty wallet is not a guardian, and you find that out during the incident |
+| **governance** | **0.05 0G** | eight timelock transactions to take the four contracts, plus Safe overhead |
+| **curator** | **nothing** | it signs EIP-712 approvals off-chain and never sends a transaction. Fund it only if the same wallet also creates markets |
+| **treasury** | **nothing** | it receives. It never signs |
+
+### The collateral is the larger bill
+
+These are **not** gas, and they are denominated in the collateral — W0G, 18 decimals:
+
+| | default | fourteen resolvers / one market |
+|---|---|---|
+| `MIN_RESOLVER_STAKE` | 100 W0G | **2,800 W0G** (the script stakes 2× the floor) |
+| `MIN_SEED` | 100 W0G | 100 W0G per market |
+| `MIN_SETTLEMENT_DEPOSIT` | 20 W0G | 20 W0G per market |
+| `DISPUTE_BOND` | 50 W0G | 50 W0G, posted by whoever disputes |
+
+The stake is locked, not spent, and returns after `UNSTAKE_COOLDOWN`. The seed is
+liquidity and comes back through the market. Neither is a fee — but both have to be
+on hand on the day.
+
+**These four numbers are policy, not plumbing.** They read `100` because the
+deployment they were written for settled in a 6-decimal stablecoin where 100 meant a
+hundred dollars. A hundred W0G is a different quantity of belief. The deployer owns
+the registry until the cliff closes, which is the window to set them, and the bounds
+allow anything from one whole token upward. If you are launching to demonstrate the
+protocol rather than to hold real open interest, say so in the parameters:
+
+```bash
+K(){ cast keccak "$1"; }
+S(){ cast send "$CONFIG" 'setParam(bytes32,uint256)' "$(K "$1")" "$2" \
+       --rpc-url "$RPC" --private-key "$DEPLOYER_KEY"; }
+S MIN_RESOLVER_STAKE      1000000000000000000   # 1 W0G  → roster costs 28, not 2,800
+S MIN_SEED                5000000000000000000   # 5 W0G
+S MIN_SETTLEMENT_DEPOSIT  1000000000000000000   # 1 W0G
+S DISPUTE_BOND            1000000000000000000   # 1 W0G
+```
+
+Run this BEFORE `setup-committee.sh`, which reads `MIN_RESOLVER_STAKE` to decide
+what to stake, and before creating any market. Raising them afterwards is a
+governance call and leaves members already staked above the new floor alone.
+
+---
+
 ## 2. Deploy
 
 ```bash
@@ -223,7 +277,9 @@ missing and the first market of that kind simply could not be created.
 
 **Enough staked resolvers to form a committee.** A committee is sampled only
 from agents registered as resolvers whose `activeStake` is at least
-`MIN_RESOLVER_STAKE` (100 mUSDC at the deployed default). Below that count,
+`MIN_RESOLVER_STAKE` — **100 whole collateral tokens** at the deployed default,
+so 100 W0G on a W0G deployment, not the 100e6 wei that the same literal meant
+against the 6-decimal testnet mock. Below that count,
 `openResolution` reverts with `NotEnoughResolvers` and every closed market waits
 until its settlement deadline passes and it **fails** — which looks like a
 committee that refused to show up, when it is really a launch that forgot to
@@ -232,6 +288,30 @@ staff itself.
 Size the roster against the largest round you intend to reach, which is the
 DISPUTE round at **nine**, not the five a VERIFIED market samples — and round two
 excludes every member of round one, so nine *more* than the five already sitting.
+**Price the roster before you build it.** `setup-committee.sh` stakes twice the
+floor per member so that a slash cannot drop one below it mid-run, so fourteen
+resolvers at the default lock **2,800 W0G**. That is locked, not spent — it comes
+back after `UNSTAKE_COOLDOWN` — but it has to be held on the day.
+
+The stake is policy, and its bounds are `1 .. UNBOUNDED`, so it is a parameter you
+choose rather than one you inherit. The deployer still owns the registry until the
+cliff, which is exactly the window in which to set it:
+
+```bash
+# 1 W0G per resolver instead of 100 — a launch roster costs 28 W0G, not 2,800
+cast send "$CONFIG" 'setParam(bytes32,uint256)' \
+  "$(cast keccak MIN_RESOLVER_STAKE)" 1000000000000000000 \
+  --rpc-url "$RPC" --private-key "$DEPLOYER_KEY"
+```
+
+Do it BEFORE `setup-committee.sh`, which reads the parameter to decide what to
+stake. Raising it later is a governance call and does not disturb members already
+staked above the new floor; it only gates the next registration. Understand what a
+low stake buys, though: the committee's honesty is bought with the stake, and a
+roster that risks 1 W0G a head is secured by 14 W0G against whatever the open
+interest turns out to be. It is the right number for a launch with no money in it
+and the wrong number the moment there is.
+
 Fourteen staked resolvers is the floor at which a disputed VERIFIED market can be
 reviewed at all; below it `openDisputeRound` reverts `NotEnoughResolvers` and the
 dispute stalls, which now costs the challenger its bond.
