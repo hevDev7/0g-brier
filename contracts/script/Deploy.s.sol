@@ -106,6 +106,7 @@ contract Deploy is Script {
         config.setAddress(ConfigKeys.TREASURY, roles.treasury);
         config.setAddress(ConfigKeys.CURATOR_SIGNER, roles.curatorSigner);
         config.setAddress(ConfigKeys.STAKE_TOKEN, m.usdc);
+        _wireErc8004(config);
 
         // After MARKET_FACTORY, not before: the module checks every market it records
         // against the factory, and initialising it into a registry that cannot answer
@@ -192,6 +193,41 @@ contract Deploy is Script {
             revert(string.concat("Deploy: ", name, " is not an address - expected 0x plus 40 hex characters"));
         }
         return vm.parseAddress(raw);
+    }
+
+    /**
+     * Point the config at ERC-8004's registries, when the deployment wants them.
+     *
+     * THIS WAS ONLY EVER DONE BY AN UPGRADE SCRIPT, and that is why it is here now.
+     * `UpgradeErc8004.s.sol` wired the live testnet after the fact, so the addresses
+     * existed there and nowhere else — and every FRESH deployment, which is what
+     * mainnet will be, was born with the integration silently off. The symptom is
+     * not a revert at deploy time but a `linkErc8004` that fails much later with
+     * `Erc8004RegistryUnset`, long after anyone would think to look at the deploy.
+     *
+     * OPTIONAL, deliberately. `ResolutionModule._publish` declines when the registry
+     * is unset rather than failing a settlement, so a deployment without 8004 is a
+     * real configuration and not a broken one. What is refused is an address that
+     * holds no code: that is a typo, not a decision, and it would fail later in the
+     * same invisible way.
+     *
+     * The two registries sit at the same addresses on every network that has them,
+     * so this is configuration rather than deployment — which is exactly why it can
+     * be passed in rather than deployed here.
+     */
+    function _wireErc8004(ConfigRegistry config) internal {
+        address identity = vm.envOr("ERC8004_IDENTITY", address(0));
+        address reputation = vm.envOr("ERC8004_REPUTATION", address(0));
+        if (identity == address(0) && reputation == address(0)) {
+            console2.log("ERC-8004:            not configured (publishing is off)");
+            return;
+        }
+        require(identity.code.length > 0, "Deploy: ERC8004_IDENTITY has no code on this chain");
+        require(reputation.code.length > 0, "Deploy: ERC8004_REPUTATION has no code on this chain");
+        config.setAddress(ConfigKeys.ERC8004_IDENTITY, identity);
+        config.setAddress(ConfigKeys.ERC8004_REPUTATION, reputation);
+        console2.log("ERC8004_IDENTITY:   ", identity);
+        console2.log("ERC8004_REPUTATION: ", reputation);
     }
 
     /// @notice The collateral a market settles in.

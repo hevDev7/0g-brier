@@ -44,8 +44,19 @@ invented to prevent.
 | `CURATOR_SIGNER` | signs the EIP-712 approval that lets a market be created |
 
 Optional: `COLLATERAL` (an existing token; otherwise one is deployed),
-`RESOLVER` (allowlisted at deploy, before the cliff — see step 4), and
-`TIMELOCK_DELAY` (**48 hours** by default).
+`RESOLVER` (allowlisted at deploy, before the cliff — see step 4),
+`TIMELOCK_DELAY` (**48 hours** by default), and `ERC8004_IDENTITY` /
+`ERC8004_REPUTATION`.
+
+**Set the ERC-8004 pair, or know that you are switching the integration off.**
+Until 2026-08-31 those two addresses were only ever written by
+`UpgradeErc8004.s.sol`, which had been run against the live testnet after the
+fact — so they existed there and in no fresh deployment. Mainnet is a fresh
+deployment. `ResolutionModule._publish` declines silently when the registry is
+unset, which is correct of it and means the absence shows up nowhere: settlements
+succeed, reputation is simply never published, and the first sign is a
+`linkErc8004` failing with `Erc8004RegistryUnset` much later. `Deploy.s.sol` now
+wires them when supplied and refuses an address holding no code.
 
 The script only checks that these are distinct addresses. It cannot check that
 they are *multisigs*, and it should not have to — but `GOVERNANCE` as a single

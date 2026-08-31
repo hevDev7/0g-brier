@@ -100,6 +100,7 @@ const MODULE = [
 const CONFIG = [
   {type: "function", name: "setParam", stateMutability: "nonpayable", inputs: [{type: "bytes32"}, {type: "uint256"}], outputs: []},
   {type: "function", name: "params", stateMutability: "view", inputs: [{type: "bytes32"}], outputs: [{type: "uint256"}]},
+  {type: "function", name: "addresses", stateMutability: "view", inputs: [{type: "bytes32"}], outputs: [{type: "address"}]},
 ];
 const MARKET_ABI = [
   {type: "function", name: "status", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
@@ -151,6 +152,36 @@ function resolverKey(i) {
   return keccak256(encodeAbiParameters(parseAbiParameters("bytes32, string, uint256"), [DEPLOYER, "brier-resolver", BigInt(i)]));
 }
 
+/**
+ * Every operator key this deployer could be holding, indexed by address.
+ *
+ * THE COMMITTEE IS DRAWN, NOT CHOSEN, and that is the whole point of the module —
+ * so a runner cannot assume the resolvers it registered are the ones that will be
+ * seated. On a registry with other staked resolvers in it, the draw will seat
+ * some of them, and voting for a list of one's own making instead reverts
+ * `NotOnCommittee` while the round quietly fails to reach its threshold.
+ *
+ * Three derivations are in play on this deployment and all three are covered:
+ * this file's own `resolverKey`, and the two `setup-committee.sh` has used —
+ * `cast to-bytes32` (which pads the index on the RIGHT) and the `printf %064x`
+ * that replaced it (which pads on the LEFT). A member whose key is not in here
+ * is reported by name rather than skipped, because a silently short committee
+ * looks exactly like resolvers refusing to show up.
+ */
+function operatorCandidates() {
+  const byAddress = new Map();
+  const add = (k) => {
+    const a = privateKeyToAccount(k).address.toLowerCase();
+    if (!byAddress.has(a)) byAddress.set(a, k);
+  };
+  for (let i = 0; i < 32; i++) {
+    add(resolverKey(i));
+    add(keccak256(`0x${DEPLOYER.slice(2)}${i.toString(16).padEnd(64, "0")}`));
+    add(keccak256(`0x${DEPLOYER.slice(2)}${i.toString(16).padStart(64, "0")}`));
+  }
+  return byAddress;
+}
+
 async function main() {
   const tier = await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "tier"});
   const shapeKey = ["COMMITTEE_FAST", "COMMITTEE_VERIFIED", "COMMITTEE_DETERMINISTIC"][tier];
@@ -172,8 +203,13 @@ async function main() {
   // `setBounds` allows, which makes it the tempting number and the wrong one:
   // it is shorter than the work the window exists to hold.
   const windows = {COMMIT_WINDOW: 300n, REVEAL_WINDOW: 120n, [disputeKey]: 60n};
+  // What to put back at step 9. Captured BEFORE the first write, because after it
+  // the original is gone — and a script that shortens a live deployment's windows
+  // and then cannot say what they were has broken the configuration, not borrowed it.
+  const restore = [];
   for (const [name, want] of Object.entries(windows)) {
     const before = await pub.readContract({address: C.ConfigRegistry, abi: CONFIG, functionName: "params", args: [key(name)]});
+    if (before !== want) restore.push([name, before]);
     if (before === want) {
       console.log(`   ${name} already ${want}s`);
       continue;
@@ -210,7 +246,18 @@ async function main() {
     }
     // The link is what makes the module publish this resolver's record to 8004.
     // Without it `_publish` declines rather than guessing an id.
-    if ((await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "erc8004Of", args: [agentId]})) === 0n) {
+    //
+    // SKIPPED ENTIRELY when the registry is unset. `ResolutionModule._publish`
+    // treats an unset registry as "the integration is off" and settles anyway, so
+    // a runner that hard-fails here is stricter than the protocol it drives — and
+    // it fails with `Erc8004RegistryUnset` in the middle of provisioning, which
+    // reads like a broken resolver rather than an unconfigured deployment. Seen on
+    // a fresh Galileo deploy, 2026-08-31: the addresses had only ever been wired by
+    // `UpgradeErc8004.s.sol`, so no new deployment had them.
+    const identityAddr = await pub.readContract({address: C.ConfigRegistry, abi: CONFIG, functionName: "addresses", args: [key("ERC8004_IDENTITY")]});
+    if (identityAddr === "0x0000000000000000000000000000000000000000") {
+      if (i === 0) console.log("   ERC-8004 registry unset on this deployment — skipping the link, as the module does");
+    } else if ((await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "erc8004Of", args: [agentId]})) === 0n) {
       const rec = await send(wallet, {address: ERC8004_IDENTITY, abi: IDENTITY_8004, functionName: "register", args: [`https://brier.0g/resolver/${agentId}`]}, "8004 register");
       const ev = rec.logs
         .map((l) => {
@@ -311,6 +358,39 @@ async function main() {
   const committee = await pub.readContract({address: C.ResolutionModule, abi: MODULE, functionName: "committeeOf", args: [MARKET]});
   console.log(`   sampled ${committee.join(", ")}`);
 
+  // The seated committee replaces the list built above. Whoever was drawn is who
+  // votes; the earlier loop existed only to make sure enough eligible resolvers
+  // EXISTED for a draw to be possible at all.
+  const candidates = operatorCandidates();
+  const voters = [];
+  const orphans = [];
+  for (const agentId of committee) {
+    const op = await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "operatorOf", args: [agentId]});
+    const pk = candidates.get(op.toLowerCase());
+    if (!pk) {
+      orphans.push(`${agentId} (operator ${op})`);
+      continue;
+    }
+    const account = privateKeyToAccount(pk);
+    voters.push({agentId, account, wallet: createWalletClient({account, chain, transport: http(RPC)})});
+  }
+  if (orphans.length > 0) {
+    console.log(`   ⚠ no operator key for ${orphans.length} member(s): ${orphans.join(", ")}`);
+  }
+  const seated = await pub.readContract({address: C.ResolutionModule, abi: MODULE, functionName: "roundOf", args: [MARKET]});
+  if (voters.length < seated.k) {
+    throw new Error(`only ${voters.length} of ${committee.length} seated members are operable, and the threshold is ${seated.k} — this round cannot be carried.`);
+  }
+  console.log(`   operable ${voters.length}/${committee.length}, threshold ${seated.k}`);
+
+  // Each voter needs gas of its own: the module checks `operatorOf == msg.sender`,
+  // so a commit cannot be relayed by the deployer on a member's behalf.
+  for (const v of voters) {
+    if ((await pub.getBalance({address: v.account.address})) < 30_000_000_000_000_000n) {
+      await mined(await boss.sendTransaction({to: v.account.address, value: 60_000_000_000_000_000n, ...(await fees())}), "fund voter");
+    }
+  }
+
   // ── 5. commit ────────────────────────────────────────────────────────────
   console.log("\n── 5. commit (the vote is a hash; nobody can see it) ──");
   // A REAL receipt per resolver, uploaded before it is committed to.
@@ -327,8 +407,7 @@ async function main() {
   const roundNo = (await pub.readContract({address: C.ResolutionModule, abi: MODULE, functionName: "roundOf", args: [MARKET]})).index;
   const salts = new Map();
   const roots = new Map();
-  for (const r of resolvers) {
-    if (!committee.includes(r.agentId)) continue;
+  for (const r of voters) {
     const doc = JSON.stringify({
       version: 1,
       market: MARKET,
@@ -365,8 +444,7 @@ async function main() {
   // Commits go out only once every receipt exists. Interleaving them would put
   // an upload between each pair of transactions, and the window is a deadline
   // for the whole set, not for each one.
-  for (const r of resolvers) {
-    if (!committee.includes(r.agentId)) continue;
+  for (const r of voters) {
     const commitment = keccak256(encodeAbiParameters(parseAbiParameters("address, uint8, bytes32, bytes32, address"), [MARKET, outcome, salts.get(r.agentId), roots.get(r.agentId), r.account.address]));
     await send(r.wallet, {address: C.ResolutionModule, abi: MODULE, functionName: "commitVote", args: [MARKET, r.agentId, commitment]}, "commit");
     console.log(`   agent ${r.agentId} committed ${commitment.slice(0, 18)}…`);
@@ -377,8 +455,7 @@ async function main() {
   const waitCommit = Number(round.commitDeadline) - Math.floor(Date.now() / 1000) + 5;
   if (waitCommit > 0) { console.log(`\n   waiting ${waitCommit}s for the commit window to close`); await sleep(waitCommit); }
   console.log("── 6. reveal ──");
-  for (const r of resolvers) {
-    if (!committee.includes(r.agentId)) continue;
+  for (const r of voters) {
     await send(r.wallet, {address: C.ResolutionModule, abi: MODULE, functionName: "revealVote", args: [MARKET, r.agentId, outcome, salts.get(r.agentId), roots.get(r.agentId)]}, "reveal");
     console.log(`   agent ${r.agentId} revealed ${outcome === 1 ? "YES" : "NO"}`);
   }
@@ -398,13 +475,24 @@ async function main() {
   console.log(`   market status    ${["Open", "Closed", "Proposed", "Disputed", "Settled", "Failed", "Voided"][await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "status"})]}`);
   console.log(`   winner           ${await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "winningOutcome"}) === 1 ? "YES" : "NO"}`);
   console.log(`   viaCommittee     ${await pub.readContract({address: C.ResolutionModule, abi: MODULE, functionName: "viaCommittee", args: [MARKET]})}`);
-  for (const r of resolvers) {
-    if (!committee.includes(r.agentId)) continue;
+  for (const r of voters) {
     const rep = await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "reputationOf", args: [r.agentId]});
     const stakeLeft = await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "stakeOf", args: [r.agentId]});
     console.log(`   agent ${r.agentId}  agreed ${rep.resolutionsAgreed}  overturned ${rep.resolutionsOverturned}  stake ${formatUnits(stakeLeft, 6)}  erc8004 #${await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "erc8004Of", args: [r.agentId]})}`);
   }
   console.log(`\n   finalize block ${fin.blockNumber} — read FeedbackPublished from it to see the 8004 records`);
+
+  // ── 9. put the windows back ──────────────────────────────────────────────
+  // Step 1 shortened them so a lifecycle fits in one sitting. Leaving them short
+  // is not harmless: the deployment then MISREPRESENTS itself — anyone reading the
+  // config, or the docs page that quotes it, sees a one-minute dispute window that
+  // nobody chose. Restored here rather than left to the operator, because the
+  // script is what changed them.
+  console.log("\n── 9. windows restored ──");
+  for (const [name, value] of restore) {
+    await send(boss, {address: C.ConfigRegistry, abi: CONFIG, functionName: "setParam", args: [key(name), value]}, `restore ${name}`);
+    console.log(`   ${name} → ${value}s`);
+  }
 }
 
 await main();
