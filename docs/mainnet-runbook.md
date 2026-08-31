@@ -188,6 +188,15 @@ is worth running rather than a liability.
 
 A keeper key is not the deployer key and not a trading key.
 
+**Run your own RPC endpoint.** The public one is not reliable enough to build on.
+Rehearsing the resolution flow on Galileo on 2026-08-31, `evmrpc-testnet.0g.ai`
+refused receipts for transactions that had already landed — once as "could not be
+found", once as `-32000 no matching receipts found: this may indicate potential
+data corruption`, on a transaction confirmed in block 52348572 with status 1. A
+keeper that treats either as failure will re-send work that already succeeded.
+`scripts/rehearse-resolution.mjs` shows the shape of the fix: poll for the receipt
+yourself and treat "not found" as "wait", never as "failed".
+
 ---
 
 ## What is still open on launch day

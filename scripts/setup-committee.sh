@@ -22,6 +22,12 @@ set -euo pipefail
 { set +x; } 2>/dev/null
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COUNT="${1:-5}"
+# Where to start numbering. Lets a committee be TOPPED UP rather than rebuilt:
+# names and operator keys both derive from the index, so re-running from zero
+# would collide on both. The dispute round draws nine members from OUTSIDE round
+# one's five, so a deployment that started with five and later wants a real
+# dispute has to add nine more without disturbing the ones already staked.
+START="${2:-0}"
 
 if [[ -f "$ROOT/.env" ]]; then
   _pre="$(export -p)"; set -a; . "$ROOT/.env"; set +a; eval "$_pre" 2>/dev/null || true
@@ -42,16 +48,32 @@ STAKE=$(cast call --rpc-url "$RPC" "$(J ConfigRegistry)" 'params(bytes32)(uint25
 STAKE=$(( STAKE * 2 ))   # comfortably above the floor, so a slash cannot drop a member below it mid-demo
 GAS_EACH=5000000000000000  # 0.005 0G — enough for a commit and a reveal
 
-echo "committee of $COUNT on chain $CHAIN"
+echo "committee of $COUNT on chain $CHAIN (indices $START..$((START + COUNT - 1)))"
 echo "  registry $REG   stake $STAKE per resolver"
 H=$(send "$USDC" "mintTo(address,uint256)" "$ACTOR" $(( STAKE * COUNT ))); wait_ok "$H"
 H=$(send "$USDC" "approve(address,uint256)" "$REG" $(( STAKE * COUNT ))); wait_ok "$H"
 
-OUT="$ROOT/deployments/committee-$CHAIN.json"; echo "[" > "$OUT"
-for i in $(seq 0 $((COUNT-1))); do
-  OPKEY=$(cast keccak "$(cast concat-hex "$DEPLOYER_KEY" "$(cast to-bytes32 $i)")")
+OUT="$ROOT/deployments/committee-$CHAIN.json"
+# A top-up writes its own slice and leaves the caller to merge. Overwriting the
+# manifest here would drop the members this run is deliberately not touching.
+if [ "$START" != "0" ]; then OUT="$ROOT/deployments/committee-$CHAIN.slice-$START.json"; fi
+echo "[" > "$OUT"
+for i in $(seq "$START" $((START + COUNT - 1))); do
+  # `printf '%064x'`, NOT `cast to-bytes32`. That helper reads its argument as a
+  # HEX STRING and pads it on the RIGHT, so `10` becomes 0x1000… — byte-identical
+  # to what `1` produces. Indices 1 and 10 therefore derived the SAME operator
+  # key, and the eleventh registration failed with `OperatorAlreadyActs` naming
+  # the second agent. Observed on Galileo, 2026-08-31, building a committee of
+  # fourteen for a dispute round.
+  OPKEY=$(cast keccak "$(cast concat-hex "$DEPLOYER_KEY" "$(printf '0x%064x' "$i")")")
   OP=$(cast wallet address --private-key "$OPKEY")
-  H=$(send "$REG" "register(uint8,address,bytes32)" 2 "$OP" "$(cast keccak "agent-$i")"); wait_ok "$H"
+  # FOUR arguments. `register` gained `metadataRoot` after this line was written, and
+  # a three-argument call hashes to a selector the registry does not have — so every
+  # registration reverted, and the script reported it as a resolver that refused to
+  # register rather than as a script calling a function that is not there. Caught by
+  # checking every signature in this file against the deployed bytecode, 2026-08-31.
+  H=$(send "$REG" "register(uint8,address,bytes32,bytes32)" 2 "$OP" \
+        "$(cast keccak "agent-$i")" "$(cast keccak "meta-$i")"); wait_ok "$H"
   ID=$(cast call --rpc-url "$RPC" "$REG" 'nextAgentId()(uint256)' | cut -d' ' -f1); ID=$(( ID - 1 ))
   H=$(send "$REG" "stake(uint256,uint256)" "$ID" "$STAKE"); wait_ok "$H"
   BAL=$(cast balance --rpc-url "$RPC" "$OP")
@@ -59,7 +81,7 @@ for i in $(seq 0 $((COUNT-1))); do
     H=$(send --value "$GAS_EACH" "$OP" 2>/dev/null || cast send --rpc-url "$RPC" --private-key "$DEPLOYER_KEY" --priority-gas-price "$TIP" --gas-price "$CEIL" --async --value "$GAS_EACH" "$OP"); wait_ok "$H"
   fi
   echo "  agent $ID  operator $OP  staked $(python3 -c "print(f\"{$STAKE/10**6:.2f}\")")  gas $(cast balance --rpc-url "$RPC" "$OP" --ether)"
-  printf '  {"agentId": %s, "operator": "%s", "index": %s}%s\n' "$ID" "$OP" "$i" "$([ $i -lt $((COUNT-1)) ] && echo ,)" >> "$OUT"
+  printf '  {"agentId": %s, "operator": "%s", "index": %s}%s\n' "$ID" "$OP" "$i" "$([ $i -lt $((START + COUNT - 1)) ] && echo ,)" >> "$OUT"
 done
 echo "]" >> "$OUT"
 echo "✓ $COUNT resolvers, written to $OUT"

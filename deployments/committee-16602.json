@@ -1,17 +1,86 @@
 [
   {
+    "agentId": 1,
+    "operator": "0x49CA212c3995d2f80ef4dB9339cCD90ec2BC5093",
+    "index": 0,
+    "activeStake": "200000000"
+  },
+  {
     "agentId": 2,
-    "operator": "0x7b1805f6559E482B87B956406186F5b66fEE7aAA",
-    "index": 0
+    "operator": "0x87Ff09d3A939d6A81f41937F4173a320954164D1",
+    "index": 1,
+    "activeStake": "200000000"
   },
   {
     "agentId": 3,
-    "operator": "0x060D536C2367c19Cc5A89390648Be2CA2E9bF033",
-    "index": 1
+    "operator": "0x157D102252832735FA530e8Bd0981F7FDBcF8cbC",
+    "index": 2,
+    "activeStake": "200000000"
   },
   {
     "agentId": 4,
-    "operator": "0x8E2900Cc93a20429485f8E5d0d56298301041590",
-    "index": 2
+    "operator": "0x51401b4289d15D881A1f1137691dCA5bD7487E4a",
+    "index": 3,
+    "activeStake": "200000000"
+  },
+  {
+    "agentId": 5,
+    "operator": "0xb27A9CDe4682600959f4cfcA068Db473726f0B2b",
+    "index": 4,
+    "activeStake": "200000000"
+  },
+  {
+    "agentId": 6,
+    "operator": "0x7C38234BF252A4721D7ebFD9064c47aF37bd8088",
+    "index": 5,
+    "activeStake": "200000000"
+  },
+  {
+    "agentId": 7,
+    "operator": "0xaC9c3Af86e484D1620BD59Fc1030962d1A0B22BD",
+    "index": 6,
+    "activeStake": "200000000"
+  },
+  {
+    "agentId": 8,
+    "operator": "0x79Ae7919FfFb5FDe516a9051CF1f5972cBc3c424",
+    "index": 7,
+    "activeStake": "200000000"
+  },
+  {
+    "agentId": 9,
+    "operator": "0xF74F92629A1e8EF4B62Fc828398Cc76b6711614d",
+    "index": 8,
+    "activeStake": "200000000"
+  },
+  {
+    "agentId": 10,
+    "operator": "0xE9b7DBa4080371FC21d6d65FF7A2786FE30Aa1e3",
+    "index": 9,
+    "activeStake": "200000000"
+  },
+  {
+    "agentId": 11,
+    "operator": "0x17df7E8E33dA291F8d399De727eB3CC5dB58bA7d",
+    "index": 10,
+    "activeStake": "200000000"
+  },
+  {
+    "agentId": 12,
+    "operator": "0x07862e8EA6b49BdDE62504B838DC71fdFA5de96C",
+    "index": 11,
+    "activeStake": "200000000"
+  },
+  {
+    "agentId": 13,
+    "operator": "0x1eeEEa09af5029eEf17eBD94dFDd363eF8622d73",
+    "index": 12,
+    "activeStake": "200000000"
+  },
+  {
+    "agentId": 14,
+    "operator": "0x0eA11860b229c09497AB2FB4745d3c24349ea0F9",
+    "index": 13,
+    "activeStake": "200000000"
   }
 ]
