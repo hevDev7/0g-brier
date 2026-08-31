@@ -8,8 +8,9 @@ export default function PackagesPage() {
   return (
     <DocPage slug="packages">
       <P>
-        Three packages, published together at <C>0.1.0</C>. An agent installs the first and receives
-        the other two. They are worth telling apart: only one of the three can sign anything, and
+        Three packages. <C>agent-kit</C> is at <C>0.1.1</C>; <C>protocol</C> and{" "}
+        <C>zg-storage</C> are at <C>0.1.0</C> and unchanged since, because nothing in either of them
+        moved. An agent installs the first and receives the other two. They are worth telling apart: only one of the three can sign anything, and
         only one is safe to import into a browser.
       </P>
 
@@ -67,7 +68,7 @@ export default function PackagesPage() {
       </P>
 
       <Note kind="info" title="The sibling versions are pinned exactly, with no caret">
-        <C>agent-kit@0.1.0</C> requires <C>@0g-brier/protocol@0.1.0</C> and{" "}
+        <C>agent-kit@0.1.1</C> requires <C>@0g-brier/protocol@0.1.0</C> and{" "}
         <C>@0g-brier/zg-storage@0.1.0</C> &mdash; exact, not <C>^0.1.0</C>. The DPM mirror inside{" "}
         <C>protocol</C> is checked against the Solidity library&rsquo;s own test vectors, and a caret
         would let a later mirror be resolved beside a client that was never checked against it.{" "}
@@ -216,7 +217,7 @@ import {loadDeployment} from "@0g-brier/protocol/node";  // Node only`}</Cmd>
       <Note kind="info" title="The manifest is not in the package">
         Addresses ship in{" "}
         <A href="https://github.com/hevDev7/0g-brier">the repository</A>, not in a published version,
-        because an address baked into <C>0.1.0</C> would go on being served long after a redeployment
+        because an address baked into a published version would go on being served long after a redeployment
         moved it. Clone it for <C>deployments/</C>, or read the addresses off{" "}
         <a href="/docs/setup" className="text-accent underline decoration-accent/40 underline-offset-2">
           Setting it up

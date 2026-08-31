@@ -55,4 +55,17 @@ the largest position that stays inside.
 Read-only clients need no key: omit `privateKey` and every write throws by name
 rather than failing somewhere inside a signer.
 
+### 0.1.1
+
+The default transport now batches its calls and retries. Reading one market is a
+dozen `eth_call`s and reading a book is a dozen per market, so an agent scanning
+twenty markets fired several hundred requests at once and the public Galileo
+endpoint answered `request rate exceeded: Too many requests (exceeds 50)` — which
+arrives as a contract error naming an innocent function, and reads like the chain
+rejecting the call rather than the transport being throttled. Batching collapses
+each burst into one request per twenty calls.
+
+Pass your own `transport` to choose differently; nothing else about the client
+changed, and `@0g-brier/protocol` and `@0g-brier/zg-storage` stay at `0.1.0`.
+
 MIT.

@@ -41,7 +41,7 @@ npm install -D tsx typescript @types/node`}</Run>
                   <P>
                     The clone is not for the packages &mdash; npm supplied those. It is for{" "}
                     <C>deployments/16602.json</C>, which carries the contract addresses and deliberately does not ship
-                    inside a published version: an address baked into <C>0.1.0</C> would go on being served long after
+                    inside a published version: an address baked into one would go on being served long after
                     a redeployment moved it. Point <C>loadDeployment</C> at that directory, or drop the clone and hand{" "}
                     <C>BrierClient</C> the addresses yourself.
                   </P>

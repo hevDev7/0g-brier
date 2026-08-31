@@ -293,7 +293,7 @@ ERC-8004. Brier identities link to the IdentityRegistry with ownership verified 
 sides, and resolver records are published to the ReputationRegistry — a settlement here is
 readable by someone who has never heard of Brier.
 
-SDK published to npm, three packages at 0.1.0:
+SDK published to npm — `agent-kit` at 0.1.1, `protocol` and `zg-storage` at 0.1.0:
 https://www.npmjs.com/package/@0g-brier/agent-kit
 https://www.npmjs.com/package/@0g-brier/protocol
 https://www.npmjs.com/package/@0g-brier/zg-storage
