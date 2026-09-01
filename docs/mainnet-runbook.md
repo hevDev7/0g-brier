@@ -50,6 +50,21 @@ the deadline it was born with. `COMMIT_WINDOW`, `REVEAL_WINDOW` and the dispute
 windows are NOT safe to change that way — they are read during settlement, so
 moving them rewrites the rules of every market already waiting on one.
 
+**All thirteen are verified on chainscan**, proxies alongside their
+implementations, so a reader can check that a proxy points at the code they just
+read. `bash scripts/verify-contracts.sh 16661` does it and is idempotent.
+
+Three things make the obvious `forge verify-contract` invocation fail here, each
+differently. The mainnet API is at `/open/api`, not the `/api` the Galileo
+instance uses. Foundry has no entry for chain 16661, so `--verifier etherscan`
+refuses before sending anything and `--verifier custom` with an explicit
+`--verifier-url` is the path that works. And `--watch` ALWAYS fails, even on a
+successful verification: chainscan's submit response carries no guid, so Foundry
+polls without one, is told "guid is required" five times, and reports
+`Error: Checking verification result failed` for a contract that is verified.
+The script submits without `--watch` and reads the answer back from
+`getsourcecode`, which is the explorer's own account of what it holds.
+
 **The cliff is still open.** All four contracts remain owned by the deployer.
 
 ---
