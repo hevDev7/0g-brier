@@ -46,8 +46,9 @@ import {privateKeyToAccount} from "viem/accounts";
 import fs from "node:fs";
 import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
+import {networkForChainId} from "@0g-brier/protocol";
 
-const RPC = process.env.RPC_URL ?? "https://evmrpc-testnet.0g.ai";
+const RPC = process.env.RPC_URL ?? process.env.ZERO_G_RPC ?? networkForChainId(Number(process.env.CHAIN_ID ?? 16602)).rpcUrl;
 const MARKET = process.argv[2];
 if (!MARKET) throw new Error("usage: node scripts/committee-run.mjs <market address>");
 
@@ -56,10 +57,18 @@ if (!raw) throw new Error("set DEPLOYER_KEY — it funds the resolvers and deriv
 const DEPLOYER = (raw.startsWith("0x") ? raw : `0x${raw}`);
 const ROOT = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
 
-const C = JSON.parse(fs.readFileSync(new URL("../deployments/16602.json", import.meta.url), "utf-8")).contracts;
+// The chain used to be frozen here in three places at once — the manifest name,
+// the viem chain id, and the RPC default — with no environment variable able to
+// move any of them. A `grep mainnet` over this file returned nothing.
+const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
+const NET = networkForChainId(CHAIN_ID);
+const INDEXER = process.env.ZG_INDEXER ?? NET.indexerUrl;
+const C = JSON.parse(
+  fs.readFileSync(new URL(`../deployments/${CHAIN_ID}.json`, import.meta.url), "utf-8"),
+).contracts;
 const chain = defineChain({
-  id: 16602,
-  name: "galileo",
+  id: CHAIN_ID,
+  name: NET.name,
   nativeCurrency: {name: "0G", symbol: "0G", decimals: 18},
   rpcUrls: {default: {http: [RPC]}},
 });
@@ -220,6 +229,24 @@ async function main() {
 
   // ── 2. three resolvers: funded, registered, staked, linked to ERC-8004 ────
   console.log("\n── 2. resolvers ──");
+  // A WARNING, NOT A GUARD, because this script is the wrong tool for a registry
+  // that already has a committee and half-fixing it would hide that.
+  //
+  // The keys below come from `resolverKey`, a THIRD derivation that
+  // setup-committee.sh has never used. On the 0G mainnet deployment — fourteen
+  // resolvers already registered and staked — this step does not reuse them. It
+  // registers five MORE and locks another MIN_RESOLVER_STAKE x 2 x 5 of collateral
+  // that the market's seed was budgeted for. Voting on an existing committee needs
+  // a driver that seats the members the module DRAWS, which is what
+  // `operatorCandidates` below is for; provisioning is for a fresh chain.
+  if (CHAIN_ID === 16661) {
+    throw new Error(
+      "committee-run.mjs provisions its own resolvers, and chain 16661 already has a staked committee.\n" +
+        "  Running it here would register five more and lock collateral the market needs.\n" +
+        "  Use it on a fresh chain; drive an existing committee with the module directly.",
+    );
+  }
+
   const stakeAmount = await pub.readContract({address: C.ConfigRegistry, abi: CONFIG, functionName: "params", args: [key("MIN_RESOLVER_STAKE")]});
   const resolvers = [];
   for (let i = 0; i < n; i++) {
@@ -280,7 +307,7 @@ async function main() {
 
   // ── 3. what the market's own source says ─────────────────────────────────
   const specRoot = await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "specRoot"});
-  const spec = await (await fetch(`${process.env.ZG_INDEXER ?? "https://indexer-storage-testnet-turbo.0g.ai"}/file?root=${specRoot}`)).json();
+  const spec = await (await fetch(`${INDEXER}/file?root=${specRoot}`)).json();
   const src = spec.sources[0];
   // The BYTES, then the number — in that order and only once. A receipt claims
   // "this is what the source said", and that claim is only checkable if what was

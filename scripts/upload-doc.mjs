@@ -26,6 +26,7 @@
  */
 import {MemData, Indexer} from "@0gfoundation/0g-storage-ts-sdk";
 import {ethers} from "ethers";
+import {networkForChainId} from "@0g-brier/protocol";
 
 // The SDK narrates its progress with `console.log`, and stdout is this script's
 // RETURN CHANNEL. Left alone, a caller doing `ROOT="$(upload-spec.mjs)"` captures
@@ -35,13 +36,75 @@ import {ethers} from "ethers";
 console.log = (...args) => console.error(...args);
 const emit = (line) => process.stdout.write(`${line}\n`);
 
-const INDEXER = process.env.ZG_INDEXER ?? "https://indexer-storage-testnet-turbo.0g.ai";
-const EVM_RPC = process.env.EVM_RPC ?? "https://evmrpc-testnet.0g.ai";
+// Both endpoints come from CHAIN_ID, so they cannot be set to different networks
+// by forgetting one of them. Explicit env still wins, which is what the assertion
+// below is for.
+const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
+const NET = networkForChainId(CHAIN_ID);
+const INDEXER = process.env.ZG_INDEXER ?? NET.indexerUrl;
+const EVM_RPC = process.env.EVM_RPC ?? NET.rpcUrl;
 
 const die = (msg) => {
   console.error(`upload-doc: ${msg}`);
   process.exit(1);
 };
+
+/**
+ * THE INDEXER AND THE RPC MUST BE THE SAME NETWORK, and nothing upstream checks it.
+ *
+ * The SDK does not take a Flow address — it asks the indexer for one
+ * (`zgs_getStatus` -> `networkIdentity.flowAddress`) and builds a contract there
+ * with whatever signer it was given. Mainnet Flow is
+ * 0x62D4144dB0F0a6fBBaeb6296c785C71B3D57C526 and Galileo's is
+ * 0x22E03a6A89B950F1c82ec5e74F8eCa321a105296, and NEITHER has code on the other's
+ * chain. So a mainnet key with the testnet indexer reverts at gas estimation with
+ * nothing naming the cause.
+ *
+ * The other half is worse because it succeeds: point both at testnet while the
+ * market is on 16661 and the upload works, the specRoot is written, and it is
+ * immutable. Galileo has already been reset onto a new chain id twice; a permanent
+ * commitment to a document on a disposable network reads `unavailable` forever
+ * after the next one.
+ */
+async function assertSameNetwork() {
+  if (dryRun) return;
+  const nodes = await (
+    await fetch(INDEXER, {
+      method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({jsonrpc: "2.0", id: 1, method: "indexer_getShardedNodes", params: []}),
+    })
+  ).json().catch(() => null);
+  const node = nodes?.result?.trusted?.[0]?.url ?? null;
+  if (node === null) return; // the indexer would not say; the upload will fail loudly enough
+  const status = await (
+    await fetch(node, {
+      method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({jsonrpc: "2.0", id: 1, method: "zgs_getStatus", params: []}),
+    })
+  ).json().catch(() => null);
+  const storageChain = status?.result?.networkIdentity?.chainId ?? null;
+  const evmChain = Number(
+    (
+      await (
+        await fetch(EVM_RPC, {
+          method: "POST",
+          headers: {"content-type": "application/json"},
+          body: JSON.stringify({jsonrpc: "2.0", id: 1, method: "eth_chainId", params: []}),
+        })
+      ).json()
+    ).result,
+  );
+  if (storageChain !== null && storageChain !== evmChain) {
+    die(
+      `the indexer ${INDEXER} stores for chain ${storageChain}, but EVM_RPC ${EVM_RPC} is chain ${evmChain}.\n` +
+        "  These are separate storage networks that share no data, and their Flow contracts\n" +
+        "  have no code on each other's chain. Set ZG_INDEXER and EVM_RPC to one network, or\n" +
+        "  set CHAIN_ID and let both be derived.",
+    );
+  }
+}
 
 const dryRun = process.argv.includes("--dry-run");
 

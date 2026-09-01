@@ -45,7 +45,26 @@ import {readFileSync} from "node:fs";
 import {execFileSync} from "node:child_process";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
-const ZG_INDEXER = process.env.ZG_INDEXER ?? "https://indexer-storage-testnet-turbo.0g.ai";
+const ZG_INDEXER = requireIndexer();
+
+/**
+ * The 0G Storage indexer for this chain, or a refusal.
+ *
+ * `indexerUrl` is null on anvil, where there is no storage network — and a local
+ * demo reads its spec from a fixture rather than from 0G. Returning null here and
+ * letting `ZgStore` receive it would fail later, inside a fetch, with a message
+ * about an invalid URL rather than about the chain being wrong.
+ */
+function requireIndexer(): string {
+  const url = process.env.ZG_INDEXER ?? networkForChainId(CHAIN_ID).indexerUrl;
+  if (url === null) {
+    throw new Error(
+      `chain ${CHAIN_ID} has no 0G Storage indexer. Set ZG_INDEXER, or run against ` +
+        "16661 (mainnet) or 16602 (Galileo), whose indexers are known.",
+    );
+  }
+  return url;
+}
 /**
  * The provider(s) whose enclaves judge this market.
  *

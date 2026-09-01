@@ -235,7 +235,12 @@ describe("the documentation does not describe things that are not there", () => 
     const lib = read("contracts/script/DeployLib.sol");
     expect(lib).toContain("setParam(ConfigKeys.CREATOR_FEE_SHARE_BPS, 4000)");
     expect(lib).toContain("setParam(ConfigKeys.RESOLVER_FEE_SHARE_BPS, 3000)");
-    expect(lib).toContain("setParam(ConfigKeys.MIN_SETTLEMENT_DEPOSIT, 20e6)");
+    // `20 * unit`, not `20e6`. The literal was written for a 6-decimal testnet
+    // stablecoin and was wrong by twelve orders of magnitude against the
+    // 18-decimal mainnet collateral; the deploy now scales every money default by
+    // the collateral's own decimals. The page must not name a token either — the
+    // deposit is twenty whole units of whatever a given market settles in.
+    expect(lib).toContain("setParam(ConfigKeys.MIN_SETTLEMENT_DEPOSIT, 20 * unit)");
     expect(lib).toContain("setParam(ConfigKeys.SWEEP_UNCLAIMED_AFTER, 365 days)");
     expect(lib).toContain("setParam(ConfigKeys.UNSTAKE_COOLDOWN, 7 days)");
 
@@ -243,7 +248,14 @@ describe("the documentation does not describe things that are not there", () => 
     expect(running, "the creator's share").toContain("40% of the fee");
     expect(running, "the resolver pool's share").toContain("30% of the fee");
     expect(running, "the treasury's remainder").toContain("remaining 30% of the fee");
-    expect(running, "the settlement deposit").toContain("20 mUSDC");
+    // The deposit is a PROTOCOL RULE, so it must not name a token: it is twenty
+    // whole units of whatever a given market settles in. The page's other mUSDC
+    // mentions are a transcript of a real Galileo session and are left alone —
+    // rewriting them to say W0G would make the record false rather than general.
+    expect(running, "the settlement deposit").toContain("20 whole units of the");
+    expect(running, "the deposit rule must not name a token").not.toMatch(
+      /settlement deposit[^.]*mUSDC/,
+    );
     expect(running, "the sweep deadline, in seconds").toContain("31536000");
     expect(running, "the unstake cooldown, in seconds").toContain("604800");
 

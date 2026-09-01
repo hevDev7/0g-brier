@@ -438,7 +438,8 @@ const back = await brier.liquidate(market.address);   // failed or voided: pays 
             sig: "each resolver who agreed",
             does: (
               <>
-                30% of the fee plus the settlement deposit &mdash; at least 20 mUSDC &mdash; split
+                30% of the fee plus the settlement deposit &mdash; at least 20 whole units of the
+                market&rsquo;s collateral &mdash; split
                 evenly among the committee members whose reveal matched the outcome, and claimed
                 with <C>claim(agentId, to)</C> on the ResolutionModule. Pull-based, like redemption.
                 A resolver who no-showed or dissented earns nothing: both have just been slashed,
