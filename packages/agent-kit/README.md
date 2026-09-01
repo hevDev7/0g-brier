@@ -10,24 +10,36 @@ npm i @0g-brier/agent-kit
 
 ```ts
 import {BrierClient} from "@0g-brier/agent-kit";
+import {parseEther} from "viem";
 
 const client = new BrierClient({
-  network: "galileo",
+  network: "mainnet",               // 0G mainnet, chain 16661
   privateKey: process.env.AGENT_KEY as `0x${string}`,
-  factory: "0xd6F9aE316ef729C6c79fbC8684a2b0e4B76D4133",
-  outcomeShares: "0xFEAbd7d2f4e9A390d0Ca1d3A8C47C3a0557CFbb7",
+  factory: "0x4c79210ce5236803d1369691c56e79c21dfd8fe0",
+  outcomeShares: "0x05c14536e7f8718b512ad03328a15de7250c7681",
 });
 
 const market = await client.getMarket("0x…");
 
-// How many shares 50 mUSDC buys, without moving the price more than 5pp.
-const shares = await client.sizeWithinImpact(market, 1, 50_000000n, 500n);
-const preview = await client.previewBuy(market.address, 1, shares);
+// Collateral is W0G, native 0G wrapped one-for-one. Native 0G has no
+// `transferFrom`, so no market can hold it: an agent with a funded wallet owns
+// nothing a market will accept until it wraps.
+await client.wrapNative(market.collateral, parseEther("10"));
 
-await client.ensureAllowance(market.address, preview.tokensIn);
-const fill = await client.buyShares({
+// How many shares 1 W0G buys, without moving the price more than 5pp.
+const shares = await client.sizeWithinImpact({
   market: market.address,
   outcome: 1,                       // 0 = NO, 1 = YES
+  budgetTokens: parseEther("1"),
+  maxImpactBps: 500n,
+});
+const preview = await client.previewBuy(market.address, 1, shares);
+
+// Wrapping is not approving.
+await client.ensureAllowance(market.address, market.collateral, preview.tokensIn);
+const fill = await client.buyShares({
+  market: market.address,
+  outcome: 1,
   sharesOut: shares,
   maxTokensIn: preview.tokensIn,    // slippage bound; the trade reverts above it
 });
@@ -55,6 +67,35 @@ the largest position that stays inside.
 Read-only clients need no key: omit `privateKey` and every write throws by name
 rather than failing somewhere inside a signer.
 
+### 0.2.0
+
+Brier is on 0G mainnet, and this release is what an agent needs to trade there.
+
+**`wrapNative` and `unwrapNative`.** Mainnet settles in W0G, wrapped native 0G.
+Native 0G is not an ERC-20 — it has no `transferFrom`, so no market can hold it —
+and until this release the SDK had no way to obtain the collateral at all. Both
+read the token's bytecode first and refuse anything without `deposit()` and
+`withdraw(uint256)`: sending native currency to a plain ERC-20 with a payable
+fallback is accepted, mints nothing, and has no second attempt.
+
+**`decideByThreshold`.** A settlement question phrased as a numeric threshold is
+decided by comparing two numbers, in code, with no model and no enclave call. It
+declines — returning `null` — on anything it cannot read exactly, including a rule
+written from the NO side, so the model still handles every question that needs
+judgement. `settle()` tries it first.
+
+**`networkForChainId` and `modeForChainId`**, from `@0g-brier/protocol@0.2.0`, name
+a network from a chain id and throw on one they do not know. Nine places in this
+repository used to write that choice inline, and five of them were a two-way
+ternary from before mainnet existed: chain 16661 fell through to `anvil`, so a
+client aimed at mainnet silently addressed `http://127.0.0.1:8545` and reported an
+empty protocol rather than a misconfiguration. `NetworkConfig` also carries
+`indexerUrl` now, because the two 0G Storage networks share no data and their Flow
+contracts have no code on each other's chain.
+
+Requires `@0g-brier/protocol@0.2.0` and `@0g-brier/zg-storage@0.1.1`, pinned
+exactly.
+
 ### 0.1.1
 
 The default transport now batches its calls and retries. Reading one market is a
@@ -66,6 +107,6 @@ rejecting the call rather than the transport being throttled. Batching collapses
 each burst into one request per twenty calls.
 
 Pass your own `transport` to choose differently; nothing else about the client
-changed, and `@0g-brier/protocol` and `@0g-brier/zg-storage` stay at `0.1.0`.
+changed in that release.
 
 MIT.

@@ -30,7 +30,7 @@ Deployment manifests load through the `./node` entry point:
 
 ```ts
 import {loadDeployment} from "@0g-brier/protocol/node";
-const {contracts} = loadDeployment(16602, "./deployments");
+const {contracts} = loadDeployment(16661, "./deployments"); // 0G mainnet
 ```
 
 MIT.

@@ -10,7 +10,9 @@ npm i @0g-brier/zg-storage
 ```ts
 import {ZgStore, zgMerkleRoot} from "@0g-brier/zg-storage";
 
-const store = new ZgStore("https://indexer-storage-testnet-turbo.0g.ai");
+const store = new ZgStore("https://indexer-storage-turbo.0g.ai"); // mainnet;
+// Galileo is indexer-storage-testnet-turbo.0g.ai. The two networks share no data,
+// and a root stored on one is not fetchable from the other.
 const doc = await store.get("0x5da31d27…"); // throws unless the bytes hash back
 ```
 
