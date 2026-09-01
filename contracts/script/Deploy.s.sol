@@ -447,6 +447,23 @@ contract Deploy is Script {
         // the repo pointing at 0xC4627f87…, which has no code on 16661 — and the
         // frontend, the keeper and every script resolve addresses out of these files by
         // chain id. It also left the tree dirty, so the next simulation refused to run.
+        // A RESUME MUST NOT WRITE IT EITHER, and this one cost more than the dry run
+        // did. `--resume` re-runs this script against the CURRENT chain state, so it
+        // predicts a completely fresh set of addresses, then writes them over the
+        // manifest — while the transactions it actually broadcasts are the recorded
+        // ones from the original run. The 16661 deploy took six resumes and finished
+        // "ONCHAIN EXECUTION COMPLETE & SUCCESSFUL" with a manifest whose fourteen
+        // addresses ALL had no code, while the real contracts sat elsewhere. Nothing
+        // in the run said anything was wrong.
+        if (vm.isContext(VmSafe.ForgeContext.ScriptResume)) {
+            console2.log("");
+            console2.log("Resume: deployments/%s.json was NOT written.", vm.toString(block.chainid));
+            console2.log("A resume re-simulates and would predict addresses that are not the ones");
+            console2.log("deployed. Rebuild it from the chain instead:");
+            console2.log("  node scripts/rebuild-manifest.mjs --chain %s --write", vm.toString(block.chainid));
+            return;
+        }
+
         if (vm.isContext(VmSafe.ForgeContext.ScriptDryRun)) {
             console2.log("");
             console2.log("Dry run: deployments/%s.json was NOT written.", vm.toString(block.chainid));

@@ -26,12 +26,34 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ACTION="${1:-status}"
 
-if [[ -f "$ROOT/.env" ]]; then
-  _pre="$(export -p)"; set -a; . "$ROOT/.env"; set +a; eval "$_pre" 2>/dev/null || true
+# .env.mainnet wins over .env, as everywhere else, so that running this against a
+# mainnet deployment does not silently read the testnet's endpoint.
+ENV_FILE="${ENV_FILE:-}"
+if [[ -z "$ENV_FILE" ]]; then
+  ENV_FILE="$ROOT/.env"
+  [[ -f "$ROOT/.env.mainnet" ]] && ENV_FILE="$ROOT/.env.mainnet"
 fi
-RPC="${ZERO_G_TESTNET_RPC:-https://evmrpc-testnet.0g.ai}"
+if [[ -f "$ENV_FILE" ]]; then
+  _pre="$(export -p)"; set -a; . "$ENV_FILE"; set +a; eval "$_pre" 2>/dev/null || true
+fi
+RPC="${ZERO_G_RPC:-${ZERO_G_MAINNET_RPC:-${ZERO_G_TESTNET_RPC:-https://evmrpc-testnet.0g.ai}}}"
 CHAIN="$(cast chain-id --rpc-url "$RPC")"
 M="$ROOT/deployments/$CHAIN.json"
+
+# SAY WHICH CHAIN. This script is what closes the cliff, and it used to default to
+# the testnet endpoint and print a timelock address with no chain beside it. Run
+# against a fresh mainnet deployment on 2026-09-01 it reported Galileo's timelock and
+# Galileo's four pending contracts — an answer that looks exactly like the right one
+# and is about a different network.
+CHAIN_NAME="chain $CHAIN"
+case "$CHAIN" in
+  16661) CHAIN_NAME="0G MAINNET (16661)" ;;
+  16602) CHAIN_NAME="Galileo testnet (16602)" ;;
+  31337) CHAIN_NAME="local anvil (31337)" ;;
+esac
+echo "▶ $CHAIN_NAME via $RPC"
+echo "▶ manifest $(basename "$M")   env $(basename "$ENV_FILE")"
+echo ""
 J(){ python3 -c "import json;print(json.load(open('$M'))['contracts'].get('$1',''))"; }
 TIMELOCK="$(J Timelock)"
 [[ -n "$TIMELOCK" && "$TIMELOCK" != "0x0000000000000000000000000000000000000000" ]] \

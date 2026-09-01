@@ -1,0 +1,21 @@
+{
+  "chainId": 16661,
+  "contracts": {
+    "AgentCard": "0xa2f14bede0c49022a9864263e8174096dd94adcd",
+    "AgentRegistry": "0xe87a66e1ed8c1fee635ac0df70e0f7f03c695963",
+    "AgentRegistryImpl": "0x590cfcded7127615cfc0924883942b975c4da0e7",
+    "ConfigRegistry": "0x3289fcb307714774ac45de9606af6f95d2b2b4dd",
+    "ConfigRegistryImpl": "0xc0b6e8371e55cff1ffa5a4e6e902a97eab2334c2",
+    "MarketFactory": "0x4c79210ce5236803d1369691c56e79c21dfd8fe0",
+    "MarketFactoryImpl": "0x29240d510bbee046b2f0ceb46fa741f836e93518",
+    "MarketImplementation": "0xf182794e8c1a437ae16536ab4b8e7b019637732f",
+    "MockUSDC": "0x1cd0690ff9a693f5ef2dd976660a8dafc81a109c",
+    "OutcomeShares": "0x05c14536e7f8718b512ad03328a15de7250c7681",
+    "ResolutionModule": "0xd3ab1d14d85fbf24698d8e679c2e32c26c5c0fbb",
+    "ResolutionModuleImpl": "0x061eb8a4c749de76f1ea312d9a430b7c05306ded",
+    "Timelock": "0x4810a1bf3ef8f7d52d9d7a01155ddb171cea8d4e",
+    "ZgDataVerifier": "0xd23aee353f60ad8cd211d088b58b4f9e61bde257"
+  },
+  "deployedAt": 1788222687,
+  "deploymentBlock": 43180916
+}
