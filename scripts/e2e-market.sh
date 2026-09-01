@@ -23,10 +23,21 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Loaded from the repo root so a private key never has to be typed on a command
 # line, where it would land in shell history — and, if this session is driven by
 # an agent, in a transcript. `.env` is gitignored; `.env.example` is the template.
-if [[ -f "$ROOT/.env" ]]; then
-  perms="$(stat -c '%a' "$ROOT/.env" 2>/dev/null || echo '')"
+# .env.mainnet wins over .env, as in every other script here. This one did not, and
+# it was the worst place for it: .env holds the Galileo deployer key that was burned
+# into a transcript — an address the mainnet deploy script refuses BY ADDRESS — plus
+# a CURATOR_KEY for a wallet that is not the on-chain CURATOR_SIGNER. Against 16661
+# every send died for gas, and the one that would not have died would have been
+# rejected as BadCuratorSignature.
+ENV_FILE="${ENV_FILE:-}"
+if [[ -z "$ENV_FILE" ]]; then
+  ENV_FILE="$ROOT/.env"
+  [[ -f "$ROOT/.env.mainnet" ]] && ENV_FILE="$ROOT/.env.mainnet"
+fi
+if [[ -f "$ENV_FILE" ]]; then
+  perms="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || echo '')"
   if [[ -n "$perms" && "${perms:1}" != "00" ]]; then
-    echo "⚠  $ROOT/.env is mode $perms — it holds a private key. chmod 600 it."
+    echo "⚠  $ENV_FILE is mode $perms — it holds a private key. chmod 600 it."
   fi
   # The environment wins over the file, which is the convention everywhere else
   # and the only thing that makes `RPC=... bash scripts/e2e-market.sh` mean
@@ -34,12 +45,12 @@ if [[ -f "$ROOT/.env" ]]; then
   # after sourcing, so `.env` keeps full shell semantics — quoting, expansion —
   # rather than being re-parsed by hand.
   _pre_env="$(export -p)"
-  set -a; . "$ROOT/.env"; set +a
+  set -a; . "$ENV_FILE"; set +a
   eval "$_pre_env" 2>/dev/null || true
   unset _pre_env
 fi
 
-RPC="${RPC:-${ZERO_G_TESTNET_RPC:-http://127.0.0.1:8545}}"
+RPC="${RPC:-${ZERO_G_RPC:-${ZERO_G_MAINNET_RPC:-${ZERO_G_TESTNET_RPC:-http://127.0.0.1:8545}}}}"
 # Wallets export a key with and without the prefix, and both are the same key —
 # `cast` accepts either. `forge`'s `vm.envUint` does not: without `0x` it parses
 # the string as DECIMAL, so an all-digit key would silently become a different
@@ -66,6 +77,37 @@ USDC="$(j MockUSDC)";        SHARES="$(j OutcomeShares)"
 
 ACTOR="$(cast wallet address --private-key "$DEPLOYER_KEY")"
 CURATOR="$(cast wallet address --private-key "$CURATOR_KEY")"
+
+case "$CHAIN_ID" in
+  16661) echo "▶ 0G MAINNET (16661) via $RPC   env $(basename "$ENV_FILE")" ;;
+  16602) echo "▶ Galileo testnet (16602) via $RPC   env $(basename "$ENV_FILE")" ;;
+  *)     echo "▶ chain $CHAIN_ID via $RPC   env $(basename "$ENV_FILE")" ;;
+esac
+
+# ── every money figure comes from the chain, never from a literal ───────────
+# SEED and DEPOSIT used to be `1000000000` and `20000000` with a comment reading
+# "1,000 mUSDC". Those are 6-decimal constants. Against an 18-decimal collateral
+# they are 1e-9 and 2e-11 of a token, and Market.initialize reverts SeedTooSmall
+# before anything else gets a chance to be wrong.
+DEC="$(cast call --rpc-url "$RPC" "$USDC" 'decimals()(uint8)' | awk '{print $1}')"
+SYM="$(cast call --rpc-url "$RPC" "$USDC" 'symbol()(string)' 2>/dev/null | tr -d '"' || echo '?')"
+cfg() { cast call --rpc-url "$RPC" "$CONFIG" 'params(bytes32)(uint256)' "$(cast keccak "$1")" | awk '{print $1}'; }
+SEED="${SEED:-$(cfg MIN_SEED)}"
+DEPOSIT="${DEPOSIT:-$(cfg MIN_SETTLEMENT_DEPOSIT)}"
+MIN_SETTLE_WINDOW="$(cfg MIN_SETTLEMENT_WINDOW)"
+# python3, never $(( )): these are wei on an 18-decimal token and bash tops out at
+# 9.22e18, which is under ten whole tokens.
+NEED="$(python3 -c "print($SEED + $DEPOSIT)")"
+human() { python3 -c "print(f'{$1/10**$DEC:,.6f}'.rstrip('0').rstrip('.') or '0')"; }
+
+# THE CURATOR MUST BE THE ONE THE CHAIN CHECKS AGAINST. createMarket recovers the
+# signature and compares it with CURATOR_SIGNER; a mismatch is BadCuratorSignature
+# after the creator has already paid for the attempt.
+ONCHAIN_CURATOR="$(cast call --rpc-url "$RPC" "$CONFIG" 'addresses(bytes32)(address)' "$(cast keccak CURATOR_SIGNER)" | awk '{print $1}')"
+[[ "${CURATOR,,}" == "${ONCHAIN_CURATOR,,}" ]] || {
+  echo "✗ CURATOR_KEY derives $CURATOR but the chain's CURATOR_SIGNER is $ONCHAIN_CURATOR." >&2
+  echo "  No market could be created: createMarket checks the signature against the latter." >&2
+  exit 1; }
 # Galileo enforces a minimum priority fee and rejects cast's default tip of 1 wei
 # outright: "transaction gas price below minimum: gas tip cap 1, minimum needed
 # 2000000000". `forge script` never hit it because it estimates its own fees.
@@ -168,12 +210,52 @@ ONCHAIN_MODULE="$(call "$CONFIG" "addresses(bytes32)(address)" "$(cast keccak "R
 }
 echo "   resolution module $MODULE"
 
+# ── --check: read everything, send nothing ─────────────────────────────────
+# There was no way to ask this script what it would do. That is not a small gap in
+# a script whose first act is to spend collateral: on 2026-09-01 setup-committee.sh
+# was invoked to see its banner and registered two resolvers on mainnet instead,
+# because it had the same gap. Everything above this line is reads.
+if [[ "${1:-}" == "--check" || "${CHECK:-0}" == "1" ]]; then
+  cat <<CHECKEOF
+
+▶ CHECK ONLY. Nothing will be sent.
+    chain            $CHAIN_ID via $RPC
+    env              $ENV_FILE
+    creator          $ACTOR
+    curator          $CURATOR  (chain expects $ONCHAIN_CURATOR)
+    collateral       $USDC  $SYM, $DEC decimals
+    creator holds    $(human "$(call "$USDC" "balanceOf(address)(uint256)" "$ACTOR" | cut -d' ' -f1)") $SYM
+    seed             $(human "$SEED") $SYM
+    deposit          $(human "$DEPOSIT") $SYM
+    needs            $(human "$NEED") $SYM
+    trade budget     $(human "$(python3 -c "print($SEED // 5)")") $SYM
+    settlement floor $MIN_SETTLE_WINDOW s ($(python3 -c "print(f'{$MIN_SETTLE_WINDOW/86400:.1f}')") days)
+    storage          $([[ "$CHAIN_ID" != "31337" ]] && echo "uploads for real" || echo "dry-run (local chain)")
+    direct settle    $(call "$MODULE" "isResolver(address)(bool)" "$ACTOR" | awk '{print $1}') (false means the committee settles, which is right)
+
+CHECKEOF
+  exit 0
+fi
+
 step "1/8 fund the creator and approve the factory"
-SEED=1000000000        # 1,000 mUSDC (MIN_SEED is 100)
-DEPOSIT=20000000       #    20 mUSDC (MIN_SETTLEMENT_DEPOSIT)
-send "$USDC" "mintTo(address,uint256)" "$ACTOR" 100000000000
-send "$USDC" "approve(address,uint256)" "$FACTORY" 100000000000
-echo "   mUSDC balance: $(cast call --rpc-url "$RPC" "$USDC" "balanceOf(address)(uint256)" "$ACTOR")"
+echo "   seed $(human "$SEED") $SYM  ·  settlement deposit $(human "$DEPOSIT") $SYM"
+BAL="$(call "$USDC" "balanceOf(address)(uint256)" "$ACTOR" | cut -d' ' -f1)"
+if [ "$(python3 -c "print(1 if $BAL < $NEED else 0)")" = "1" ]; then
+  # mintTo BELONGS TO MockUSDC AND NOTHING ELSE. W0G has no such function, and the
+  # mint it does have is quota-gated by a chain precompile. So the mint is the
+  # testnet convenience it always was, not a precondition: on a real token the
+  # collateral has to be held before this runs.
+  if send "$USDC" "mintTo(address,uint256)" "$ACTOR" "$NEED" 2>/dev/null; then
+    echo "   minted $(human "$NEED") $SYM (mock collateral)"
+  else
+    echo "✗ $ACTOR holds $(human "$BAL") $SYM but the market needs $(human "$NEED")." >&2
+    echo "  $SYM has no mintTo — acquire it first. For a wrapped native token that is" >&2
+    echo "  deposit(), which takes the chain's own currency one-for-one." >&2
+    exit 1
+  fi
+fi
+send "$USDC" "approve(address,uint256)" "$FACTORY" "$NEED"
+echo "   $SYM balance: $(human "$(call "$USDC" "balanceOf(address)(uint256)" "$ACTOR" | cut -d' ' -f1)")"
 
 step "2/8 sign a curator approval (EIP-712) and create the market"
 TRADING_END=$(( $(now) + WINDOW ))
@@ -183,7 +265,11 @@ TRADING_END=$(( $(now) + WINDOW ))
 # resolver inside the first of those. Sizing it off the trading window is how the
 # first weather run got a deadline shorter than its own settlement, failed, and
 # looked like a committee that never turned up.
-SETTLEMENT_DEADLINE=$(( TRADING_END + ${SETTLEMENT_WINDOW_SECONDS:-$WINDOW} ))
+# Defaulted from the CHAIN's MIN_SETTLEMENT_WINDOW, not from the trading window.
+# It used to default to WINDOW — 180s — against a live minimum of three days, so
+# Market.initialize reverted BadDeadlines before any of the other defects here got
+# a turn.
+SETTLEMENT_DEADLINE=$(( TRADING_END + ${SETTLEMENT_WINDOW_SECONDS:-$MIN_SETTLE_WINDOW} ))
 # 0 = FAST, 1 = VERIFIED, 2 = DETERMINISTIC. The tier decides the committee's shape
 # and its dispute window, so a run with three staked resolvers wants tier 2 (n=3, k=2)
 # rather than the default VERIFIED (n=5, k=3), which would revert NotEnoughResolvers.
@@ -216,7 +302,10 @@ CATEGORY="$(cast format-bytes32-string "$(printf '%s' "$SPEC_DOC" | python3 -c "
 # market is created with rather than beside them.
 # Uploading writes to 0G Chain, so a local anvil run computes the root without
 # storing anything and says so, rather than pretending.
-if [[ "$CHAIN_ID" == "16602" || "${ZG_UPLOAD:-0}" == "1" ]]; then
+# ANY CHAIN THAT IS NOT LOCAL STORES FOR REAL. This used to test `== 16602`, so a
+# mainnet run took the --dry-run branch and created a market whose specRoot named a
+# document that was never stored — and specRoot is immutable at birth.
+if [[ "$CHAIN_ID" != "31337" || "${ZG_UPLOAD:-0}" == "1" ]]; then
   echo "   uploading the MarketSpec to 0G Storage"
   SPEC_ROOT="$(printf '%s' "$SPEC_DOC" | UPLOADER_KEY="$DEPLOYER_KEY" node "$ROOT/scripts/upload-doc.mjs" --require question,rules)"
 else
@@ -257,7 +346,11 @@ fi
 p() { call "$MARKET" "probability(uint8)(uint256)" "$1" | cut -d' ' -f1; }
 pool() { call "$MARKET" "poolWad()(uint256)" | cut -d' ' -f1; }
 pct() { python3 -c "print(f'{int('$1')/10**16:.2f}%')"; }
-usd() { python3 -c "print(f\"{int('${1%% *}')/10**6:.6f}\")"; }
+# `human`, defined above from the token's own decimals. This used to be a `usd()`
+# that divided by 10**6, so every amount it printed on an 18-decimal collateral was
+# a million million times too large — and step 8 is where a person judges whether
+# the run was solvent.
+usd() { human "${1%% *}"; }
 # poolWad is wad, not token units — the collateral is 6-decimal but every DPM
 # quantity on this contract is 18. Mixing the two is the single easiest way to
 # print a number that is wrong by 1e12 and looks plausible.
@@ -265,17 +358,31 @@ wad() { python3 -c "print(f\"{int('${1%% *}')/10**18:.6f}\")"; }
 
 echo "   P(YES) $(pct "$(p 1)")  ·  pool $(wad "$(pool)") mUSDC"
 
-step "3/8 buy 300 YES shares"
-send "$USDC" "approve(address,uint256)" "$MARKET" 100000000000
+# A BUDGET, NOT A SHARE COUNT. This step used to buy a flat 300 shares with a
+# maxTokensIn of 1e11 wei. Against a 1 W0G seed, 300 shares costs 299.7 W0G plus
+# fee — two orders of magnitude past the whole wallet — so it reverted
+# SlippageExceeded, and would have been unaffordable without the cap. Spending a
+# fraction of the seed is a trade whose size means the same thing at any scale.
+BUDGET="${TRADE_BUDGET:-$(python3 -c "print($SEED // 5)")}"
+step "3/8 buy YES with $(human "$BUDGET") $SYM"
+# quoteBuySpend answers "this much money buys this many shares", which is the
+# question a budget asks. Quoting first also means maxTokensIn is a real slippage
+# bound rather than a number large enough to never bind.
+QUOTED="$(call "$MARKET" "quoteBuySpend(uint8,uint256)(uint256,uint256)" 1 "$BUDGET")"
+SHARES_OUT="$(echo "$QUOTED" | head -1 | cut -d' ' -f1)"
+MAX_IN="$(python3 -c "print($BUDGET * 102 // 100)")"
+send "$USDC" "approve(address,uint256)" "$MARKET" "$MAX_IN"
 BEFORE_YES="$(p 1)"
-send "$MARKET" "buy(uint8,uint256,uint256,address)" 1 300000000000000000000 100000000000 "$ACTOR"
+send "$MARKET" "buy(uint8,uint256,uint256,address)" 1 "$SHARES_OUT" "$MAX_IN" "$ACTOR"
 AFTER_YES="$(p 1)"
 echo "   P(YES) $(pct "$BEFORE_YES") -> $(pct "$AFTER_YES")"
-[[ "$AFTER_YES" -gt "$BEFORE_YES" ]] || { echo "✗ buying YES did not raise P(YES)" >&2; exit 1; }
+[ "$(python3 -c "print(1 if $AFTER_YES > $BEFORE_YES else 0)")" = "1" ] \
+  || { echo "✗ buying YES did not raise P(YES)" >&2; exit 1; }
 echo "   shares held: $(call "$SHARES" "balanceOfOutcome(address,address,uint8)(uint256)" "$ACTOR" "$MARKET" 1)"
 
-step "4/8 sell 100 of them back"
-send "$MARKET" "sell(uint8,uint256,uint256,address)" 1 100000000000000000000 0 "$ACTOR"
+step "4/8 sell a third of them back"
+SELL_IN="$(python3 -c "print($SHARES_OUT // 3)")"
+send "$MARKET" "sell(uint8,uint256,uint256,address)" 1 "$SELL_IN" 0 "$ACTOR"
 echo "   P(YES) now $(pct "$(p 1)")"
 echo "   shares held: $(call "$SHARES" "balanceOfOutcome(address,address,uint8)(uint256)" "$ACTOR" "$MARKET" 1)"
 
@@ -290,11 +397,26 @@ step "6/8 settle YES, with a receipt anchored on chain"
 # rejects a zero root, which is the guard that stops this market repeating what
 # the first Galileo market did with its specRoot.
 RECEIPT_DOC="$(python3 "$ROOT/scripts/settlement-receipt.py" "$MARKET" "$SPEC_ROOT" 1 "$ACTOR" "$(now)")"
-if [[ "$CHAIN_ID" == "16602" || "${ZG_UPLOAD:-0}" == "1" ]]; then
+# ANY CHAIN THAT IS NOT LOCAL STORES FOR REAL. This used to test `== 16602`, so a
+# mainnet run took the --dry-run branch and created a market whose specRoot named a
+# document that was never stored — and specRoot is immutable at birth.
+if [[ "$CHAIN_ID" != "31337" || "${ZG_UPLOAD:-0}" == "1" ]]; then
   echo "   uploading the settlement receipt to 0G Storage"
   RECEIPT_ROOT="$(printf '%s' "$RECEIPT_DOC" | UPLOADER_KEY="$DEPLOYER_KEY" node "$ROOT/scripts/upload-doc.mjs")"
 else
   RECEIPT_ROOT="$(printf '%s' "$RECEIPT_DOC" | node "$ROOT/scripts/upload-doc.mjs" --dry-run)"
+fi
+# settle() IS THE DIRECT PATH, and it is gated by isResolver — one address writing
+# an outcome on its own signature, with no committee, no commit-reveal and no
+# dispute round. Deploy.s.sol refuses to fill that allowlist on mainnet, so this
+# step cannot work there and should not be made to: the committee is what settles.
+IS_RESOLVER="$(call "$MODULE" "isResolver(address)(bool)" "$ACTOR" | awk '{print $1}')"
+if [[ "$IS_RESOLVER" != "true" ]]; then
+  echo "✗ $ACTOR is not on the resolver allowlist, so settle() would revert NotResolver." >&2
+  echo "  That is correct on a committee deployment and deliberate on mainnet." >&2
+  echo "  Stop here with STOP_AFTER_CREATE=1 and settle through the committee:" >&2
+  echo "    requestResolution -> openResolution -> commitVote -> revealVote -> finalize" >&2
+  exit 1
 fi
 send "$MODULE" "settle(address,uint8,bytes32)" "$MARKET" 1 "$RECEIPT_ROOT"
 ANCHORED="$(call "$MODULE" "resolutionOf(address)(bytes32,address)" "$MARKET" | head -1)"
@@ -308,13 +430,17 @@ step "7/8 redeem"
 BAL_BEFORE="$(call "$USDC" "balanceOf(address)(uint256)" "$ACTOR" | cut -d' ' -f1)"
 send "$MARKET" "redeem(address)" "$ACTOR"
 BAL_AFTER="$(call "$USDC" "balanceOf(address)(uint256)" "$ACTOR" | cut -d' ' -f1)"
-echo "   redeemed $(usd $(( BAL_AFTER - BAL_BEFORE ))) mUSDC"
+echo "   redeemed $(human "$(python3 -c "print($BAL_AFTER - $BAL_BEFORE)")") $SYM"
 
 step "8/8 solvency, on chain, after everything"
 OWED="$(call "$MARKET" "collateralOwed()(uint256)" | cut -d' ' -f1)"
 HELD="$(call "$USDC" "balanceOf(address)(uint256)" "$MARKET" | cut -d' ' -f1)"
-echo "   market holds $(usd "$HELD") mUSDC, owes $(usd "$OWED")"
-[[ "$HELD" -ge "$OWED" ]] || { echo "✗ INV-2 violated on a live chain" >&2; exit 1; }
+echo "   market holds $(human "$HELD") $SYM, owes $(human "$OWED")"
+# python3, not `-ge`. INV-2 is the solvency invariant, and checking it in bash's
+# 64-bit arithmetic against an 18-decimal collateral is how a violation gets read
+# as a pass: anything above 9.22 tokens wraps negative.
+[ "$(python3 -c "print(1 if $HELD >= $OWED else 0)")" = "1" ] \
+  || { echo "✗ INV-2 violated on a live chain: holds $HELD, owes $OWED" >&2; exit 1; }
 
 printf '\n\033[1;32m✓ full lifecycle on chain %s\033[0m\n' "$CHAIN_ID"
 echo "  market $MARKET"
