@@ -20,7 +20,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EXPECTED_CHAIN_ID=16661
 BROADCAST=""
-[[ "${1:-}" == "--broadcast" ]] && BROADCAST=1
+RESUME=""
+for a in "$@"; do
+  case "$a" in
+    --broadcast) BROADCAST=1 ;;
+    # 0G's RPC drops receipts. A run that stops halfway has already spent gas and
+    # already moved the deployer's nonce, so the remedy is to continue it, not to
+    # start again: forge replays the recorded transactions and sends only the ones
+    # that never landed.
+    --resume) BROADCAST=1; RESUME=1 ;;
+  esac
+done
 
 # The Galileo deployer, burned into a transcript on 2026-08-30. Refused by
 # ADDRESS rather than by key, so it stays refused however the key is spelled —
@@ -281,7 +291,10 @@ set +e
 forge script script/Deploy.s.sol:Deploy \
   --rpc-url "$RPC" \
   ${BROADCAST:+--broadcast} \
+  ${RESUME:+--resume} \
   --slow \
+  --timeout 300 \
+  --retries 10 \
   --priority-gas-price "$TIP" \
   --with-gas-price "$MAXFEE" \
   -vv
@@ -289,10 +302,22 @@ STATUS=$?
 set -e
 
 if (( STATUS != 0 )); then
+  # The script writes the manifest from its SIMULATION, before a single transaction
+  # is broadcast, so a run that dies partway leaves a file naming contracts that were
+  # only predicted. Restoring a backup covered the case where one already existed;
+  # on a FIRST deploy there is nothing to restore, and the phantom stayed. It was
+  # observed on 2026-09-01: twelve of fourteen addresses in deployments/16661.json
+  # had no code, and the frontend and every script resolve addresses out of that file.
   if [[ -n "${BACKUP:-}" ]]; then
     cp "$BACKUP" "$MANIFEST"
     echo "✗ deploy failed — manifest restored from $(basename "$BACKUP")" >&2
+  elif [[ -f "$MANIFEST" ]]; then
+    rm -f "$MANIFEST"
+    echo "✗ deploy failed — removed $(basename "$MANIFEST"), which named contracts that were never deployed" >&2
   fi
+  echo "" >&2
+  echo "  If transactions DID land, do not start over: re-run with --resume." >&2
+  echo "  forge replays the recorded sequence and sends only what never made it." >&2
   exit "$STATUS"
 fi
 
