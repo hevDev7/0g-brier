@@ -7,7 +7,7 @@ order is signed by an autonomous agent through an SDK. A settlement is decided b
 staked resolvers voting blind, published as a document on 0G Storage, and — where
 the resolver runs on 0G Compute — attested by the enclave that ran the model.
 
-Live on **0G mainnet** (chain 16661) and on Galileo. The contracts are unaudited
+Live on **0G mainnet**, chain 16661. The contracts are unaudited
 and the deployer still holds them — read [What is not true yet](#what-is-not-true-yet)
 before putting anything in.
 
@@ -173,50 +173,12 @@ cost an afternoon.
 
 ---
 
-## Live on Galileo (chain 16602)
-
-**All fourteen are verified on the explorer** — the links open readable Solidity, not
-bytecode. Deployed at block `52344003`.
-
-**Call these.** Four UUPS proxies — the addresses that stay the same across upgrades.
-
-| Contract | Address | What it is |
-|---|---|---|
-| MarketFactory | [`0x62A0f066d032F631876e70562FDc38070a090202`](https://chainscan-galileo.0g.ai/address/0x62A0f066d032F631876e70562FDc38070a090202) | Creates markets, and the registry of which addresses are real ones |
-| ConfigRegistry | [`0x3C899430a3781f5b0123247B5D0d073Ae020eD02`](https://chainscan-galileo.0g.ai/address/0x3C899430a3781f5b0123247B5D0d073Ae020eD02) | Every economic parameter, bounded at deployment |
-| AgentRegistry | [`0xa9Ce57757B07fdf10A9e181436d76C33005E4c0a`](https://chainscan-galileo.0g.ai/address/0xa9Ce57757B07fdf10A9e181436d76C33005E4c0a) | Identity and stake. ERC-721, ERC-7857, ERC-8004 link |
-| ResolutionModule | [`0x548D61B9A372cBa05407087eF0eD29B92D340EAC`](https://chainscan-galileo.0g.ai/address/0x548D61B9A372cBa05407087eF0eD29B92D340EAC) | Commit–reveal settlement, sampling and slashing |
-
-**Also live.** Not upgradeable, and not meant to be.
-
-| Contract | Address | What it is |
-|---|---|---|
-| OutcomeShares | [`0x24A051a42EC3963d7998682e52697fCb3F77F2a5`](https://chainscan-galileo.0g.ai/address/0x24A051a42EC3963d7998682e52697fCb3F77F2a5) | ERC-1155 holding every tradable position |
-| MarketImplementation | [`0x83d6ACf5c70882c70d02f1133D2199EB0a101e2c`](https://chainscan-galileo.0g.ai/address/0x83d6ACf5c70882c70d02f1133D2199EB0a101e2c) | The EIP-1167 template every market is cloned from |
-| ZgDataVerifier | [`0x3080772F00b6aDFadeb915BdD5a442F1043c6D5D`](https://chainscan-galileo.0g.ai/address/0x3080772F00b6aDFadeb915BdD5a442F1043c6D5D) | ERC-7857 verifier; recomputes 0G Storage's Merkle root on chain |
-| AgentCard | [`0x85fE61E652f8347A08a966775f02606572E3b890`](https://chainscan-galileo.0g.ai/address/0x85fE61E652f8347A08a966775f02606572E3b890) | Renders the Agentic ID's tokenURI |
-| Timelock | [`0xDF1482EC379D9D12307796897dD39fc54E4192Be`](https://chainscan-galileo.0g.ai/address/0xDF1482EC379D9D12307796897dD39fc54E4192Be) | 48-hour delay, for governance once ownership is handed over |
-| Collateral (mUSDC) | [`0xc39BBf4DFe69Cbd9687AED0BAd568d5245b49f2C`](https://chainscan-galileo.0g.ai/token/0xc39BBf4DFe69Cbd9687AED0BAd568d5245b49f2C) | Test collateral, 6 decimals, open faucet. Not money |
-
-**Behind the proxies.** Listed so an upgrade can be checked rather than trusted.
-
-| Implementation | Address |
-|---|---|
-| MarketFactory | [`0xCc1cF73CD9B0DA9D2974782643C05c70eA180eF9`](https://chainscan-galileo.0g.ai/address/0xCc1cF73CD9B0DA9D2974782643C05c70eA180eF9) |
-| ConfigRegistry | [`0xCB2753447763B30df1697AE675044d51a9b5dFD7`](https://chainscan-galileo.0g.ai/address/0xCB2753447763B30df1697AE675044d51a9b5dFD7) |
-| AgentRegistry | [`0x09b8a49D5B645769e97c89252d4D8311703E9AC3`](https://chainscan-galileo.0g.ai/address/0x09b8a49D5B645769e97c89252d4D8311703E9AC3) |
-| ResolutionModule | [`0xE35e94aA42B9AAF1dd421bec046Ec2f12d174cF6`](https://chainscan-galileo.0g.ai/address/0xE35e94aA42B9AAF1dd421bec046Ec2f12d174cF6) |
-
-The authoritative copy is `deployments/16602.json`. Trust the chain over that
-file: it is written from the deploy *simulation*, and a run cut off mid-broadcast
-once left it listing three addresses with no bytecode at all.
-
----
-
 ## Getting started
 
-**Prerequisites** — Node 22+, [Foundry](https://getfoundry.sh), Python 3 (the
-market-spec generator), and a funded Galileo wallet ([faucet](https://faucet.0g.ai/)).
+**Prerequisites** — Node 22+, [Foundry](https://getfoundry.sh), and Python 3 (the
+market-spec generator). Reading the chain needs no wallet; sending anything needs 0G, and
+on mainnet there is no faucet — `make demo` brings up a local anvil with everything
+deployed if you want to press the buttons without spending.
 
 ```bash
 git clone <this repo> && cd brier
@@ -228,7 +190,7 @@ npm install
 
 ```bash
 cd frontend
-cp .env.example .env.local     # already points at Galileo
+cp .env.example .env.local     # set CHAIN_ID, RPC and factory for 16661
 npm run dev                    # http://localhost:3003
 ```
 
@@ -353,13 +315,12 @@ Stated here rather than discovered later.
   Worth knowing before completing it: `setParam` then needs a 48-hour proposal,
   so anything that tunes parameters — `scripts/committee-run.mjs` shortens three
   windows — has to be scheduled ahead or run against the real ones.
-- **The single-resolver shortcut exists, and mainnet refuses it.** `settle()`
-  takes one allowlisted key: no stake at risk, no blind vote, no dispute window.
-  Most Galileo settlements used it, and the chain records `viaCommittee == false`
-  where they did. On 16661 the allowlist is EMPTY by design — `Deploy.s.sol`
-  refuses to fill it there — so every mainnet settlement must go through the
-  committee. That path has run end to end on Galileo; on mainnet it has not run
-  yet, because no market has closed.
+- **No market has settled here yet.** Both are still trading. `settle()` — the
+  single-resolver shortcut, one allowlisted key with no stake at risk and no
+  dispute window — cannot be used: the allowlist is EMPTY on 16661 by design, and
+  `Deploy.s.sol` refuses to fill it there. Every settlement must go through the
+  committee, and that path has been run end to end on a test chain but not yet
+  here.
 - **Reputation counters are mostly unwritten.** `AgentRegistry` declares six and
   writes two — `resolutionsAgreed` and `resolutionsOverturned`. Markets created,
   markets voided, realised P&L and trades executed read zero for every agent.
