@@ -18,10 +18,13 @@ export default function RunningPage() {
         what it printed.
       </P>
 
-      <Note kind="warn" title="This spends real testnet collateral">
-        Nothing here is a dry run. The transcripts show an agent buying into a live Galileo market
-        and moving its probability, because a runbook whose last step is simulated is a runbook whose
-        last step is untested.
+      <Note kind="warn" title="This spends real money">
+        Nothing here is a dry run. The transcripts show an agent buying into a live market and
+        moving its probability, because a runbook whose last step is simulated is a runbook whose
+        last step is untested. They are a Galileo run, so every balance in them is the old
+        testnet&rsquo;s mUSDC; on mainnet the collateral is W0G and the money is real. Native 0G is
+        not an ERC-20, so an agent holding it calls <C>wrapNative</C> before it has a bankroll at
+        all.
       </Note>
 
       <H3>The configuration</H3>
@@ -34,10 +37,10 @@ export default function RunningPage() {
 chmod 600 .env`}</Run>
 
       <Cmd>{`AGENT_KEY=0x…                                             # the only secret here
-CHAIN_ID=16602
-RPC_URL=https://evmrpc-testnet.0g.ai
+CHAIN_ID=16661
+RPC_URL=https://evmrpc.0g.ai
 DEPLOYMENTS_DIR=../brier/deployments
-ZG_INDEXER=https://indexer-storage-testnet-turbo.0g.ai
+ZG_INDEXER=https://indexer-storage-turbo.0g.ai
 AGENT_NAME=Nostradamus
 
 BANKROLL_FRACTION_CAP=0.25   # never stake more than a quarter, whatever Kelly says
@@ -57,8 +60,8 @@ REVERSAL_EDGE_BPS=600        # 6 points AGAINST the position closes it`}</Cmd>
         methods={[
           {sig: "AGENT_KEY", does: <><strong className="text-neg">Private key.</strong> Signs every trade. Give it a wallet of its own — a program trading on a loop is the wrong place for a key holding anything else. Shape-checked at startup, so a malformed one names itself rather than failing eight transactions in.</>},
           {sig: "ANTHROPIC_API_KEY", does: <><strong className="text-neg">Secret.</strong> Only if your agent forms its beliefs with Claude. Nothing in the SDK requires it.</>},
-          {sig: "CHAIN_ID", does: <>16602 for Galileo, 31337 for a local anvil.</>},
-          {sig: "RPC_URL", does: <>Defaults to the public Galileo endpoint below.</>},
+          {sig: "CHAIN_ID", does: <>16661 for 0G mainnet, 31337 for a local anvil.</>},
+          {sig: "RPC_URL", does: <>Defaults to the public 0G mainnet endpoint below.</>},
           {sig: "DEPLOYMENTS_DIR", does: <>Path to the protocol repo&rsquo;s <C>deployments/</C>. Reading the manifest rather than pasting addresses is what keeps an agent pointed at the same contracts these pages are reading.</>},
           {sig: "ZG_INDEXER", does: <>0G Storage gateway, for fetching a market&rsquo;s question. Without it an agent cannot verify what it is trading on.</>},
           {sig: "AGENT_NAME", does: <>The handle to register. Permissionless, and refused only if taken.</>},
@@ -189,9 +192,9 @@ const BANKROLL_CAP_BPS = BigInt(Math.round(Number(env("BANKROLL_FRACTION_CAP", "
 const MAX_IMPACT_BPS = BigInt(env("MAX_IMPACT_BPS", "200"));
 const SLIPPAGE_BPS = BigInt(env("SLIPPAGE_BPS", "100"));
 
-const manifest = loadDeployment(Number(env("CHAIN_ID", "16602")), env("DEPLOYMENTS_DIR"));
+const manifest = loadDeployment(Number(env("CHAIN_ID", "16661")), env("DEPLOYMENTS_DIR"));
 const brier = new BrierClient({
-  network: "galileo",
+  network: "mainnet",
   privateKey: env("AGENT_KEY") as \`0x\${string}\`,
   factory: manifest.contracts.MarketFactory as \`0x\${string}\`,
   outcomeShares: manifest.contracts.OutcomeShares as \`0x\${string}\`,
@@ -438,7 +441,7 @@ const back = await brier.liquidate(market.address);   // failed or voided: pays 
             sig: "each resolver who agreed",
             does: (
               <>
-                30% of the fee plus the settlement deposit &mdash; at least 20 whole units of the
+                30% of the fee plus the settlement deposit &mdash; at least one whole unit of the
                 market&rsquo;s collateral &mdash; split
                 evenly among the committee members whose reveal matched the outcome, and claimed
                 with <C>claim(agentId, to)</C> on the ResolutionModule. Pull-based, like redemption.

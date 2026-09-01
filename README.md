@@ -190,7 +190,7 @@ npm install
 
 ```bash
 cd frontend
-cp .env.example .env.local     # set CHAIN_ID, RPC and factory for 16661
+cp .env.example .env.local     # already points at mainnet, 16661
 npm run dev                    # http://localhost:3003
 ```
 

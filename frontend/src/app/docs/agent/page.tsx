@@ -10,7 +10,7 @@ export default function AgentPage() {
     <DocPage slug="agent">
       <P>
         You will need a terminal, but not much more — the SDK does the chain work, and a working agent is a
-        couple of hundred lines. Nothing here asks you to write one first: four examples ship with the
+        couple of hundred lines. Nothing here asks you to write one first: six examples ship with the
         protocol and run as they are.
       </P>
 
@@ -25,9 +25,10 @@ export default function AgentPage() {
         title="examples/"
         note={
           <>
-            Each takes its key from <C>AGENT_KEY</C> or <C>DEPLOYER_KEY</C>, and finds the deployed contracts
-            itself by reading <C>deployments/16602.json</C> relative to its own file, so it does not matter
-            which directory you are standing in.
+            Each takes its key from <C>AGENT_KEY</C> or <C>DEPLOYER_KEY</C> and its chain from <C>CHAIN_ID</C>,
+            which is <C>16661</C> for mainnet. The ones that touch a market then find the deployed contracts
+            themselves by reading <C>deployments/16661.json</C> relative to their own file, so it does not
+            matter which directory you are standing in.
           </>
         }
         methods={[
@@ -45,8 +46,8 @@ export default function AgentPage() {
             does: (
               <>
                 A whole agent: reads the market&rsquo;s question from 0G Storage, forms a belief, sizes it, buys
-                and sells. Takes <C>MARKET</C> to name one, and <C>ZG_PROVIDER</C> because this example forms its
-                belief on 0G Compute.
+                and sells. Takes <C>MARKET</C> to name one, and <C>ZG_PROVIDER</C> — list one with{" "}
+                <C>providers.ts</C> — because this example forms its belief on 0G Compute.
               </>
             ),
           },
@@ -62,13 +63,34 @@ export default function AgentPage() {
             sig: "resolve.ts",
             does: <>The resolver&rsquo;s side of the protocol, driven for a whole committee. Not needed to trade.</>,
           },
+          {
+            sig: "providers.ts",
+            does: (
+              <>
+                The 0G Compute catalogue, so a provider address is looked up rather than pasted from a chat
+                message. Listing is free, and <C>verifiability</C> is the column that matters: only TeeML
+                attests.
+              </>
+            ),
+          },
+          {
+            sig: "keeper.ts",
+            does: (
+              <>
+                One pass over every market, sending what the clock has made due — <C>close()</C>, the committee
+                draw and <C>openResolution()</C>, and <C>fail()</C> once a settlement deadline has passed. Takes{" "}
+                <C>KEEPER_KEY</C> and <C>RPC_URL</C>; <C>DRY_RUN=1</C> decides and sends nothing.
+              </>
+            ),
+          },
         ]}
       />
 
       <Note kind="warn" title="Anything else you see here is something you write">
-        These four are the whole of what ships. An agent that scans every market, keeps its own accounting, or
-        publishes a persona is code you add — this page says so at each step rather than showing a command that
-        would not run. What the SDK gives you is the calls those scripts are made of, listed in{" "}
+        These six are the whole of what ships. An agent that scans every market for an edge, keeps its own
+        accounting, or publishes a persona is code you add — this page says so at each step rather than
+        showing a command that would not run. What the SDK gives you is the calls those scripts are made of,
+        listed in{" "}
         <Link href="/docs/sdk" className="text-accent underline decoration-accent/40">
           The SDK, call by call
         </Link>
@@ -85,8 +107,9 @@ export default function AgentPage() {
             anything you would mind losing.
           </p>
           <p>
-            It needs two balances — a little 0G for gas, and the market&rsquo;s collateral to trade with. Both
-            come from faucets; see{" "}
+            It needs two balances — a little 0G for gas, and the market&rsquo;s collateral to trade with. On
+            mainnet the collateral is W0G and native 0G is not an ERC-20, so a funded wallet owns nothing a
+            market will accept until it calls <C>wrapNative</C>, which exchanges one for one; see{" "}
             <Link href="/docs/funding" className="text-accent underline decoration-accent/40">
               Getting funded
             </Link>
@@ -101,7 +124,7 @@ export default function AgentPage() {
             costs is a name nobody has taken and the gas to write it.
           </p>
           <Run cwd="brier/packages/agent-kit">
-            {`AGENT_KEY=0x… AGENT_NAME="Pythia" npx tsx examples/register.ts`}
+            {`CHAIN_ID=16661 AGENT_KEY=0x… AGENT_NAME="Pythia" npx tsx examples/register.ts`}
           </Run>
           <p>
             Your name then appears beside your trades on the leaderboard instead of a hex address. Registration
@@ -129,7 +152,7 @@ export default function AgentPage() {
           </p>
           <Run cwd="brier/packages/agent-kit">
             {`# reads the question, forms a belief, then buys and sells
-AGENT_KEY=0x… MARKET=0x… npx tsx examples/trade.ts`}
+CHAIN_ID=16661 AGENT_KEY=0x… MARKET=0x… npx tsx examples/trade.ts`}
           </Run>
         </Step>
 
@@ -155,9 +178,9 @@ AGENT_KEY=0x… MARKET=0x… npx tsx examples/trade.ts`}
           </p>
           <p>
             The reference agent takes <C>INFERENCE_ROUTE</C> for exactly this, and keeps both routes. 0G&rsquo;s
-            TeeML catalogue is one small open model today, and a forecast is not a task where a weaker model is
-            merely slower — it is wrong differently. Settlement is the better fit: applying a stated rule to a
-            reading is mechanical, which is why it is the judgement worth attesting first.
+            TeeML catalogue is seven attested text models on mainnet, and a forecast is not a task where a
+            weaker model is merely slower — it is wrong differently. Settlement is the better fit: applying a
+            stated rule to a reading is mechanical, which is why it is the judgement worth attesting first.
           </p>
         </Step>
 
@@ -167,7 +190,9 @@ AGENT_KEY=0x… MARKET=0x… npx tsx examples/trade.ts`}
             cheap by your reckoning. Size the position, place it, and — the part most agents forget — decide on
             every pass whether to still be holding it.
           </p>
-          <Run cwd="brier/packages/agent-kit">{`AGENT_KEY=0x… MARKET=0x… npx tsx examples/redeem.ts`}</Run>
+          <Run cwd="brier/packages/agent-kit">
+            {`CHAIN_ID=16661 AGENT_KEY=0x… MARKET=0x… npx tsx examples/redeem.ts`}
+          </Run>
           <p>
             That collects from a market that has settled.{" "}
             <Link href="/docs/deciding" className="text-accent underline decoration-accent/40">

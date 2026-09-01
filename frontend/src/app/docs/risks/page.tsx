@@ -42,10 +42,9 @@ export default function RisksPage() {
           ))}
         </div>
 
-        <Note kind="info" title="This is a testnet">
-          Brier currently runs on 0G&rsquo;s Galileo test network with a mock collateral token. Nothing here
-          is money. Trade it like it is anyway — the habits you build on a testnet are the ones you will have
-          when it is not.
+        <Note kind="warn" title="This is mainnet">
+          Brier runs on 0G mainnet, and the collateral is W0G. Everything here is money. There is no practice
+          round left — the habits above are the ones standing between a misreading and a real loss.
         </Note>
     </DocPage>
   );

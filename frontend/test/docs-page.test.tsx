@@ -335,7 +335,7 @@ describe("what each page has to say", () => {
     expect(text).toMatch(/ESM only/i);
     // Exact pins, not carets: agent-kit is differential against protocol, and a
     // caret would let a mirror it was never checked against be resolved beside it.
-    expect(text).toContain("^0.1.0");
+    expect(text).toContain("^0.2.0");
     expect(text).toContain("@0g-brier/protocol/node");
     expect(text).toMatch(/cannot enter a browser bundle/i);
     // The manifest deliberately does not ship, so the page has to say where it is.
@@ -391,10 +391,14 @@ describe("what each page has to say", () => {
   it("funding gives the concrete numbers and the two-part gas price", () => {
     const text = textOf("funding");
     for (const fact of [
-      "https://faucet.0g.ai",
-      "0.1 0G per wallet per day",
-      "10,000 mUSDC",
-      "claim()",
+      // Mainnet has no faucet, so the page's job changed: it used to explain how to
+      // claim, and now explains how to WRAP. Native 0G has no transferFrom, so an
+      // agent holding only it owns nothing a market will take.
+      "no faucet",
+      "deposit()",
+      "wrapNative",
+      // The gas pair survives the move: 0G still quotes a 7 wei base fee under a
+      // 4 gwei minimum tip, which is what breaks tools that send only one of them.
       "7 wei",
       "4 gwei",
       // Both failure messages, because they look unrelated and have one cause.

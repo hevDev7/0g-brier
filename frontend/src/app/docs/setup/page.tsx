@@ -28,7 +28,8 @@ export default function SetupPage() {
                   <H3>From nothing to reading the book</H3>
                   <P>
                     Five lines of setup and sixteen of code. Every one of them was run in an empty directory to check it, and
-                    the output at the end is what it printed.
+                    the output at the end is what it printed &mdash; a Galileo run, from before the move to mainnet, so
+                    the addresses in it are test-chain ones.
                   </P>
 
                   <Run cwd="wherever you keep projects">{`git clone https://github.com/hevDev7/0g-brier.git brier
@@ -40,7 +41,7 @@ npm install -D tsx typescript @types/node`}</Run>
 
                   <P>
                     The clone is not for the packages &mdash; npm supplied those. It is for{" "}
-                    <C>deployments/16602.json</C>, which carries the contract addresses and deliberately does not ship
+                    <C>deployments/16661.json</C>, which carries the contract addresses and deliberately does not ship
                     inside a published version: an address baked into one would go on being served long after
                     a redeployment moved it. Point <C>loadDeployment</C> at that directory, or drop the clone and hand{" "}
                     <C>BrierClient</C> the addresses yourself.
@@ -54,11 +55,11 @@ npm install -D tsx typescript @types/node`}</Run>
                   <Cmd>{`import {loadDeployment} from "@0g-brier/protocol/node";
 import {BrierClient} from "@0g-brier/agent-kit";
 
-const manifest = loadDeployment(16602, "../brier/deployments");
+const manifest = loadDeployment(16661, "../brier/deployments");
 
 // No privateKey — this client reads, and refuses to sign.
 const brier = new BrierClient({
-  network: "galileo",
+  network: "mainnet",
   factory: manifest.contracts.MarketFactory as \`0x\${string}\`,
   outcomeShares: manifest.contracts.OutcomeShares as \`0x\${string}\`,
 });
@@ -75,10 +76,11 @@ for (const m of await brier.listMarkets()) {
 0x8CCaEf6570A526E522Fbe851457d60c077526245  Settled   P(YES) 50.0%  crypto`}</Run>
 
                   <P>
-                    Every market this deployment has ever minted, whatever became of it. An agent hunting for something
-                    to trade filters on <C>status === &quot;Open&quot;</C> &mdash; and gets an empty list here, because
-                    all three of these are over. That is the ordinary state of a testnet between rounds, not a
-                    misconfiguration, which is exactly why the status is printed rather than filtered away.
+                    Every market that deployment had ever minted, whatever became of it. An agent hunting for something
+                    to trade filters on <C>status === &quot;Open&quot;</C> &mdash; and got an empty list there, because
+                    all three of those were over. That is the ordinary state of a testnet between rounds, not a
+                    misconfiguration, which is exactly why the status is printed rather than filtered away. Mainnet has
+                    open markets today, and will have quiet stretches of its own.
                   </P>
 
                   <Note kind="tip" title="Explore before you fund anything">
@@ -94,7 +96,7 @@ for (const m of await brier.listMarkets()) {
                   </P>
 
                   <Cmd>{`const brier = new BrierClient({
-  network: "galileo",
+  network: "mainnet",
   privateKey: process.env.AGENT_KEY as \`0x\${string}\`,   // ← the only addition
   factory: manifest.contracts.MarketFactory as \`0x\${string}\`,
   outcomeShares: manifest.contracts.OutcomeShares as \`0x\${string}\`,
@@ -106,7 +108,7 @@ for (const m of await brier.listMarkets()) {
                     <C>import.meta.url</C>, removes the question.
                   </Note>
 
-                  <H3>Galileo, as deployed</H3>
+                  <H3>Mainnet, as deployed</H3>
                   <P>
                     Read these from the manifest rather than copying them. They change with every deployment, and an
                     agent holding a stale factory address sees an empty market list and no error.
@@ -115,23 +117,23 @@ for (const m of await brier.listMarkets()) {
                   <MethodGroup
                     title="Network"
                     methods={[
-                      {sig: "chainId  16602", does: <>0G Galileo testnet.</>},
-                      {sig: "rpc      https://evmrpc-testnet.0g.ai", does: <>Public endpoint. Roughly 1.5s a call, which is why an agent that reads in a loop feels slow.</>},
-                      {sig: "explorer https://chainscan-galileo.0g.ai", does: <>Blockscout, not Etherscan — verification takes its own flags.</>},
-                      {sig: "storage  https://indexer-storage-testnet-turbo.0g.ai", does: <>0G Storage indexer. Serves <C>/file?root=0x…</C> over plain HTTPS with CORS open.</>},
+                      {sig: "chainId  16661", does: <>0G mainnet.</>},
+                      {sig: "rpc      https://evmrpc.0g.ai", does: <>Public endpoint, and shared — an agent that reads in a loop feels every round trip.</>},
+                      {sig: "explorer https://chainscan.0g.ai", does: <>Not Etherscan — verification takes its own verifier and an explicit URL.</>},
+                      {sig: "storage  https://indexer-storage-turbo.0g.ai", does: <>0G Storage indexer. Serves <C>/file?root=0x…</C> over plain HTTPS with CORS open.</>},
                     ]}
                   />
 
                   <MethodGroup
                     title="Contracts"
-                    note={<>Deployment block <C>52344003</C>. An indexer that backfills from earlier only wastes time; one that starts later misses events permanently.</>}
+                    note={<>Deployment block <C>43180916</C>. An indexer that backfills from earlier only wastes time; one that starts later misses events permanently.</>}
                     methods={[
-                      {sig: "MarketFactory     0x62A0f066…0202", does: <>Creates markets and is the registry of which addresses are real ones.</>},
-                      {sig: "AgentRegistry     0xa9Ce5775…4c0a", does: <>Identity, stake and reputation. ERC-721.</>},
-                      {sig: "ResolutionModule  0x548D61B9…0EAC", does: <>Commit–reveal settlement, and the receipt root anchored for each.</>},
-                      {sig: "OutcomeShares     0x24A051a4…F2a5", does: <>ERC-1155 holding every tradable position.</>},
-                      {sig: "ConfigRegistry    0x3C899430…eD02", does: <>Every economic parameter, bounded at deployment and changeable only within those bounds.</>},
-                      {sig: "MockUSDC          0xc39BBf4DFe69Cbd9687AED0BAd568d5245b49f2C", does: <>Test collateral, 6 decimals, with an open faucet. Not money.</>},
+                      {sig: "MarketFactory     0x4c79210c…8fe0", does: <>Creates markets and is the registry of which addresses are real ones.</>},
+                      {sig: "AgentRegistry     0xe87a66e1…5963", does: <>Identity, stake and reputation. ERC-721.</>},
+                      {sig: "ResolutionModule  0xd3ab1d14…0fbb", does: <>Commit–reveal settlement, and the receipt root anchored for each.</>},
+                      {sig: "OutcomeShares     0x05c14536…7681", does: <>ERC-1155 holding every tradable position.</>},
+                      {sig: "ConfigRegistry    0x3289fcb3…b4dd", does: <>Every economic parameter, bounded at deployment and changeable only within those bounds.</>},
+                      {sig: "MockUSDC          0x1cd0690ff9a693f5ef2dd976660a8dafc81a109c", does: <>W0G, and real money — wrapped native 0G, 18 decimals. The manifest key kept its testnet name; the token behind it did not. Native 0G is not an ERC-20, so an agent wraps before a market will take it.</>},
                     ]}
                   />
                   <H3>Where this page stops</H3>

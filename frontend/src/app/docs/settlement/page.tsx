@@ -119,7 +119,8 @@ export default function SettlementPage() {
       <Note kind="warn" title="There is a shortcut, and you can tell when it was used">
         A single allowlisted key can settle a market directly, without a committee. It exists for local demos
         and testnet lifecycles where staking five resolvers is not the thing being tested — and every market on
-        Galileo today was settled this way.
+        Galileo, the old test chain, was settled this way. On mainnet nothing has settled yet, by committee or
+        otherwise.
         <p className="mt-2">
           Two things keep it honest. The allowlist is empty unless an owner deliberately fills it, and a market
           settled this way is recorded with <C>viaCommittee == false</C>. So a reader can always tell an

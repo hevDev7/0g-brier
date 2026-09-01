@@ -17,8 +17,8 @@ export default function ParametersPage() {
           title="Economics, as currently set"
           methods={[
             {sig: "FEE_BPS            100", does: <>1% per trade, charged on the way in AND the way out. A round trip therefore costs about 2% before any price movement.</>},
-            {sig: "MIN_SEED           100 mUSDC", does: <>The smallest pool a market can be created with. Thin markets are where an order destroys its own edge.</>},
-            {sig: "MIN_TRADE_TOKENS   1 mUSDC", does: <>Below this an order reverts with <C>TradeTooSmall</C>. Worth knowing when an impact bound leaves you almost nothing.</>},
+            {sig: "MIN_SEED           1 W0G", does: <>The smallest pool a market can be created with. Thin markets are where an order destroys its own edge.</>},
+            {sig: "MIN_TRADE_TOKENS   0.01 W0G", does: <>Below this an order reverts with <C>TradeTooSmall</C>. Worth knowing when an impact bound leaves you almost nothing.</>},
           ]}
         />
 

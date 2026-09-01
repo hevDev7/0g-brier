@@ -8,9 +8,11 @@ export default function PackagesPage() {
   return (
     <DocPage slug="packages">
       <P>
-        Three packages. <C>agent-kit</C> is at <C>0.1.1</C>; <C>protocol</C> and{" "}
-        <C>zg-storage</C> are at <C>0.1.0</C> and unchanged since, because nothing in either of them
-        moved. An agent installs the first and receives the other two. They are worth telling apart: only one of the three can sign anything, and
+        Three packages. <C>agent-kit</C> and <C>protocol</C> are at <C>0.2.0</C>, both moved for
+        mainnet: the client can wrap native 0G into the collateral a market takes, and the mirror
+        can name a network from a chain id. <C>zg-storage</C> is at <C>0.1.1</C>, which is{" "}
+        <C>0.1.0</C>&rsquo;s code and a corrected README. An agent installs the first and receives
+        the other two. They are worth telling apart: only one of the three can sign anything, and
         only one is safe to import into a browser.
       </P>
 
@@ -68,8 +70,8 @@ export default function PackagesPage() {
       </P>
 
       <Note kind="info" title="The sibling versions are pinned exactly, with no caret">
-        <C>agent-kit@0.1.1</C> requires <C>@0g-brier/protocol@0.1.0</C> and{" "}
-        <C>@0g-brier/zg-storage@0.1.0</C> &mdash; exact, not <C>^0.1.0</C>. The DPM mirror inside{" "}
+        <C>agent-kit@0.2.0</C> requires <C>@0g-brier/protocol@0.2.0</C> and{" "}
+        <C>@0g-brier/zg-storage@0.1.1</C> &mdash; exact, not <C>^0.2.0</C>. The DPM mirror inside{" "}
         <C>protocol</C> is checked against the Solidity library&rsquo;s own test vectors, and a caret
         would let a later mirror be resolved beside a client that was never checked against it.{" "}
         <C>ethers</C> is pinned for the same reason. <C>viem</C> is not: nothing here is differential
@@ -153,10 +155,11 @@ const rate = quote.payoutPerShareWad(q, 1);`}</Cmd>
         title="units — the two decimals"
         note={
           <>
-            Shares carry 18 decimals; collateral carries the token&rsquo;s own, which is 6 for the
-            mUSDC used here. Both are <C>bigint</C> and the types do not distinguish them, so a
-            quantity converted with the wrong one is out by a factor of a trillion and still looks
-            like a number.
+            Shares carry 18 decimals; collateral carries the token&rsquo;s own, which is 18 for the
+            W0G used here &mdash; so the conversion is the identity today, and a quantity converted
+            with the wrong one comes back unchanged rather than out by a factor of a trillion. Both
+            are <C>bigint</C> and the types do not distinguish them, so read the decimals off the
+            token rather than assuming the scale is 1.
           </>
         }
         methods={[
@@ -180,7 +183,7 @@ const rate = quote.payoutPerShareWad(q, 1);`}</Cmd>
         methods={[
           {sig: "CATEGORIES · isCategory(value)", does: <>The fixed category list, and the guard that keeps an unknown string out of it.</>},
           {sig: "categoryBit(category) · categoryMask(categories)", does: <>Categories as a bitmask, which is how a resolver&rsquo;s competence is recorded on chain.</>},
-          {sig: "networkFor(mode, env)", does: <>Chain id, RPC and explorer for <C>anvil</C>, <C>galileo</C> or <C>mainnet</C>. Reads overrides from the environment you hand it.</>},
+          {sig: "networkFor(mode, env)", does: <>Chain id, RPC, explorer and 0G Storage indexer for <C>anvil</C>, <C>galileo</C> or <C>mainnet</C>. Reads overrides from the environment you hand it.</>},
           {sig: "loadModes(env)", does: <>Validates a set of the three axes an agent is configured along &mdash; <C>CHAIN_MODES</C>, <C>STORAGE_MODES</C> and <C>INFERENCE_MODES</C>, each exported beside it.</>},
           {sig: "parseDeployment(raw, expectedChainId)", does: <>A manifest, checked rather than trusted. Refuses one whose chain id is not the one you asked for.</>},
           {sig: "requireContracts(m, names)", does: <>Asserts the addresses you are about to use are actually in the manifest, so a missing one names itself here instead of as an empty result later.</>},
@@ -358,7 +361,7 @@ import {loadDeployment} from "@0g-brier/protocol/node";  // Node only`}</Cmd>
               <>
                 <A href="https://github.com/hevDev7/0g-brier">github.com/hevDev7/0g-brier</A>{" "}
                 &mdash; the Solidity these packages mirror, the examples the following pages run, and{" "}
-                <C>deployments/16602.json</C>. MIT.
+                <C>deployments/16661.json</C>. MIT.
               </>
             ),
           },

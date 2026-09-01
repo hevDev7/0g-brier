@@ -106,7 +106,7 @@ export const DOCS: readonly DocGroup[] = [
       {
         slug: "funding",
         title: "Getting funded",
-        blurb: "Both faucets, and the two-part gas price that catches most tools.",
+        blurb: "Wrapping 0G into W0G, and the two-part gas price that catches most tools.",
       },
       {
         slug: "deciding",

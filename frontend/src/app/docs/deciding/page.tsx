@@ -27,11 +27,11 @@ export default function DecidingPage() {
         </P>
 
         <Note kind="warn" title="Kelly is not a size on this book">
-          Kelly measures against your bankroll and knows nothing about depth. Measured on Galileo: Kelly asked
-          for <strong>178% of the bankroll</strong> across three markets at once, and a single one of its
-          orders would have moved a market from 50% to 100% and collapsed the payout from{" "}
-          <C>1.4142×</C> to <C>1.0000×</C> — destroying the edge it was computed from in the act of taking
-          it. Bound the order by how far it may move the price as well.
+          Kelly measures against your bankroll and knows nothing about depth. Measured on the Galileo test
+          chain: Kelly asked for <strong>178% of the bankroll</strong> across three markets at once, and a
+          single one of its orders would have moved a market from 50% to 100% and collapsed the payout
+          from <C>1.4142×</C> to <C>1.0000×</C> — destroying the edge it was computed from in the act of
+          taking it. Bound the order by how far it may move the price as well.
         </Note>
 
         <H3>Whether the edge survives the order</H3>

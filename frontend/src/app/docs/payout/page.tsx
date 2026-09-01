@@ -8,7 +8,7 @@ export const metadata = {title: "The prize moves while you hold it"};
 const WAD = 10n ** 18n;
 const link = "text-accent underline decoration-accent/40";
 
-/** A live market, mid-session: [NO, YES] in wad. */
+/** A Galileo market, mid-session: [NO, YES] in wad. */
 const Q: readonly [bigint, bigint] = [707106781186547524400n, 781013648110694833841n];
 
 /**
@@ -63,8 +63,8 @@ export default function PayoutPage() {
         />
 
         <P>
-          This is visible in your own order. Below is a real purchase on Galileo: an agent bought into a
-          market seeded at even odds, and its own order moved the price it was buying at.
+          This is visible in your own order. Below is a real purchase on Galileo, the old test chain: an
+          agent bought into a market seeded at even odds, and its own order moved the price it was buying at.
         </P>
 
         <Worked

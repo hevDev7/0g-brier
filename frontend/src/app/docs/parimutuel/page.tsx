@@ -48,7 +48,7 @@ export default function ParimutuelPage() {
       </P>
 
       <Worked
-        title="A live market, both outcomes"
+        title="A real market, both outcomes"
         rows={[
           ["q", "[707.106781 NO, 781.013648 YES]"],
           ["C(q) = poolWad", "1053.556984 mUSDC"],
@@ -57,7 +57,8 @@ export default function ParimutuelPage() {
         ]}
         note={
           <>
-            Measured on an open market, not constructed — and quoted to six decimals so that recomputing{" "}
+            Measured on an open market, not constructed — a Galileo run, in the old testnet&rsquo;s mUSDC —
+            and quoted to six decimals so that recomputing{" "}
             <C>C(q)</C> from these figures gives this <C>C(q)</C>. At four it does not: the rounding moves the
             total by twenty-three micro-units, which is small enough to look like agreement and is not.
             <span className="mt-2 block">

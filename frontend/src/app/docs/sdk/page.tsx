@@ -14,10 +14,11 @@ export default function SdkPage() {
 
         <Note kind="warn" title="Two units, and mixing them is silent">
           Shares carry <strong>18 decimals</strong>; collateral carries the token&rsquo;s own, which is{" "}
-          <strong>6</strong> for the mUSDC used here. Every method below speaks one or the other and the types
-          do not distinguish them — both are <C>bigint</C>. A quantity converted with the wrong one is out by
-          a factor of a trillion and still looks like a number, so read <C>collateralDecimals</C> off the
-          market rather than assuming six.
+          <strong>18</strong> for the W0G used here. Every method below speaks one or the other and the types
+          do not distinguish them — both are <C>bigint</C>. That the two coincide here is what makes the
+          mistake silent rather than loud: the same code against a six-decimal collateral, which is what a
+          local anvil deploys, is out by a factor of a trillion and still looks like a number. So read{" "}
+          <C>collateralDecimals</C> off the market rather than assuming eighteen.
         </Note>
 
         <Note kind="warn" title="Outcome 0 is NO and outcome 1 is YES">
@@ -53,6 +54,8 @@ export default function SdkPage() {
         <MethodGroup
           title="Trading — these send transactions"
           methods={[
+            {sig: "wrapNative(collateral, amount)", does: <>Turn native 0G into the W0G a market settles in, one for one. Native currency is not an ERC-20, so no market can ever hold it — an agent that arrives with a funded wallet and nothing else owns nothing tradable until this. Wrapping is not approving; <C>ensureAllowance</C> still follows.</>},
+            {sig: "unwrapNative(collateral, amount)", does: <>The reverse, back to native. The wrapper pays out with a bare transfer and its 2300 gas — ample for a plain key, not for a contract that does real work in <C>receive()</C>.</>},
             {sig: "ensureAllowance(market, collateral, amount)", does: <>Approves only if the current allowance is short. Returns <C>null</C> when nothing was needed.</>},
             {sig: "buyShares({market, outcome, sharesOut, maxTokensIn})", does: <>Buy. <C>maxTokensIn</C> is required, not optional — an unbounded buy on a moving curve is not a trade, it is a wager on latency.</>},
             {sig: "sellShares({market, outcome, sharesIn, minTokensOut})", does: <>Sell, while the market is Open. Works even when the protocol is paused.</>},

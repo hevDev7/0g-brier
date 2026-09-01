@@ -205,13 +205,18 @@ describe("the documentation does not describe things that are not there", () => 
    * nothing, and a reader gets an empty market list with no error to explain it.
    */
   it("quotes addresses that match the live manifest", () => {
-    const {contracts, deploymentBlock} = JSON.parse(read("deployments/16602.json")) as {
+    // 16661, because the docs describe mainnet. This read is the whole point of the
+    // test: the pages quote whichever chain the manifest names, so pointing it at a
+    // deployment the docs no longer describe would pass while proving nothing.
+    const {contracts, deploymentBlock} = JSON.parse(read("deployments/16661.json")) as {
       contracts: Record<string, string>;
       deploymentBlock: number;
     };
 
     expect(PAGES).toContain(String(deploymentBlock));
-    // The faucet is the one address a reader must paste, so it is quoted whole.
+    // The collateral is the one address a reader must paste, so it is quoted whole.
+    // On mainnet that is W0G — a real token with no faucet, which is why the pages
+    // now tell a reader to wrap rather than to claim.
     expect(PAGES).toContain(contracts.MockUSDC);
 
     // The rest are abbreviated: the page tells readers to take them from the
@@ -252,7 +257,10 @@ describe("the documentation does not describe things that are not there", () => 
     // whole units of whatever a given market settles in. The page's other mUSDC
     // mentions are a transcript of a real Galileo session and are left alone —
     // rewriting them to say W0G would make the record false rather than general.
-    expect(running, "the settlement deposit").toContain("20 whole units of the");
+    // One whole unit, not twenty: MIN_SETTLEMENT_DEPOSIT is 1e18 on 16661 against an
+    // 18-decimal collateral. The unit is still not named — the deposit is a protocol
+    // rule, and a page that says "W0G" here would be wrong on the next deployment.
+    expect(running, "the settlement deposit").toContain("one whole unit");
     expect(running, "the deposit rule must not name a token").not.toMatch(
       /settlement deposit[^.]*mUSDC/,
     );

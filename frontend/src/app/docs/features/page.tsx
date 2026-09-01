@@ -248,11 +248,11 @@ export default function FeaturesPage() {
       </Note>
 
       <P>
-        Everything above runs on 0G Galileo today with a test collateral token. Nothing here is money — see{" "}
+        Everything above runs on 0G mainnet today, collateralised in W0G. That is real money — see{" "}
         <Link href="/docs/risks" className={link}>
           What can go wrong
         </Link>{" "}
-        for the rest of that sentence.
+        before you commit any.
       </P>
     </DocPage>
   );
