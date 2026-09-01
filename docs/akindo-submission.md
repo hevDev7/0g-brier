@@ -50,9 +50,9 @@ to npm, and a full trade cycle run end to end against the chain.
 Keep every `##` heading: the form pre-fills all seven and the last is `## What's next for`,
 not `## What's next`.
 
-**5,765 characters as written.** The margin is deliberate — no field on this form carries a
+**5,773 characters as written.** The margin is deliberate — no field on this form carries a
 `maxLength` attribute, so length is checked on submit, and if the editor stores line breaks
-as CRLF the count rises by one per line (100 lines here, so 5,865 worst case). That is also
+as CRLF the count rises by one per line (103 lines here, so 5,876 worst case). That is also
 why the tagline helper text says "100 words" while the real limit is 90 characters.
 
 ```markdown
@@ -61,27 +61,26 @@ why the tagline helper text says "100 words" while the real limit is 90 characte
 Brier is a binary prediction market where **only agents trade**. The website is an
 observation deck: it renders every market, position and settlement receipt, and holds no
 private key and no method that writes to the chain. Not a policy but the shape of the code —
-a test fails if anybody adds a write path to the human pages.
+a test fails if anyone adds a write path to the human pages.
 
-Agents work through three published npm packages: `npm install @0g-brier/agent-kit
-@0g-brier/protocol`. An agent reads a market's question from 0G Storage, forms a
-probability, checks it against the market's own, sizes the order under two independent caps
-and sends it. A hundred-line agent doing exactly that is printed in the docs, with the
-transcripts of it running.
+Agents work through three published npm packages: `npm install @0g-brier/agent-kit`. An
+agent reads a market's question from 0G Storage, forms a probability, checks it against the
+market's own, sizes the order under two independent caps and sends it. A hundred-line agent
+doing exactly that is printed in the docs, with transcripts of it running.
 
 ## The problem it solves
 
-Prediction markets are built and priced for humans, and the participants best suited to
-them are programs. Three things follow.
+Prediction markets are built and priced for humans; the participants best suited to them
+are programs. Three things follow.
 
-**Agents cannot create markets.** On the closest existing agent venue they may only trade;
-markets are made by people through a web UI. Here creation is a first-class agent action: an
-agent uploads the question to 0G Storage and the factory stores its Merkle root.
+**Agents cannot create markets.** On the closest agent venue they may only trade; markets
+are made by people through a web UI. Here creation is a first-class agent action: the agent
+uploads the question to 0G Storage and the factory stores its Merkle root.
 
 **Settlement is a black box.** "Resolved by AI" without evidence is a request to be trusted.
 Brier settles by commit–reveal from a sampled committee, anchors a receipt root on chain, and
 publishes the receipt — model, prompt, criteria, sources — to 0G Storage, where anyone can
-recompute that root. On 0G Compute the receipt also carries the TeeML provider's attestation.
+recompute that root. On 0G Compute it also carries the TeeML provider's attestation.
 
 **Price is not probability, and confusing them costs about 30%.** On an LMSR venue the
 marginal price *is* the implied probability. Brier uses Pennock's DPM, `C(q) = √(Σqᵢ²)`,
@@ -93,70 +92,73 @@ bleeds. So the SDK has no field called `price`, and a test asserts the two are s
 ## Challenges I ran into
 
 **Implementing ERC-7857 honestly.** Its private-data path needs a TEE oracle that decrypts,
-re-encrypts and attests, and 0G publishes no such oracle on testnet or mainnet. Returning
-`isValid: true` there would have been three lines, and would have looked identical on chain
-to a verification that meant something. It reverts instead, with a named error.
+re-encrypts and attests, and 0G publishes none. Returning `isValid: true` was three lines,
+and on chain would look identical to a verification that meant something. It reverts
+instead, with a named error.
 
 **Computing 0G Storage's Merkle root in Solidity**, so a token's `dataHash` is the file's
 *address* — anyone can fetch those bytes by that number and recompute it. `keccak256` would
 prove something about bytes nobody could find.
 
-**An upgrade that silently shifted storage.** Adding a mapping mid-layout in `AgentRegistry`
+**An upgrade that silently shifted storage.** A mapping added mid-layout in `AgentRegistry`
 moved every slot after it, and `metadataRootOf` began returning the next mapping's contents.
-The upgrade script reads state before and compares after — which is what caught it.
+The upgrade script reads state before and compares after — which caught it.
 
 ## Technologies I used
 
-- **0G Chain** (Galileo, 16602) — every contract, EVM
+- **0G Chain** — **mainnet 16661** and Galileo 16602; every contract, EVM
 - **0G Storage** — questions and receipts, Merkle-addressed and re-verified on read; a
-  mismatch throws rather than resolving
+  mismatch throws
 - **0G Compute** — TeeML inference, attestation carried into the receipt
-- **ERC-7857** — the AgentRegistry token is a 0G Agentic ID, with an on-chain data verifier
-- **ERC-8004** — verified identity link and resolver records published to the shared registries
+- **ERC-7857** — the AgentRegistry token is a 0G Agentic ID, with an on-chain verifier
+- **ERC-8004** — identity link and resolver records, published to the shared registries
 - **Solidity 0.8.28**, Foundry, UUPS proxies, EIP-1167 clones, Ownable2Step + 48h timelock
-- **TypeScript**, viem, Next.js 15, Vitest
+- **TypeScript**, viem, Next.js 16, Vitest
 
 ## How we built it
 
-Eleven contracts, ~3,000 lines. `MarketFactory` mints EIP-1167 clones — a market holds user
-funds and is therefore never upgradeable. `ConfigRegistry` bounds every economic parameter
-at deployment, so governance can move a number but not outside a range fixed in advance.
-`ResolutionModule` samples a committee by category competence and runs commit–reveal with
-slashing.
+Eight contracts of its own, ~3,500 lines. `MarketFactory` mints EIP-1167 clones — a market
+holds user funds and is therefore never upgradeable. `ConfigRegistry` bounds every economic
+parameter at deployment, so governance can move a number but not outside a fixed range.
+`ResolutionModule` samples a committee by category competence and runs commit–reveal
+with slashing.
 
-Payouts are pull-based: `settle()` transfers nothing and snapshots the rate once; winners
-call `redeem`. Pushing to a list of holders would let one reverting recipient wedge a whole
-market's settlement.
-
-`@0g-brier/protocol` is pure arithmetic with no RPC, keys or `node:` import, so the website
+`@0g-brier/protocol` is pure arithmetic — no RPC, keys or `node:` import — so the website
 imports the very same module: the probability on a market page and the one an agent computes
 come from one implementation, not two that agree by hand.
 
-**910 tests pass**: 331 Solidity (19 invariant), 398 frontend, 181 across the packages. The
+**1,004 tests pass**: 370 Solidity (53 invariant), 414 frontend, 220 across the packages. The
 load-bearing ones are differential — the TypeScript DPM mirror against vectors generated by
 the Solidity library, and the Merkle root against the reference.
 
 ## What we learned
 
-**An unverifiable claim recorded on chain is worth less than no claim, because it looks
-exactly like a verified one.** That decided the ERC-7857 verifier, the settlement receipt,
-and a storage layer that throws on a root mismatch rather than returning a shrug.
+**An unverifiable claim on chain is worth less than no claim, because it looks exactly like
+a verified one.** That decided the ERC-7857 verifier, the settlement receipt, and a storage
+layer that throws on a root mismatch rather than returning a shrug.
 
 **Documentation does not fail loudly, so it has to be tested.** A page once told readers to
-run five npm scripts that existed nowhere. The docs suite now checks that every method,
-error and address named exists; writing this submission found two more defects that way.
+run five npm scripts that existed nowhere. The docs suite now checks that every method, error
+and address named exists; revising this submission found five stale numbers the same way.
 
 ## What's next for Brier
 
-**Resolvers are now paid.** 30% of fees plus the settlement deposit is split evenly among
-the committee members whose reveal matched the outcome, credited at settlement and claimed
-by the agent's owner. No-shows and dissenters earn nothing — they have just been slashed.
-Until this Wave the module received that money and had no function to move it out.
+**Resolvers are now paid.** 30% of fees plus the settlement deposit, split evenly among the
+committee members whose reveal matched the outcome. No-shows and dissenters earn nothing —
+they have just been slashed. Until this Wave the module took that money and could not move
+it out.
 
-The leaderboard and trade tape read history from event logs — correct, but recomputed on
-every load. A dedicated indexer would make them fast and add realised profit.
+**And it is on mainnet.** Thirteen addresses on 16661, verified on chainscan, settling in
+W0G. Two markets open, fourteen resolvers staked.
 
-Beyond that: an audit, ConfigRegistry to the 48-hour timelock, and mainnet.
+Deploying found the defect that argues for deploying: every money default read `100e6`,
+right for a 6-decimal testnet stablecoin and wrong by twelve orders against an 18-decimal
+one. It would have set the resolver stake to 1e-10 W0G — a stake anyone can post is no
+stake, and a committee with nothing to slash is not a committee.
+
+Still ahead: an indexer, an audit, and ConfigRegistry to the timelock. The deployer still
+holds all four upgradeable contracts, so the cliff is open and nothing behind it has been
+reviewed outside this repository.
 ```
 
 ---
@@ -252,63 +254,62 @@ Fill in whichever accounts you want reachable. Email is the one worth setting:
 2,739 characters. This is the whole project rather than a diff against a previous
 submission, because Wave 3 is where all of it was built.
 
-> **Push before submitting.** The contract list this text links to is a table of fourteen
-> explorer links added to `README.md` locally. The copy on GitHub still shows plain
-> addresses, so a judge clicking through today gets text they cannot click. The heading
-> anchor already exists, so the link itself will not 404 — only the links inside it are
-> missing until the README is committed and pushed.
+> **Pushed.** The mainnet contract table this text links to is live on GitHub as of
+> commit `7bd1737`, every address checked to have code on chain before the link was
+> written.
 
 ```
-This Wave delivered Brier end to end: contracts live and verified on 0G Galileo, an SDK
-published to npm, and a full trade-to-settlement cycle run against the chain rather than
-simulated. Everything below can be clicked, installed, or re-run.
+This Wave delivered Brier end to end, then put it on mainnet: contracts live and verified,
+an SDK on npm, and a full trade-to-settlement cycle run against the chain. Everything below
+can be clicked, installed, or re-run.
 
 Repo: https://github.com/hevDev7/0g-brier
 
 WHAT SHIPPED
 
-Contracts, live on Galileo (16602). Fourteen deployed addresses, all fourteen VERIFIED on
-0G's explorer — the links open readable Solidity, not bytecode. Every one is clickable in
-the README:
-https://github.com/hevDev7/0g-brier#live-on-galileo-chain-16602 — the entry point is
+Contracts, live on MAINNET (16661) and Galileo (16602). Thirteen mainnet addresses, all
+VERIFIED on 0G's explorer — the links open readable Solidity, not bytecode. Every one is
+clickable in the README:
+https://github.com/hevDev7/0g-brier#live-on-mainnet-chain-16661 — the entry point is
 MarketFactory at
-https://chainscan-galileo.0g.ai/address/0x62A0f066d032F631876e70562FDc38070a090202
+https://chainscan.0g.ai/address/0x4c79210ce5236803d1369691c56e79c21dfd8fe0
 
-Eleven source contracts, ~3,000 lines: DPM pricing, a curator-gated factory, commit–reveal
-settlement with slashing, and every economic parameter bounded at deployment.
+Collateral is W0G — wrapped native 0G, real money. Two markets open, fourteen resolvers
+staked. Eight source contracts, ~3,500 lines: DPM pricing, a curator-gated factory,
+commit–reveal settlement with slashing, every economic parameter bounded at deployment.
 
 All three 0G services, not one. Chain carries the contracts. Storage holds each market's
-question and each settlement receipt, addressed by Merkle root and re-verified on read.
-Compute runs TeeML inference for beliefs and settlement, and the provider address and
-attestation are carried into the receipt.
+question and settlement receipt, Merkle-addressed and re-verified on read. Compute runs
+TeeML inference, with the provider address and attestation carried into the receipt.
 
-ERC-7857 Agentic ID, implemented rather than announced. The AgentRegistry token is a 0G
-Agentic ID with an on-chain data verifier that recomputes 0G Storage's own Merkle root in
-Solidity — so a token's dataHash is the file's address, and anyone can fetch those bytes
-and check it. The standard's private-data path needs a TEE oracle 0G has not published, so
-it reverts with a named error instead of returning isValid: true for something nothing can
-check.
+ERC-7857 Agentic ID, implemented rather than announced. An on-chain verifier recomputes 0G
+Storage's Merkle root in Solidity, so a token's dataHash IS the file's address — anyone can
+fetch those bytes and check it. The private-data path needs a TEE oracle 0G has not
+published, so it reverts with a named error instead of a meaningless isValid: true.
 
-ERC-8004. Brier identities link to the IdentityRegistry with ownership verified on both
-sides, and resolver records are published to the ReputationRegistry — a settlement here is
-readable by someone who has never heard of Brier.
+ERC-8004. Identities link to the IdentityRegistry with ownership verified both sides;
+resolver records go to the ReputationRegistry, so a settlement here is readable by someone
+who has never heard of Brier.
 
-SDK published to npm — `agent-kit` at 0.1.1, `protocol` and `zg-storage` at 0.1.0:
+SDK on npm — `agent-kit` and `protocol` at 0.2.0, `zg-storage` at 0.1.1:
 https://www.npmjs.com/package/@0g-brier/agent-kit
-https://www.npmjs.com/package/@0g-brier/protocol
-https://www.npmjs.com/package/@0g-brier/zg-storage
 
 PROVEN, NOT CLAIMED
 
 A real committee settlement ran on Galileo: three resolvers, threshold two, commit–reveal,
-with the receipt anchored on chain and feedback landing in ERC-8004's registry. The no-show
-path was exercised too — a missed reveal window failed the market and slashed 5% from each
-resolver. A hundred-line agent using only the published packages traded a live market end
-to end, and its transcripts are printed in the docs.
+receipt anchored on chain, feedback in ERC-8004's registry. The no-show path was exercised
+too — a missed reveal window failed the market and slashed 5% from each resolver. A
+hundred-line agent using only the published packages traded a live market, with transcripts
+in the docs.
 
-910 tests pass: 331 Solidity (19 invariant), 398 frontend, 181 across the packages. The
-load-bearing ones are differential — the TypeScript DPM mirror against vectors generated by
-the Solidity library, and the Merkle root against 0G's reference implementation.
+Deploying found what testnet could not: every money default read 100e6, right for a
+6-decimal test stablecoin and wrong by twelve orders against 18-decimal W0G. It would have
+set the resolver stake to 1e-10 W0G, and a committee with nothing to slash is not one.
+Caught before broadcast.
+
+1,004 tests pass: 370 Solidity (53 invariant), 414 frontend, 220 across the packages. The
+load-bearing ones are differential — the TypeScript DPM mirror against vectors from the
+Solidity library, and the Merkle root against 0G's reference implementation.
 ```
 
 ---
