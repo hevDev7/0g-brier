@@ -67,6 +67,15 @@ the largest position that stays inside.
 Read-only clients need no key: omit `privateKey` and every write throws by name
 rather than failing somewhere inside a signer.
 
+### 0.2.1
+
+The quickstart above did not compile. `sizeWithinImpact` takes one object and
+`ensureAllowance` takes three arguments, and the block shipped calling them with
+four and two — so the first thing anyone copied produced two type errors. It also
+named a superseded deployment's factory. No code changed in this release; the
+example is now typechecked against the published package rather than written
+beside it.
+
 ### 0.2.0
 
 Brier is on 0G mainnet, and this release is what an agent needs to trade there.
