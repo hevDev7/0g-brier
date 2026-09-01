@@ -34,6 +34,22 @@ That question settles through the ARITHMETIC route: `decideByThreshold` reads
 The 3 0G Compute ledger in step 4 is therefore still unspent, and is only needed
 for a market whose rules require judgement.
 
+**A second market**, `0xCDc13Cc2830240518ce76a0a6ecbA51a4DBA8c35`, is the first that can
+run a whole lifecycle in a day: DETERMINISTIC tier, a committee of three with a
+threshold of two, trading to 2026-09-01 22:40 UTC and settlement by 2026-09-02
+06:40 UTC. It asks whether one baseball game's combined final score beats 8.
+
+Two things about its timing are worth copying rather than rediscovering. The
+settlement window is EIGHT hours, not the four the tier's machinery needs, because
+the game itself runs about three hours AFTER trading closes and the committee
+cannot answer before the score is Final — the four hours of machinery have to fit
+after the event, not after the market. And `MIN_SETTLEMENT_WINDOW` was lowered from
+72 hours to 4 to permit this class of market at all. That is safe to change with
+markets open: it is read only by `Market.initialize`, so an existing clone keeps
+the deadline it was born with. `COMMIT_WINDOW`, `REVEAL_WINDOW` and the dispute
+windows are NOT safe to change that way — they are read during settlement, so
+moving them rewrites the rules of every market already waiting on one.
+
 **The cliff is still open.** All four contracts remain owned by the deployer.
 
 ---

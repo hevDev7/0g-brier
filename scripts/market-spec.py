@@ -20,6 +20,7 @@ import datetime as _dt
 import json
 import os
 import sys
+import time
 
 
 def _iso(ts: int) -> str:
@@ -354,6 +355,109 @@ def _live_science(trading_end: int, settlement_deadline: int) -> dict:
     }
 
 
+def _live_sports(trading_end: int, settlement_deadline: int) -> dict:
+    """The combined final score of one MLB game, against a threshold this function
+    measures rather than picks.
+
+    WHY BASEBALL. A short-horizon sports question needs three things at once: it
+    must finish inside the settlement window, it must be BINARY with no draw, and
+    its answer must be a NUMBER a resolver can compare. "Will team X win" fails the
+    third — it needs a model to read a result, and a model is what settled a Galileo
+    market wrong. A combined run total is an integer, so `decideByThreshold` settles
+    it in code and 0G Compute is never called. MLB also has no draws and no
+    penalty shoot-out, so extra innings lengthen the game without muddying it.
+
+    THE THRESHOLD IS MEASURED. It comes from every completed game at that venue this
+    season, taken as the median, so the question lands near a coin flip instead of
+    near a formality. A market whose answer is already known is a market nobody
+    learns anything from.
+
+    Set LIVE_GAME_PK to pin a specific game; otherwise the earliest game today that
+    still starts in the future is used, preferring a roofed venue because the one
+    thing that can void this question is rain.
+    """
+    api = "https://statsapi.mlb.com/api/v1"
+    day = time.strftime("%Y-%m-%d", time.gmtime(trading_end))
+    pinned = os.environ.get("LIVE_GAME_PK")
+
+    if pinned:
+        sched = _http_json(f"{api}/schedule?sportId=1&gamePk={pinned}&hydrate=venue")
+    else:
+        sched = _http_json(f"{api}/schedule?sportId=1&date={day}&hydrate=venue")
+    games = [g for d in sched.get("dates", []) for g in d.get("games", [])]
+    # `codedGameState == "F"` is the ONLY safe gate. A gamePk can carry TWO records —
+    # a postponement with `score: null` and the replay with the real one — so a
+    # naive first-record read returns null for a game that was in fact played.
+    playable = [g for g in games if g["status"]["codedGameState"] == "S"]
+    if not playable:
+        sys.exit(f"market-spec: no scheduled MLB game found for {day}. Set LIVE_GAME_PK, or pick another day.")
+
+    def roofed(g):
+        roof = (g.get("venue", {}).get("fieldInfo", {}) or {}).get("roofType", "")
+        return 0 if roof in ("Dome", "Retractable") else 1
+
+    game = sorted(playable, key=lambda g: (roofed(g), g["gameDate"]))[0]
+    pk = game["gamePk"]
+    away = game["teams"]["away"]["team"]["name"]
+    home = game["teams"]["home"]["team"]["name"]
+    venue = game["venue"]["name"]
+    venue_id = game["venue"]["id"]
+    first_pitch = int(time.mktime(time.strptime(game["gameDate"], "%Y-%m-%dT%H:%M:%SZ")) - time.timezone)
+
+    # A game runs about three hours. The committee cannot answer before it is Final,
+    # so the deadline has to clear the finish AND the machinery behind it.
+    if first_pitch >= settlement_deadline:
+        sys.exit(
+            f"market-spec: {away} @ {home} starts at {_isoz(first_pitch)}, at or after the "
+            f"settlement deadline {_isoz(settlement_deadline)}. Nothing could settle it."
+        )
+
+    # The threshold, measured at this venue this season.
+    season = time.strftime("%Y", time.gmtime(trading_end))
+    hist = _http_json(
+        f"{api}/schedule?sportId=1&venueIds={venue_id}&season={season}"
+        f"&startDate={season}-03-01&endDate={day}&gameType=R"
+    )
+    totals = sorted(
+        g["teams"]["away"]["score"] + g["teams"]["home"]["score"]
+        for d in hist.get("dates", [])
+        for g in d.get("games", [])
+        if g["status"]["codedGameState"] == "F"
+        and g["teams"]["away"].get("score") is not None
+        and g["teams"]["home"].get("score") is not None
+    )
+    if len(totals) < 10:
+        sys.exit(f"market-spec: only {len(totals)} completed games at {venue} this season — too few to set a fair threshold.")
+    threshold = totals[len(totals) // 2]
+    over = sum(1 for t in totals if t > threshold) / len(totals)
+
+    line = f"{api}/game/{pk}/linescore"
+    return {
+        "resolvesBy": first_pitch + 4 * 3600,  # three hours of baseball, and an hour of not assuming
+        "question": (
+            f"Will the combined final score of {away} at {home} on {day} be more than {threshold} runs?"
+        ),
+        "rules": (
+            f"Resolves YES if the sum of teams.away.runs and teams.home.runs for MLB game {pk}, read "
+            f"once the game is Final, is strictly greater than {threshold} runs. Resolves NO if the sum "
+            f"is {threshold} or fewer. Extra innings count toward the sum, and a game shortened by "
+            "weather still counts once it is recorded Final. Deemed UNRESOLVABLE if the game has no "
+            f"Final record by {_isoz(settlement_deadline)}, which covers a postponement or a suspension."
+        ),
+        "settlementPrompt": (
+            f"Source 0 is the linescore for game {pk}. Add teams.away.runs to teams.home.runs and "
+            f"compare the sum with {threshold}. Answer YES if strictly greater, NO otherwise. Before "
+            "first pitch both objects are EMPTY rather than zero; an empty reading is not a score of "
+            "nothing, and must not be settled as one."
+        ),
+        "sources": [{"kind": "http", "url": line, "selector": "$.teams.away.runs + $.teams.home.runs"}],
+        "context": [
+            {"kind": "http", "url": f"{api}/schedule?sportId=1&gamePk={pk}", "selector": "$.dates[0].games[0].status.codedGameState"},
+        ],
+        "_subject": f"a baseball score at {venue} (threshold {threshold}, {over:.0%} of {len(totals)} games this season went over)",
+    }
+
+
 def _live_culture(trading_end: int, settlement_deadline: int) -> dict:
     """Whether Hacker News reaches a given item id by a pinned second.
 
@@ -402,6 +506,7 @@ LIVE = {
     "economics": _live_economics,
     "science": _live_science,
     "culture": _live_culture,
+    "sports": _live_sports,
 }
 
 
