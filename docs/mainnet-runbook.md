@@ -4,6 +4,40 @@ Chain **16661**. Everything below was read out of the scripts that will run it,
 not written from memory, and the paragraphs that say "this is irreversible" are
 the ones to read twice.
 
+**This has now been done.** What is live on 16661, verified on chain rather than
+copied from a transcript:
+
+| | |
+|---|---|
+| ConfigRegistry | `0x3289fcb307714774ac45de9606af6f95d2b2b4dd` |
+| MarketFactory | `0x4c79210ce5236803d1369691c56e79c21dfd8fe0` |
+| ResolutionModule | `0xd3ab1d14d85fbf24698d8e679c2e32c26c5c0fbb` |
+| AgentRegistry | `0xe87a66e1ed8c1fee635ac0df70e0f7f03c695963` |
+| Timelock | `0x4810a1bf3ef8f7d52d9d7a01155ddb171cea8d4e` (48 h) |
+| Collateral | W0G `0x1cd0690ff9a693f5ef2dd976660a8dafc81a109c` |
+| Deployed at | block 43180916, 2026-09-01 |
+
+Fourteen resolvers are registered and staked at 0.2 W0G each — five for a round,
+nine more for a dispute drawn from outside those five. The full manifest is
+`deployments/16661.json`, rebuilt from the chain rather than from the deploy's own
+simulation; see step 2 for why that distinction cost an afternoon.
+
+**The first market**, `0x7c1f9c8b2C1b17fbB054d18735982cD9a696099E`, asks whether the
+Coinbase ETH-USD close for the minute ending 2026-09-30 23:59:59 UTC is strictly
+above 4000.00 USD. Trading runs to 2026-10-01 00:00 UTC and it must be settled by
+2026-10-08. Its spec is `0x2081bf1b86b4acdead29092e69639ee100c2821c613449a69bbed822ad5041d3`
+on MAINNET 0G Storage — the same root returns "File not found" from the testnet
+indexer, which is the check worth repeating on any market you create.
+
+That question settles through the ARITHMETIC route: `decideByThreshold` reads
+"strictly greater than 4000.00", compares two numbers, and never calls an enclave.
+The 3 0G Compute ledger in step 4 is therefore still unspent, and is only needed
+for a market whose rules require judgement.
+
+**The cliff is still open.** All four contracts remain owned by the deployer.
+
+---
+
 One idea shapes the whole order: **the deployer's power ends at a cliff, and
 after the cliff every administrative act costs 48 hours.** Work that is cheap
 before the handover is expensive forever after. So the sequence is not a
