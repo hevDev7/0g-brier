@@ -72,7 +72,12 @@ async function handle(body) {
       if (isNullResult(o)) {
         const m = calls[i]?.method ?? "?";
         nullsByMethod.set(m, (nullsByMethod.get(m) ?? 0) + 1);
-        if (!RETRY_ON_NULL.has(m)) console.error(`rpc-retry-proxy: NULL from ${m} (not retried)`);
+        // EVERY null is printed. An earlier version counted the ones inside the retry
+        // set and printed only the others, then the end-of-run report was never reached
+        // because the proxy was still running — so an empty log read as "no nulls
+        // happened" when it only meant "none outside the set". Silence has to mean
+        // silence, or an instrument is worse than none.
+        console.error(`rpc-retry-proxy: NULL from ${m}${RETRY_ON_NULL.has(m) ? " (will retry)" : " (not retried)"}`);
       }
       if (o && o.error) console.error(`rpc-retry-proxy: ERROR from ${calls[i]?.method}: ${JSON.stringify(o.error).slice(0, 160)}`);
     }
