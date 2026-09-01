@@ -63,6 +63,28 @@ const ROOT = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
 const NET = networkForChainId(CHAIN_ID);
 const INDEXER = process.env.ZG_INDEXER ?? NET.indexerUrl;
+/**
+ * PROVISION separates "prepare a demo chain" from "drive a real round".
+ *
+ * Steps 1, 2 and 9 shorten the protocol's windows, register resolvers of this
+ * file's own making, and put the windows back. That is right on a fresh chain and
+ * wrong anywhere a committee already exists: the keys in step 2 come from a THIRD
+ * derivation that setup-committee.sh has never used, so on a registry holding
+ * fourteen staked resolvers it registers more and locks collateral that was
+ * budgeted elsewhere — and step 1 rewrites live governance parameters for a market
+ * other people may have money in.
+ *
+ * Steps 3 to 8 are the ones that drive an existing committee, and they seat whoever
+ * the module DREW rather than whoever this script made.
+ */
+
+const PROVISION = process.env.PROVISION === "1";
+if (PROVISION && CHAIN_ID === 16661) {
+  throw new Error(
+    "PROVISION=1 refused on 16661: mainnet already has a staked committee, and this\n" +
+      "  step would register more resolvers and shorten live protocol windows.",
+  );
+}
 const C = JSON.parse(
   fs.readFileSync(new URL(`../deployments/${CHAIN_ID}.json`, import.meta.url), "utf-8"),
 ).contracts;
@@ -75,6 +97,17 @@ const chain = defineChain({
 const pub = createPublicClient({chain, transport: http(RPC)});
 const deployer = privateKeyToAccount(DEPLOYER);
 const boss = createWalletClient({account: deployer, chain, transport: http(RPC)});
+
+// Read, never assumed. Both of these were hardcoded to 6 and "mUSDC", which is
+// right for the testnet mock and reports an 18-decimal collateral a million million
+// times too large — in the two lines a person reads to judge whether a resolver was
+// slashed.
+const ERC20_META = [
+  {type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{type: "uint8"}]},
+  {type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{type: "string"}]},
+];
+const STAKE_DECIMALS = await pub.readContract({address: C.MockUSDC, abi: ERC20_META, functionName: "decimals"});
+const STAKE_SYMBOL = await pub.readContract({address: C.MockUSDC, abi: ERC20_META, functionName: "symbol"});
 
 const ERC8004_IDENTITY = "0x8004A818BFB912233c491871b3d84c89A494BD9e";
 const OUTCOMES = {NO: 0, YES: 1, UNRESOLVABLE: 2};
@@ -204,6 +237,8 @@ async function main() {
   // dispute. Those are the right numbers for a market people have money in and
   // the wrong ones for showing the mechanism works. 60s is the configured floor,
   // not an arbitrary choice: `setBounds` refuses anything shorter.
+  const restore = [];
+  if (PROVISION) {
   console.log("\n── 1. windows shortened to the configured floor (testnet) ──");
   const disputeKey = ["DISPUTE_WINDOW_FAST", "DISPUTE_WINDOW_VERIFIED", "DISPUTE_WINDOW_DETERMINISTIC"][tier];
   // Not all 60s. The commit window has to contain a 0G Storage upload per
@@ -215,7 +250,6 @@ async function main() {
   // What to put back at step 9. Captured BEFORE the first write, because after it
   // the original is gone — and a script that shortens a live deployment's windows
   // and then cannot say what they were has broken the configuration, not borrowed it.
-  const restore = [];
   for (const [name, want] of Object.entries(windows)) {
     const before = await pub.readContract({address: C.ConfigRegistry, abi: CONFIG, functionName: "params", args: [key(name)]});
     if (before !== want) restore.push([name, before]);
@@ -226,28 +260,15 @@ async function main() {
     await send(boss, {address: C.ConfigRegistry, abi: CONFIG, functionName: "setParam", args: [key(name), want]}, name);
     console.log(`   ${name} ${before}s → ${want}s`);
   }
-
-  // ── 2. three resolvers: funded, registered, staked, linked to ERC-8004 ────
-  console.log("\n── 2. resolvers ──");
-  // A WARNING, NOT A GUARD, because this script is the wrong tool for a registry
-  // that already has a committee and half-fixing it would hide that.
-  //
-  // The keys below come from `resolverKey`, a THIRD derivation that
-  // setup-committee.sh has never used. On the 0G mainnet deployment — fourteen
-  // resolvers already registered and staked — this step does not reuse them. It
-  // registers five MORE and locks another MIN_RESOLVER_STAKE x 2 x 5 of collateral
-  // that the market's seed was budgeted for. Voting on an existing committee needs
-  // a driver that seats the members the module DRAWS, which is what
-  // `operatorCandidates` below is for; provisioning is for a fresh chain.
-  if (CHAIN_ID === 16661) {
-    throw new Error(
-      "committee-run.mjs provisions its own resolvers, and chain 16661 already has a staked committee.\n" +
-        "  Running it here would register five more and lock collateral the market needs.\n" +
-        "  Use it on a fresh chain; drive an existing committee with the module directly.",
-    );
+  } else {
+    console.log("\n── 1. windows left alone (PROVISION unset) ──");
   }
 
-  const stakeAmount = await pub.readContract({address: C.ConfigRegistry, abi: CONFIG, functionName: "params", args: [key("MIN_RESOLVER_STAKE")]});
+  // ── 2. three resolvers: funded, registered, staked, linked to ERC-8004 ────
+  if (!PROVISION) {
+    console.log("── 2. resolvers: using the committee already staked on this chain ──");
+  } else {
+  console.log("\n── 2. resolvers ──");
   const resolvers = [];
   for (let i = 0; i < n; i++) {
     const account = privateKeyToAccount(resolverKey(i));
@@ -301,8 +322,9 @@ async function main() {
     }
     const linked = await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "erc8004Of", args: [agentId]});
     const staked = await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "activeStake", args: [agentId]});
-    console.log(`   agent ${agentId}  ${account.address}  stake ${formatUnits(staked, 6)} mUSDC  erc8004 #${linked}`);
+    console.log(`   agent ${agentId}  ${account.address}  stake ${formatUnits(staked, STAKE_DECIMALS)} ${STAKE_SYMBOL}  erc8004 #${linked}`);
     resolvers.push({agentId, wallet, account});
+  }
   }
 
   // ── 3. what the market's own source says ─────────────────────────────────
@@ -505,7 +527,7 @@ async function main() {
   for (const r of voters) {
     const rep = await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "reputationOf", args: [r.agentId]});
     const stakeLeft = await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "stakeOf", args: [r.agentId]});
-    console.log(`   agent ${r.agentId}  agreed ${rep.resolutionsAgreed}  overturned ${rep.resolutionsOverturned}  stake ${formatUnits(stakeLeft, 6)}  erc8004 #${await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "erc8004Of", args: [r.agentId]})}`);
+    console.log(`   agent ${r.agentId}  agreed ${rep.resolutionsAgreed}  overturned ${rep.resolutionsOverturned}  stake ${formatUnits(stakeLeft, STAKE_DECIMALS)} ${STAKE_SYMBOL}  erc8004 #${await pub.readContract({address: C.AgentRegistry, abi: REGISTRY, functionName: "erc8004Of", args: [r.agentId]})}`);
   }
   console.log(`\n   finalize block ${fin.blockNumber} — read FeedbackPublished from it to see the 8004 records`);
 
@@ -515,6 +537,10 @@ async function main() {
   // config, or the docs page that quotes it, sees a one-minute dispute window that
   // nobody chose. Restored here rather than left to the operator, because the
   // script is what changed them.
+  if (restore.length === 0) {
+    console.log("\n── 9. nothing to restore ──");
+    return;
+  }
   console.log("\n── 9. windows restored ──");
   for (const [name, value] of restore) {
     await send(boss, {address: C.ConfigRegistry, abi: CONFIG, functionName: "setParam", args: [key(name), value]}, `restore ${name}`);
