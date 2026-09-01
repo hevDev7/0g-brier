@@ -34,6 +34,7 @@ const BACKOFF_MS = Number(arg("--backoff", "400"));
 
 let retried = 0;
 let rescued = 0;
+const nullsByMethod = new Map();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -61,6 +62,24 @@ async function handle(body) {
   const wantsRetry = calls.some((c) => RETRY_ON_NULL.has(c?.method));
 
   let out = await forward(body);
+
+  // Log EVERY null answer with its method. The first version of this proxy retried
+  // only the two lookups it assumed were at fault, and the deploy still died — so
+  // what is actually returning null has to be observed, not guessed.
+  try {
+    const first = JSON.parse(out.text);
+    for (const [i, o] of (Array.isArray(first) ? first : [first]).entries()) {
+      if (isNullResult(o)) {
+        const m = calls[i]?.method ?? "?";
+        nullsByMethod.set(m, (nullsByMethod.get(m) ?? 0) + 1);
+        if (!RETRY_ON_NULL.has(m)) console.error(`rpc-retry-proxy: NULL from ${m} (not retried)`);
+      }
+      if (o && o.error) console.error(`rpc-retry-proxy: ERROR from ${calls[i]?.method}: ${JSON.stringify(o.error).slice(0, 160)}`);
+    }
+  } catch {
+    /* not JSON; nothing to learn */
+  }
+
   if (!wantsRetry) return out;
 
   for (let i = 1; i < TRIES; i++) {
@@ -107,7 +126,10 @@ server.listen(PORT, "127.0.0.1", () => {
   console.error(`rpc-retry-proxy: 127.0.0.1:${PORT} -> ${UPSTREAM}  (${TRIES} tries on a null receipt)`);
 });
 
-const report = () => console.error(`rpc-retry-proxy: ${retried} retries, ${rescued} nulls that turned into an answer`);
+const report = () => {
+  console.error(`rpc-retry-proxy: ${retried} retries, ${rescued} nulls that turned into an answer`);
+  for (const [m, n] of [...nullsByMethod].sort((a, b) => b[1] - a[1])) console.error(`  null x${n}  ${m}`);
+};
 process.on("SIGINT", () => {
   report();
   process.exit(0);
