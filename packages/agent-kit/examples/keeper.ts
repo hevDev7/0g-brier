@@ -33,6 +33,7 @@ import {createPublicClient, createWalletClient, defineChain, http} from "viem";
 import {privateKeyToAccount} from "viem/accounts";
 import {loadDeployment} from "@0g-brier/protocol/node";
 import {BrierClient, MARKET_ABI} from "../src/index";
+import {modeForChainId} from "@0g-brier/protocol";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
 const RPC = process.env.RPC_URL ?? "https://evmrpc-testnet.0g.ai";
@@ -46,7 +47,7 @@ const manifest = loadDeployment(CHAIN_ID, new URL("../../../deployments", import
 const account = privateKeyToAccount(KEY);
 const chain = defineChain({
   id: CHAIN_ID,
-  name: CHAIN_ID === 16602 ? "galileo" : "anvil",
+  name: modeForChainId(CHAIN_ID),
   nativeCurrency: {name: "0G", symbol: "0G", decimals: 18},
   rpcUrls: {default: {http: [RPC]}},
 });
@@ -278,7 +279,7 @@ async function send(market: `0x${string}`, functionName: "close" | "fail"): Prom
 }
 
 const client = new BrierClient({
-  network: CHAIN_ID === 16602 ? "galileo" : "anvil",
+  network: modeForChainId(CHAIN_ID),
   privateKey: KEY,
   factory: manifest.contracts.MarketFactory as `0x${string}`,
   outcomeShares: manifest.contracts.OutcomeShares as `0x${string}`,

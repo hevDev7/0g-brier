@@ -11,6 +11,7 @@
  * A provider with no verifiability is a remote API with extra steps.
  */
 import {ZgInference} from "../src/index";
+import {modeForChainId} from "@0g-brier/protocol";
 
 const raw = process.env.DEPLOYER_KEY ?? process.env.AGENT_KEY;
 if (!raw) throw new Error("set DEPLOYER_KEY or AGENT_KEY — listing reads the registry through a wallet");
@@ -23,7 +24,7 @@ const KEY = (raw.startsWith("0x") ? raw : `0x${raw}`) as `0x${string}`;
 // services where Galileo carries two, and the difference is the whole argument
 // for a committee whose members do not all run the same model.
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
-const NETWORK = CHAIN_ID === 16661 ? "mainnet" : CHAIN_ID === 16602 ? "galileo" : "anvil";
+const NETWORK = modeForChainId(CHAIN_ID);
 console.log(`catalogue on ${NETWORK} (chain ${CHAIN_ID})\n`);
 
 const services = await ZgInference.listServices({network: NETWORK, privateKey: KEY});

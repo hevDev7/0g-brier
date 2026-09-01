@@ -10,7 +10,7 @@
  * second is 27% higher, which is exactly the direction that hurts anyone who
  * trusted it. This project's own spec draft made that mistake once.
  */
-import {WAD} from "@0g-brier/protocol";
+import {WAD, modeForChainId} from "@0g-brier/protocol";
 import {loadDeployment} from "@0g-brier/protocol/node";
 import {BrierClient} from "../src/index";
 
@@ -22,7 +22,7 @@ if (!market) throw new Error("set MARKET to the settled market's address");
 
 const manifest = loadDeployment(CHAIN_ID, new URL("../../../deployments", import.meta.url).pathname);
 const client = new BrierClient({
-  network: CHAIN_ID === 16602 ? "galileo" : "anvil",
+  network: modeForChainId(CHAIN_ID),
   privateKey: (key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`,
   factory: manifest.contracts.MarketFactory as `0x${string}`,
   outcomeShares: manifest.contracts.OutcomeShares as `0x${string}`,

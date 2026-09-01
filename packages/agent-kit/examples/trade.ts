@@ -15,7 +15,7 @@
  *   not neutral on a DPM book; it is a position against whatever the market says.
  * - It will not size on Kelly alone. See `sizeWithinImpact`.
  */
-import {WAD, toTokensCeil, toWad} from "@0g-brier/protocol";
+import {WAD, modeForChainId, toTokensCeil, toWad} from "@0g-brier/protocol";
 import {loadDeployment} from "@0g-brier/protocol/node";
 import {ZgStore} from "@0g-brier/zg-storage";
 import {BrierClient, ZgInference, type Outcome} from "../src/index";
@@ -35,7 +35,7 @@ const KEY = (key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`;
 
 const manifest = loadDeployment(CHAIN_ID, new URL("../../../deployments", import.meta.url).pathname);
 const client = new BrierClient({
-  network: CHAIN_ID === 16661 ? "mainnet" : CHAIN_ID === 16602 ? "galileo" : "anvil",
+  network: modeForChainId(CHAIN_ID),
   privateKey: KEY,
   factory: manifest.contracts.MarketFactory as `0x${string}`,
   outcomeShares: manifest.contracts.OutcomeShares as `0x${string}`,
@@ -85,7 +85,7 @@ console.log(`\nquestion  ${spec.question}`);
 // From CHAIN_ID, not hardcoded — see the same note in examples/resolve.ts. A
 // literal "galileo" here pointed the inference client at the testnet RPC while
 // the trading client talked to whatever CHAIN_ID said.
-const ZG_NETWORK = CHAIN_ID === 16661 ? "mainnet" : CHAIN_ID === 16602 ? "galileo" : "anvil";
+const ZG_NETWORK = modeForChainId(CHAIN_ID);
 const inference = await ZgInference.connect({network: ZG_NETWORK, privateKey: KEY, provider: ZG_PROVIDER});
 console.log(`asking 0G Compute…`);
 const judgement = await inference.believe({

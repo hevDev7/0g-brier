@@ -19,15 +19,42 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [[ -f "$ROOT/.env" ]]; then
+# .env.mainnet wins over .env, as in every other script here. This was the one
+# mainnet-relevant script that did not, and combined with the 16602 defaults below
+# it meant a keeper started for the mainnet deployment would have polled Galileo
+# forever while the first mainnet market ran past its settlement deadline and
+# failed — with no error, because a keeper with nothing to do looks exactly like a
+# keeper that is up to date.
+ENV_FILE="${ENV_FILE:-}"
+if [[ -z "$ENV_FILE" ]]; then
+  ENV_FILE="$ROOT/.env"
+  [[ -f "$ROOT/.env.mainnet" ]] && ENV_FILE="$ROOT/.env.mainnet"
+fi
+if [[ -f "$ENV_FILE" ]]; then
   # Full shell semantics, which is why this wrapper exists rather than pointing
   # systemd's EnvironmentFile at a file that may hold quoting it cannot parse.
-  set -a; . "$ROOT/.env"; set +a
+  # Anything already exported wins, so systemd or a shell can override the file.
+  _pre="$(export -p)"; set -a; . "$ENV_FILE"; set +a; eval "$_pre" 2>/dev/null || true
 fi
 
-: "${KEEPER_KEY:?set KEEPER_KEY in .env — the keeper signs with its own wallet}"
-export CHAIN_ID="${CHAIN_ID:-16602}"
-export RPC_URL="${RPC_URL:-https://evmrpc-testnet.0g.ai}"
+: "${KEEPER_KEY:?set KEEPER_KEY in the env file — the keeper signs with its own wallet}"
+# Derived from the RPC rather than defaulted, so the chain id and the endpoint can
+# never disagree. A keeper pointed at one chain while believing another is the
+# worst shape this script can take.
+export RPC_URL="${RPC_URL:-${ZERO_G_RPC:-${ZERO_G_MAINNET_RPC:-${ZERO_G_TESTNET_RPC:-https://evmrpc-testnet.0g.ai}}}}"
+DERIVED_CHAIN="$(cast chain-id --rpc-url "$RPC_URL" 2>/dev/null || echo "")"
+export CHAIN_ID="${CHAIN_ID:-$DERIVED_CHAIN}"
+[[ -n "$CHAIN_ID" ]] || { echo "✗ could not read a chain id from $RPC_URL" >&2; exit 1; }
+if [[ -n "$DERIVED_CHAIN" && "$CHAIN_ID" != "$DERIVED_CHAIN" ]]; then
+  echo "✗ CHAIN_ID is $CHAIN_ID but $RPC_URL reports $DERIVED_CHAIN." >&2
+  echo "  A keeper acting on one chain while addressed to another is worse than one that is down." >&2
+  exit 1
+fi
+case "$CHAIN_ID" in
+  16661) echo "▶ keeper on 0G MAINNET (16661) via $RPC_URL   env $(basename "$ENV_FILE")" ;;
+  16602) echo "▶ keeper on Galileo testnet (16602) via $RPC_URL   env $(basename "$ENV_FILE")" ;;
+  *)     echo "▶ keeper on chain $CHAIN_ID via $RPC_URL   env $(basename "$ENV_FILE")" ;;
+esac
 
 # Fail loudly on the wrong Node. The 0G compute SDK, which agent-kit pulls in,
 # throws "does not provide an export named 'C'" on some 22.x builds — an error

@@ -13,6 +13,7 @@
  */
 import {loadDeployment} from "@0g-brier/protocol/node";
 import {BrierClient, type AgentRole} from "../src/index";
+import {modeForChainId} from "@0g-brier/protocol";
 
 const CHAIN_ID = Number(process.env.CHAIN_ID ?? 16602);
 const key = process.env.DEPLOYER_KEY ?? process.env.AGENT_KEY;
@@ -23,7 +24,7 @@ const role = (process.env.AGENT_ROLE ?? "Trader") as AgentRole;
 
 const manifest = loadDeployment(CHAIN_ID, new URL("../../../deployments", import.meta.url).pathname);
 const client = new BrierClient({
-  network: CHAIN_ID === 16602 ? "galileo" : "anvil",
+  network: modeForChainId(CHAIN_ID),
   privateKey: (key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`,
   factory: manifest.contracts.MarketFactory as `0x${string}`,
   outcomeShares: manifest.contracts.OutcomeShares as `0x${string}`,

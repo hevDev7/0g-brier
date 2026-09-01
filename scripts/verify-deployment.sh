@@ -17,11 +17,35 @@ set -uo pipefail
 { set +x; } 2>/dev/null
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [[ -f "$ROOT/.env" ]]; then
-  _pre="$(export -p)"; set -a; . "$ROOT/.env"; set +a; eval "$_pre" 2>/dev/null || true
+ENV_FILE="${ENV_FILE:-}"
+if [[ -z "$ENV_FILE" ]]; then
+  ENV_FILE="$ROOT/.env"
+  [[ -f "$ROOT/.env.mainnet" ]] && ENV_FILE="$ROOT/.env.mainnet"
 fi
-RPC="${ZERO_G_TESTNET_RPC:-https://evmrpc-testnet.0g.ai}"
-CHAIN="${1:-$(cast chain-id --rpc-url "$RPC")}"
+if [[ -f "$ENV_FILE" ]]; then
+  _pre="$(export -p)"; set -a; . "$ENV_FILE"; set +a; eval "$_pre" 2>/dev/null || true
+fi
+RPC="${ZERO_G_RPC:-${ZERO_G_MAINNET_RPC:-${ZERO_G_TESTNET_RPC:-https://evmrpc-testnet.0g.ai}}}"
+
+# THE CHAIN ARGUMENT MUST MATCH THE ENDPOINT. This script is advertised as the last
+# gate before mainnet, and it read only the testnet endpoint — so
+# `verify-deployment.sh 16661` loaded the mainnet manifest and then checked those
+# addresses against GALILEO, where none of them exist. Every contract came back
+# missing, and a gate that fabricates failures is as useless as one that fabricates
+# passes: after the first false alarm nobody reads it.
+RPC_CHAIN="$(cast chain-id --rpc-url "$RPC")"
+CHAIN="${1:-$RPC_CHAIN}"
+if [[ "$CHAIN" != "$RPC_CHAIN" ]]; then
+  echo "✗ asked to verify chain $CHAIN, but $RPC is chain $RPC_CHAIN." >&2
+  echo "  Point ZERO_G_RPC at the right endpoint; checking one chain's addresses" >&2
+  echo "  against another reports every contract as missing." >&2
+  exit 1
+fi
+case "$CHAIN" in
+  16661) echo "▶ 0G MAINNET (16661) via $RPC   env $(basename "$ENV_FILE")" ;;
+  16602) echo "▶ Galileo testnet (16602) via $RPC   env $(basename "$ENV_FILE")" ;;
+  *)     echo "▶ chain $CHAIN via $RPC   env $(basename "$ENV_FILE")" ;;
+esac
 MANIFEST="$ROOT/deployments/$CHAIN.json"
 [[ -f "$MANIFEST" ]] || { echo "✗ no manifest at $MANIFEST" >&2; exit 1; }
 

@@ -30,7 +30,7 @@
 import {createPublicClient, createWalletClient, defineChain, encodeAbiParameters, http, keccak256, parseAbiParameters} from "viem";
 import {privateKeyToAccount} from "viem/accounts";
 import {loadDeployment} from "@0g-brier/protocol/node";
-import {networkFor} from "@0g-brier/protocol";
+import {modeForChainId, networkFor, networkForChainId} from "@0g-brier/protocol";
 import {ZgStore} from "@0g-brier/zg-storage";
 import {
   ZgInference,
@@ -78,7 +78,7 @@ if (!MARKET) throw new Error("set MARKET");
 const manifest = loadDeployment(CHAIN_ID, `${REPO}deployments`);
 const MODULE = manifest.contracts.ResolutionModule as `0x${string}`;
 const REGISTRY = manifest.contracts.AgentRegistry as `0x${string}`;
-const net = networkFor(CHAIN_ID === 16602 ? "galileo" : "anvil");
+const net = networkForChainId(CHAIN_ID);
 const chain = defineChain({
   id: net.chainId,
   name: net.name,
@@ -345,7 +345,7 @@ if (observations.length > 0 && observations.every((o) => !o.ok)) {
 // mainnet the inference client talked to the testnet RPC while every other call
 // in this file talked to 16661 — a split-brain that surfaces as an attestation
 // against a chain the market does not live on.
-const NETWORK = CHAIN_ID === 16661 ? "mainnet" : CHAIN_ID === 16602 ? "galileo" : "anvil";
+const NETWORK = modeForChainId(CHAIN_ID);
 const brokers = new Map<string, ZgInference>();
 async function inferenceFor(provider: `0x${string}`): Promise<ZgInference> {
   let b = brokers.get(provider.toLowerCase());
