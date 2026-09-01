@@ -396,7 +396,20 @@ sets and reordering would silently repoint every policy already granted.
 *This is the step that has already gone wrong once.* On Galileo, `weather` was
 missing and the first market of that kind simply could not be created.
 
-**The resolver allowlist.** `setResolver(resolver, true)` on ResolutionModule.
+**The resolver allowlist — NOT on mainnet.** `setResolver(resolver, true)` gates
+exactly four functions on ResolutionModule: `settle`, `fail`, `markProposed` and
+`markDisputed`. Those are the DIRECT-settlement path, where one allowlisted address
+writes an outcome on its own signature with no committee, no commit-reveal and no
+dispute round. `Deploy.s.sol` refuses to set it on 16661 for that reason, and
+`deploy-mainnet.sh` now refuses before it even reaches forge.
+
+The committee path does not touch `isResolver` at all — `commitVote`, `revealVote`
+and `finalize` check committee membership, not the allowlist. So on mainnet this
+step is: leave it empty, and confirm it. `isResolver(<anyone>)` should answer false.
+
+This entry used to read "setResolver(resolver, true) on ResolutionModule" with no
+qualification, which is right for a local demo and would tell a mainnet operator to
+install the one key that can decide every market.
 
 **Enough staked resolvers to form a committee.** A committee is sampled only
 from agents registered as resolvers whose `activeStake` is at least

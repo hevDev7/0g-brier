@@ -1,4 +1,72 @@
 [
-  {"agentId": 1, "operator": "0xA33E0B4c441e9add0bb1b0528C15c6C4Efa9f18a", "index": 0},
-  {"agentId": 2, "operator": "0x11dbf5Aa860abd315c353e3ae755885a4EC348Bb", "index": 1}
+  {
+    "agentId": 1,
+    "operator": "0xA33E0B4c441e9add0bb1b0528C15c6C4Efa9f18a",
+    "index": 0
+  },
+  {
+    "agentId": 2,
+    "operator": "0x11dbf5Aa860abd315c353e3ae755885a4EC348Bb",
+    "index": 1
+  },
+  {
+    "agentId": 3,
+    "operator": "0x3b2701d5a1B888393f41f94788eFA522DC9dc3D3",
+    "index": 2
+  },
+  {
+    "agentId": 4,
+    "operator": "0xa8AaF6158C7F296187Cf3419740Ddc2aa9fB03AA",
+    "index": 3
+  },
+  {
+    "agentId": 5,
+    "operator": "0x2b9070Bc018B5F4F4AbE47C835477638fE417De6",
+    "index": 4
+  },
+  {
+    "agentId": 6,
+    "operator": "0xDbC4196B6f4c4Ec0fcCdac44C26AaE474fd4bcb5",
+    "index": 5
+  },
+  {
+    "agentId": 7,
+    "operator": "0x6ce8788D9263Ddb2EFd4617a4dFaAE0c68052a5E",
+    "index": 6
+  },
+  {
+    "agentId": 8,
+    "operator": "0x9f952a7a523c7AB72f2602D85a8855b94845E2b3",
+    "index": 7
+  },
+  {
+    "agentId": 9,
+    "operator": "0xC298334937605820d304Edb748eC12026310498C",
+    "index": 8
+  },
+  {
+    "agentId": 10,
+    "operator": "0x7056C1E0183Bb40bD00852c1d2b3F86eA3C8B01d",
+    "index": 9
+  },
+  {
+    "agentId": 11,
+    "operator": "0xd9BdC3272161f98aA6d353509f7C9F2614b99992",
+    "index": 10
+  },
+  {
+    "agentId": 12,
+    "operator": "0x9495D5Dd60ae21A27F0Afeb72e0cB31679007679",
+    "index": 11
+  },
+  {
+    "agentId": 13,
+    "operator": "0x76a3E82F8Dae670C72c963fF614dF07F1f667809",
+    "index": 12
+  },
+  {
+    "agentId": 14,
+    "operator": "0xaBc4eD7142a060FD92bcc1d486d7C5f1Ab912738",
+    "index": 13
+  }
 ]

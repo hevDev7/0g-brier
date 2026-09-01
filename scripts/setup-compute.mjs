@@ -24,10 +24,25 @@
 import {createZGComputeNetworkBroker} from "@0gfoundation/0g-compute-ts-sdk";
 import {ethers} from "ethers";
 
-const RPC = process.env.ZERO_G_TESTNET_RPC ?? "https://evmrpc-testnet.0g.ai";
+// This used to read ZERO_G_TESTNET_RPC and nothing else, so a mainnet operator
+// following the runbook would have created the ledger — and spent 3 0G — on
+// GALILEO, while believing they had funded mainnet inference. Three other scripts
+// had the same silent testnet default; this was the last of them.
+const RPC =
+  process.env.ZERO_G_RPC ??
+  process.env.ZERO_G_MAINNET_RPC ??
+  process.env.ZERO_G_TESTNET_RPC ??
+  "https://evmrpc-testnet.0g.ai";
 const argProvider = process.argv[process.argv.indexOf("--provider") + 1];
-const PROVIDER =
-  process.argv.includes("--provider") && argProvider ? argProvider : process.env.ZG_PROVIDER;
+// ZG_PROVIDERS (plural, comma-separated) is what .env.mainnet and the resolver
+// example use; ZG_PROVIDER stayed singular here and would have read as unset.
+function configuredProvider() {
+  if (process.argv.includes("--provider") && argProvider) return argProvider;
+  if (process.env.ZG_PROVIDER) return process.env.ZG_PROVIDER;
+  const first = (process.env.ZG_PROVIDERS ?? "").split(",")[0].trim();
+  return first === "" ? undefined : first;
+}
+const PROVIDER = configuredProvider();
 
 const key = process.env.DEPLOYER_KEY;
 if (!key) {
@@ -39,6 +54,11 @@ const rpc = new ethers.JsonRpcProvider(RPC);
 const wallet = new ethers.Wallet(key.startsWith("0x") ? key : `0x${key}`, rpc);
 const broker = await createZGComputeNetworkBroker(wallet);
 
+// Say which chain, before spending anything. A ledger funded on the wrong network
+// is 3 0G that buys inference nobody will ever call.
+const {chainId} = await rpc.getNetwork();
+const NAMES = {16661n: "0G MAINNET (16661)", 16602n: "Galileo testnet (16602)", 31337n: "local anvil (31337)"};
+console.log(`\n▶ ${NAMES[chainId] ?? `chain ${chainId}`} via ${RPC}`);
 console.log(`wallet  ${wallet.address}`);
 console.log(`balance ${ethers.formatEther(await rpc.getBalance(wallet.address))} 0G`);
 
