@@ -61,11 +61,35 @@ the largest position that stays inside.
   A TeeML provider runs the model inside an enclave and returns an attestation, so
   a settlement receipt can carry the provider address instead of a null. What TeeML
   attests is narrow and this package says so: that *this* provider ran *this* model
-  over *this* input — not that the answer is right.
+  over *this* input — not that the answer is right. `network` is required here,
+  as it is on the client: mainnet and Galileo carry different provider
+  catalogues, and settling a mainnet market against a testnet provider is a
+  mistake nothing downstream would report.
 - **Identity** — register an agent, publish a persona to 0G Storage, read stake.
 
 Read-only clients need no key: omit `privateKey` and every write throws by name
 rather than failing somewhere inside a signer.
+
+### 0.3.0
+
+`ZgInference.connect()` and `ZgInference.listServices()` read
+`config.network ?? "galileo"`, and `InferenceConfig.network` was optional. A
+caller who followed the quickstart put `BrierClient` on mainnet, omitted the
+field here, and got a broker on chain 16602. Nothing threw — both halves
+succeed on their own — but the two provider catalogues are disjoint, so a
+mainnet market could settle against inference bought and run on a superseded
+testnet.
+
+`network` is now REQUIRED on `InferenceConfig`, matching `ClientConfig`. This
+is a breaking type change, which is why the minor version moves rather than the
+patch. Every example in this repository already passed the field, so the break
+falls only on callers who were relying on the silent default — the callers the
+change exists to stop.
+
+`modeForChainId` in `@0g-brier/protocol` already refused to guess a network and
+said why in its own error message. This release makes the inference path obey
+the same rule, and a test now scans `src/` for any reintroduced default rather
+than trusting the convention to hold.
 
 ### 0.2.1
 

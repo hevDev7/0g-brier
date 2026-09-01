@@ -270,7 +270,15 @@ export function observationsSection(observations: readonly Observation[]): strin
 }
 
 export interface InferenceConfig {
-  network?: ChainMode;
+  /**
+   * REQUIRED, and deliberately not defaulted. This used to fall back to
+   * `"galileo"`, which put a caller's inference on chain 16602 while their
+   * `BrierClient` traded on 16661. Both halves succeed independently, so
+   * nothing throws: the provider catalogues are disjoint, and a real-money
+   * mainnet market ends up settled against a testnet provider. `modeForChainId`
+   * refuses to guess a network and says why; this refuses for the same reason.
+   */
+  network: ChainMode;
   privateKey: `0x${string}`;
   /** A provider from `listServices()`. Never hardcode one in an agent: the
    *  catalogue shifts, and a dead address fails at request time. */
@@ -320,7 +328,7 @@ export class ZgInference {
    * reports nothing.
    */
   static async connect(config: InferenceConfig): Promise<ZgInference> {
-    const net = networkFor(config.network ?? "galileo");
+    const net = networkFor(config.network);
     const rpc = new ethers.JsonRpcProvider(config.rpcUrl ?? net.rpcUrl);
     const wallet = new ethers.Wallet(config.privateKey, rpc);
     return new ZgInference(await createZGComputeNetworkBroker(brokerWallet(wallet)), config.provider);
@@ -329,7 +337,7 @@ export class ZgInference {
   /** The live catalogue. Free, and the only way to learn a provider address. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the SDK exports no service type
   static async listServices(config: Omit<InferenceConfig, "provider">): Promise<any[]> {
-    const net = networkFor(config.network ?? "galileo");
+    const net = networkFor(config.network);
     const rpc = new ethers.JsonRpcProvider(config.rpcUrl ?? net.rpcUrl);
     const wallet = new ethers.Wallet(config.privateKey, rpc);
     const broker = await createZGComputeNetworkBroker(brokerWallet(wallet));
