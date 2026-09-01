@@ -7,7 +7,9 @@ order is signed by an autonomous agent through an SDK. A settlement is decided b
 staked resolvers voting blind, published as a document on 0G Storage, and — where
 the resolver runs on 0G Compute — attested by the enclave that ran the model.
 
-Live on 0G Galileo testnet. Not on mainnet: see [What is not true yet](#what-is-not-true-yet).
+Live on **0G mainnet** (chain 16661) and on Galileo. The contracts are unaudited
+and the deployer still holds them — read [What is not true yet](#what-is-not-true-yet)
+before putting anything in.
 
 ---
 
@@ -130,6 +132,47 @@ where a venue that has never heard of Brier can read it.
 
 ---
 
+## Live on mainnet (chain 16661)
+
+Deployed at block `43180916`. **All thirteen are verified on
+[chainscan](https://chainscan.0g.ai)** — the links open readable Solidity.
+`bash scripts/verify-contracts.sh 16661` repeats it and is idempotent.
+
+**Call these.** Four UUPS proxies; the addresses survive upgrades.
+
+| Contract | Address | What it is |
+|---|---|---|
+| MarketFactory | [`0x4c79210ce5236803d1369691c56e79c21dfd8fe0`](https://chainscan.0g.ai/address/0x4c79210ce5236803d1369691c56e79c21dfd8fe0) | Creates markets, and says which addresses are real ones |
+| ConfigRegistry | [`0x3289fcb307714774ac45de9606af6f95d2b2b4dd`](https://chainscan.0g.ai/address/0x3289fcb307714774ac45de9606af6f95d2b2b4dd) | Every economic parameter, bounded at deployment |
+| AgentRegistry | [`0xe87a66e1ed8c1fee635ac0df70e0f7f03c695963`](https://chainscan.0g.ai/address/0xe87a66e1ed8c1fee635ac0df70e0f7f03c695963) | Identity and stake. Fourteen resolvers staked |
+| ResolutionModule | [`0xd3ab1d14d85fbf24698d8e679c2e32c26c5c0fbb`](https://chainscan.0g.ai/address/0xd3ab1d14d85fbf24698d8e679c2e32c26c5c0fbb) | Commit–reveal settlement, sampling and slashing |
+
+| Also deployed | Address |
+|---|---|
+| OutcomeShares | [`0x05c14536e7f8718b512ad03328a15de7250c7681`](https://chainscan.0g.ai/address/0x05c14536e7f8718b512ad03328a15de7250c7681) |
+| MarketImplementation | [`0xf182794e8c1a437ae16536ab4b8e7b019637732f`](https://chainscan.0g.ai/address/0xf182794e8c1a437ae16536ab4b8e7b019637732f) |
+| ZgDataVerifier | [`0xd23aee353f60ad8cd211d088b58b4f9e61bde257`](https://chainscan.0g.ai/address/0xd23aee353f60ad8cd211d088b58b4f9e61bde257) |
+| AgentCard | [`0xa2f14bede0c49022a9864263e8174096dd94adcd`](https://chainscan.0g.ai/address/0xa2f14bede0c49022a9864263e8174096dd94adcd) |
+| Timelock | [`0x4810a1bf3ef8f7d52d9d7a01155ddb171cea8d4e`](https://chainscan.0g.ai/address/0x4810a1bf3ef8f7d52d9d7a01155ddb171cea8d4e) |
+
+**Collateral is W0G**, [`0x1cd0690ff9a693f5ef2dd976660a8dafc81a109c`](https://chainscan.0g.ai/token/0x1cd0690ff9a693f5ef2dd976660a8dafc81a109c) —
+wrapped native 0G, 18 decimals, real money. Native 0G is not an ERC-20 and no
+market can hold it, so an agent arriving with a funded wallet owns nothing a
+market will accept until it calls `client.wrapNative(collateral, amount)`.
+
+Open markets:
+
+| Market | Question | Trading closes |
+|---|---|---|
+| [`0x7c1f9c8b…`](https://chainscan.0g.ai/address/0x7c1f9c8b2C1b17fbB054d18735982cD9a696099E) | ETH/USD close above $4,000 on 2026-09-30 | 2026-10-01 00:00 UTC |
+| [`0xCDc13Cc2…`](https://chainscan.0g.ai/address/0xCDc13Cc2830240518ce76a0a6ecbA51a4DBA8c35) | Mets @ Rays combined score above 8 runs | 2026-09-01 22:40 UTC |
+
+The authoritative copy is `deployments/16661.json`, rebuilt from the chain rather
+than from the deploy's own simulation — see the runbook for why that distinction
+cost an afternoon.
+
+---
+
 ## Live on Galileo (chain 16602)
 
 **All fourteen are verified on the explorer** — the links open readable Solidity, not
@@ -194,6 +237,33 @@ all, `chain` reads state only, `indexer` adds trade history from logs. A mode
 that cannot answer something says so — the pages never render a zero for an
 unknown number.
 
+### Build an agent against the published SDK
+
+```bash
+npm install @0g-brier/agent-kit    # 0.2.0, pulls @0g-brier/protocol 0.2.0
+```
+
+```ts
+import {BrierClient} from "@0g-brier/agent-kit";
+import {networkForChainId} from "@0g-brier/protocol";
+
+const net = networkForChainId(16661);      // throws on a chain it does not know,
+                                           // rather than quietly meaning localhost
+const client = new BrierClient({network: net.name, privateKey: KEY, factory, outcomeShares});
+
+await client.wrapNative(collateral, parseEther("10"));   // 0G -> W0G, one for one
+await client.ensureAllowance(market, collateral, amount); // wrapping is not approving
+await client.buyShares({market, outcome: 1, sharesOut, maxTokensIn});
+```
+
+Two things worth knowing before writing a resolver. `net.indexerUrl` gives the
+0G Storage indexer for THAT chain — the two networks share no data, and a mainnet
+`specRoot` written to the testnet one is a permanent commitment to a document
+nobody can fetch. And `decideByThreshold(rules, observations)` settles a
+threshold question by comparing two numbers in code, returning `null` on anything
+it cannot read exactly; `settle()` tries it before the model, so a well-phrased
+rule never spends an enclave call — or acquires one's failure modes.
+
 ### Run the reference agent
 
 ```bash
@@ -228,8 +298,8 @@ DEPLOYER_KEY=0x… node scripts/committee-run.mjs <market>
 ### Tests
 
 ```bash
-cd contracts && forge test        # 331, including invariant and differential suites
-cd frontend  && npm test          # 402
+cd contracts && forge test        # 370, including invariant and differential suites
+cd frontend  && npm test          # 414
 cd packages/protocol && npm test  # the DPM mirror, against Solidity's own vectors
 ```
 
@@ -262,10 +332,14 @@ deployments/        one manifest per chain id
 
 Stated here rather than discovered later.
 
-- **Not on mainnet.** The contracts are unaudited, and that is the only thing
-  still in the way: the deployment path itself is written down, ordered, and
-  rehearsed in [docs/mainnet-runbook.md](docs/mainnet-runbook.md). Everything
-  above runs on Galileo with a valueless test collateral.
+- **On mainnet, and unaudited.** This used to read "not on mainnet", and the
+  audit was named as the only thing in the way. It still has not happened. What
+  changed is the deployment, not the assurance: real W0G now sits in two markets
+  behind contracts nobody outside this repository has reviewed. The runbook
+  ([docs/mainnet-runbook.md](docs/mainnet-runbook.md)) records what was deployed
+  and what it cost to get there, including the defects the deploy itself found.
+- **Liquidity is one wallet deep.** Each mainnet market was seeded with 1 W0G by
+  the deployer, and no third party has traded. Prices move on almost nothing.
 - **Ownership handover is half done.** `transferOwnership` to the Timelock has
   been called on all four upgradeable contracts, so `pendingOwner` is the
   timelock — but `acceptOwnership` has not, and until it does the deployer still
@@ -279,11 +353,13 @@ Stated here rather than discovered later.
   Worth knowing before completing it: `setParam` then needs a 48-hour proposal,
   so anything that tunes parameters — `scripts/committee-run.mjs` shortens three
   windows — has to be scheduled ahead or run against the real ones.
-- **Most settlements have used the single-resolver shortcut.** `settle()` takes
-  one allowlisted key: no stake at risk, no blind vote, no dispute window. The
-  chain records `viaCommittee == false` and the market page says so in as many
-  words. A real committee settlement has been run end to end (`committee-run.mjs`)
-  but it is not yet the default.
+- **The single-resolver shortcut exists, and mainnet refuses it.** `settle()`
+  takes one allowlisted key: no stake at risk, no blind vote, no dispute window.
+  Most Galileo settlements used it, and the chain records `viaCommittee == false`
+  where they did. On 16661 the allowlist is EMPTY by design — `Deploy.s.sol`
+  refuses to fill it there — so every mainnet settlement must go through the
+  committee. That path has run end to end on Galileo; on mainnet it has not run
+  yet, because no market has closed.
 - **Reputation counters are mostly unwritten.** `AgentRegistry` declares six and
   writes two — `resolutionsAgreed` and `resolutionsOverturned`. Markets created,
   markets voided, realised P&L and trades executed read zero for every agent.
