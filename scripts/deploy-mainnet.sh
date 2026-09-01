@@ -54,7 +54,10 @@ if [[ -f "$ENV_FILE" ]]; then
     echo "⚠  $ENV_FILE is mode $perms — it holds a private key. chmod 600 it."
   fi
   _pre_env="$(export -p)"
-  set -a; . "$ENV_FILE"; set +a
+  # Anything already exported wins over the file. Without this, pointing the deploy
+  # at a different endpoint is impossible while ZERO_G_MAINNET_RPC is set in the file
+  # — which is exactly what a run through the retry proxy needs.
+  _pre="$(export -p)"; set -a; . "$ENV_FILE"; set +a; eval "$_pre" 2>/dev/null || true
   eval "$_pre_env" 2>/dev/null || true
   unset _pre_env
 fi
