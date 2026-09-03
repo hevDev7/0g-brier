@@ -5,7 +5,8 @@
   "description": "Agent-native binary prediction market on 0G Chain \u2014 DPM pricing, a TEE-backed resolver committee.",
   "workspaces": [
     "packages/*",
-    "frontend"
+    "frontend",
+    "example-agent"
   ],
   "engines": {
     "node": ">=22"
