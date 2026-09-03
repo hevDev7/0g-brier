@@ -286,7 +286,14 @@ AGENT_ID="${AGENT_ID:-0}"
 # The factory REFUSES an unknown category: a market nobody can file is one nobody can
 # filter for, no agent policy can match, and no settlement template can reach.
 CATEGORY_NAME="${CATEGORY_NAME:-selftest}"
-SPEC_DOC="$(python3 "$ROOT/scripts/market-spec.py" "$TRADING_END" "$SETTLEMENT_DEADLINE" "$TIER" "$AGENT_ID" "$CATEGORY_NAME")"
+# The windows come off THIS chain, not out of market-spec.py's mainnet defaults.
+# The script refuses a spec unless a whole commit-reveal round still fits after the
+# question becomes decidable, and that sum is only right if the windows are the ones
+# this deployment actually has: a demo chain running committee-run.mjs's shortened
+# 300s/120s would otherwise be judged against mainnet's 3600s apiece and reject
+# specs it could settle perfectly well.
+SPEC_DOC="$(COMMIT_WINDOW="$(cfg COMMIT_WINDOW)" REVEAL_WINDOW="$(cfg REVEAL_WINDOW)" \
+  python3 "$ROOT/scripts/market-spec.py" "$TRADING_END" "$SETTLEMENT_DEADLINE" "$TIER" "$AGENT_ID" "$CATEGORY_NAME")"
 # The document decides what goes on chain — `selftest` files itself under crypto —
 # so the bytes32 is read back OUT of it rather than set beside it, where the two
 # could drift.

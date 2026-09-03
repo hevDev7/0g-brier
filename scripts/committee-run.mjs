@@ -47,6 +47,14 @@ import fs from "node:fs";
 import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {networkForChainId} from "@0g-brier/protocol";
+// agent-kit's selector evaluator, imported from its BUILD rather than by package
+// name on purpose: `@0g-brier/agent-kit` re-exports inference.ts, which loads the
+// 0G compute SDK eagerly, and that SDK throws "does not provide an export named
+// 'C'" on some Node 22.x builds — the failure keeper-tick.sh already gates on. A
+// script whose header says NO MODEL RUNS HERE should not stop running because a
+// model SDK will not load. Either spelling needs the package built; the package
+// name resolves to this same file.
+import {classifySelector, parsePath, applyPath, SelectorSyntaxError} from "../packages/agent-kit/dist/evidence.js";
 
 const RPC = process.env.RPC_URL ?? process.env.ZERO_G_RPC ?? networkForChainId(Number(process.env.CHAIN_ID ?? 16602)).rpcUrl;
 const MARKET = process.argv[2];
@@ -224,6 +232,85 @@ function operatorCandidates() {
   return byAddress;
 }
 
+/**
+ * The reading the market's own selector points at.
+ *
+ * THIS WAS `Number(JSON.parse(body)[0][4])` — the shape of a Coinbase candle,
+ * hardcoded, whatever the market had actually declared. Market 0xCDc13Cc2's
+ * source is an MLB linescore, so it threw `TypeError: Cannot read properties of
+ * undefined (reading '4')` before a single vote could be built: even had this
+ * script been scheduled and correctly timed on 2026-09-01, that round would still
+ * have closed with commits=0, and the traceback would have read like a bug in the
+ * runner rather than a question this voter is not equipped to answer.
+ *
+ * The evaluator is agent-kit's, not a second one written here. Two evaluators are
+ * two answers to "what did the source say", and the receipt anchored at step 5
+ * claims there is one.
+ *
+ * REFUSES rather than approximates, in every case it cannot execute. That is the
+ * same line step 3 already holds for an unreadable threshold, and for the same
+ * reason: refusing costs the round, answering wrongly costs someone their money.
+ */
+function readSelected(body, src) {
+  const selector = src.selector ?? null;
+  const refuse = (why) =>
+    new Error(
+      `${why} — refusing to vote.\n` +
+        `  market   ${MARKET}\n` +
+        `  source   ${src.url}\n` +
+        `  selector ${JSON.stringify(selector)}\n` +
+        `  A selector this evaluator cannot execute needs the model path,\n` +
+        `  packages/agent-kit/examples/resolve.ts, which reads the whole document.\n` +
+        `  This script deliberately does not use it — see NO MODEL RUNS HERE at the top.`,
+    );
+
+  const shape = classifySelector(selector);
+  // `market-spec.py` emits `"selector": None` for pages nothing can index into —
+  // the Artemis III mission page, for one. `evidence.ts` answers that by handing
+  // the WHOLE document to a model. This script has no model, so there is no part
+  // of the body it is entitled to call the reading, and choosing one is exactly
+  // the defect above with a different constant.
+  if (shape === "none") throw refuse("the market declares no selector, and this voter reads only where a selector points");
+  if (shape === "hint") throw refuse("the selector is a phrase for a human reader, not a path");
+
+  let steps;
+  try {
+    steps = parsePath(selector);
+  } catch (e) {
+    // Where market 0xCDc13Cc2 lands. `$.teams.away.runs + $.teams.home.runs`
+    // starts with `$`, so `classifySelector` calls it a path — correctly; it is an
+    // attempt at one — and `parsePath` is what reports that the arithmetic is
+    // outside the subset. Same refusal, one step later than a bare English hint.
+    throw refuse(`the selector is path-shaped and outside the subset this evaluator executes: ${e instanceof SelectorSyntaxError ? e.why : String(e)}`);
+  }
+
+  let json;
+  try {
+    json = JSON.parse(body);
+  } catch {
+    throw refuse("a path selector needs JSON and the body did not parse as JSON");
+  }
+  const hit = applyPath(json, steps);
+  if (!hit.found) throw refuse(`the selector matched nothing: ${hit.detail}`);
+  // An absence is not a reading. The MLB linescore carries EMPTY team objects
+  // before first pitch — the spec's own settlementPrompt says so in as many words
+  // — and a great many APIs spell "no data yet" as JSON null.
+  if (hit.value === null || hit.value === undefined) throw refuse("the selector resolved to JSON null, which is an absence rather than a reading");
+  // The same absence, spelled the other common way. This has to be caught HERE and
+  // not by the `Number.isFinite(reading)` guard downstream, because `Number("")` is
+  // 0 and `Number.isFinite(0)` is true: an empty string sails through that guard and
+  // is voted as a reading of zero. Against "more than 8 runs" a phantom 0 reads as a
+  // confident NO — the same shape as the NaN-threshold defect noted at step 3, which
+  // settled market 0xABE2Cf5C NO forever. Whitespace counts as empty for the same
+  // reason: `Number(" ")` is also 0.
+  if (typeof hit.value === "string" && hit.value.trim() === "") {
+    throw refuse("the selector resolved to an empty string, which is an absence rather than a reading");
+  }
+  // Text, never coerced here: `evidence.value` is what the source said, and the
+  // comparison below is what this voter made of it. Same split as `ObservedValue`.
+  return typeof hit.value === "string" ? hit.value : JSON.stringify(hit.value);
+}
+
 async function main() {
   const tier = await pub.readContract({address: MARKET, abi: MARKET_ABI, functionName: "tier"});
   const shapeKey = ["COMMITTEE_FAST", "COMMITTEE_VERIFIED", "COMMITTEE_DETERMINISTIC"][tier];
@@ -353,8 +440,9 @@ async function main() {
     hint: null,
     clipped: false,
   };
-  const reading = Number(JSON.parse(body)[0][4]);
-  evidence.value = String(reading);
+  const observed = readSelected(body, src);
+  evidence.value = observed;
+  const reading = Number(observed);
   // `[\d.]+` was greedy and the rules text ends its sentence right after the
   // number, so this captured "2397.73." — including the full stop — and Number()
   // gave NaN. Anchoring the decimal part stops at the digit.
@@ -373,12 +461,12 @@ async function main() {
     throw new Error(`cannot read a threshold out of the market's rules — refusing to vote.\n  rules: ${spec.rules}`);
   }
   if (!Number.isFinite(reading)) {
-    throw new Error(`source ${src.url} did not yield a number — refusing to vote.`);
+    throw new Error(`source ${src.url} at ${JSON.stringify(evidence.selector)} yielded ${JSON.stringify(observed)}, which is not a number — refusing to vote.`);
   }
   const outcome = reading > threshold ? OUTCOMES.YES : OUTCOMES.NO;
   console.log(`\n── 3. the rule, applied ──`);
   console.log(`   ${spec.question}`);
-  console.log(`   source reads ${reading}, threshold ${threshold} → ${outcome === 1 ? "YES" : "NO"}`);
+  console.log(`   ${src.url} at ${evidence.selector} reads ${reading}, threshold ${threshold} → ${outcome === 1 ? "YES" : "NO"}`);
 
   // ── 4. open the round ────────────────────────────────────────────────────
   console.log("\n── 4. sample a committee ──");
@@ -474,7 +562,11 @@ async function main() {
       // `rationale`, not `reasoning`. The reader looks for this exact key and
       // treats a receipt without it as unreadable — an anchored root with no
       // legible document behind it, which is the one thing worse than no root.
-      rationale: `Coinbase candle for the pinned minute closed at ${reading}; the rule asks for strictly greater than ${threshold}. ${reading > threshold ? "Greater, so YES" : "Not greater, so NO"}.`,
+      // Says which source and which selector, rather than naming Coinbase as this
+      // did on every market alike. The receipt is anchored on 0G Storage and read
+      // back by strangers; "Coinbase candle" over an MLB linescore would be a false
+      // statement in a permanent document, and the reader has no way to catch it.
+      rationale: `${src.url} at ${evidence.selector} read ${observed}; the rule asks for strictly greater than ${threshold}. ${reading > threshold ? "Greater, so YES" : "Not greater, so NO"}.`,
       criteria: spec.rules ?? null,
       citations: [src.url],
       rawResponse: null,

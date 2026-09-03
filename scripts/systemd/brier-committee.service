@@ -1,0 +1,46 @@
+# Brier resolution committee — one pass, run by brier-committee.timer.
+#
+# AN ARTIFACT, NOT AN INSTALLATION. Nothing in this repo installs it. To arm it:
+#
+#   install -Dm644 scripts/systemd/brier-committee.service ~/.config/systemd/user/
+#   install -Dm644 scripts/systemd/brier-committee.timer   ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user start brier-committee.service     # one pass, watch the journal
+#   systemctl --user enable --now brier-committee.timer
+#
+# ARMING THIS ON MAINNET IS AN OPERATOR'S DECISION AND NOBODY ELSE'S. Once the
+# timer is running, this machine commits and reveals real votes with real stake
+# behind them, on questions real money is riding on. Read the header of
+# packages/agent-kit/examples/committee-tick.ts first, then run it by hand with
+# DRY_RUN=1 until its output on the live markets is what you expect.
+#
+# The two paths below assume the repo is at %h/Project-MDlabs/Akindo/brier.
+# Change both if it is not — a unit pointed at a path that does not exist fails
+# at start, which is at least loud.
+
+[Unit]
+Description=Brier committee — commit, reveal and finalize whatever the clock has made due
+
+[Service]
+# The nvm node, pinned. systemd's own PATH finds v22.5.1 on this machine, on
+# which the 0G compute SDK fails to load with an ESM export error that says
+# nothing about the real cause — and a committee that cannot load its model does
+# not vote. Machine config: check it against `command -v node` before installing.
+Environment=PATH=%h/.nvm/versions/node/v22.23.1/bin:/usr/local/bin:/usr/bin:/bin
+Type=oneshot
+WorkingDirectory=%h/Project-MDlabs/Akindo/brier
+ExecStart=/bin/bash %h/Project-MDlabs/Akindo/brier/scripts/committee-tick.sh
+# Far longer than the keeper's 180 s, and deliberately. A keeper pass is pure
+# RPC; this one may pay for an enclave inference and upload a settlement receipt
+# to 0G Storage for every seat it holds, and a three-member committee on one
+# machine is three of each. The pass survives being killed anyway — a vote is
+# journalled to disk before its commit is sent — but a kill still costs the
+# inference that was paid for, so the budget is generous rather than tight.
+TimeoutStartSec=900
+
+# The journal of unrevealed votes lives under $XDG_STATE_HOME (default
+# ~/.local/state/brier). It holds the pre-image of every outstanding commitment,
+# which is the one secret a commit-reveal scheme has, and losing it makes an
+# outstanding commit unrevealable — the resolver is then slashed exactly as a
+# no-show would be. Back it up with the same care as the key, and do not put it
+# on a tmpfs.
