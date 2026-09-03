@@ -42,3 +42,7 @@ packages/*/dist/
 docs/akindo-submission.md
 docs/demo-video-script.md
 docs/brier-demo-silent.mp4
+
+# Python bytecode from scripts/test_market_spec.py, which runs out of scripts/.
+__pycache__/
+*.pyc

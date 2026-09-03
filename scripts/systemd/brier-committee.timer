@@ -1,0 +1,34 @@
+# Brier committee — the safety net, not the schedule.
+#
+# AN ARTIFACT, NOT AN INSTALLATION. See brier-committee.service for how to install
+# both files and for why arming this on mainnet is an operator's decision.
+#
+#   systemctl --user enable --now brier-committee.timer
+#   systemctl --user list-timers 'brier-*'
+#
+# TWO UNITS, and they do different jobs. The pass schedules its OWN next wake —
+# scripts/committee-tick.sh reads the `next-due` line and arms a one-shot
+# `brier-committee-next` for the exact second the chain says something falls due.
+# This timer exists only for when that chain of wakes breaks: the machine was off
+# at the appointed second, a pass crashed before it could schedule, or
+# systemd-run was unavailable. Either mechanism alone is a single point of
+# failure, and the failure is silent — which is how the incident this whole
+# thing answers went unnoticed for two hours.
+
+[Unit]
+Description=Brier committee — safety net, not the schedule
+
+[Timer]
+# A quarter of COMMIT_WINDOW, which is 3600 s on the live mainnet
+# ConfigRegistry. So even with every self-scheduled wake lost, four passes still
+# fall inside any commit window and three of them can fail before a vote is
+# missed. The keeper's equivalent timer runs hourly because a late close() costs
+# time; a late commit costs the resolver's stake.
+OnBootSec=90s
+OnUnitActiveSec=15min
+# A window that elapsed while the machine was off is exactly when this matters.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

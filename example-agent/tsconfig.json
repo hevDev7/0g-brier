@@ -1,0 +1,20 @@
+{
+  // The same options packages/agent-kit and packages/protocol compile under, on
+  // purpose. `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are the
+  // two that change how code has to be written — the second is why `connect`
+  // spreads `privateKey` in rather than passing `undefined` — and an example
+  // that compiled under looser settings than the SDK would teach patterns that
+  // stop compiling the moment they are pasted back into it.
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["src", "test"]
+}

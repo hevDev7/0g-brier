@@ -510,6 +510,113 @@ LIVE = {
 }
 
 
+def _window_from_env(name: str) -> int:
+    """One ConfigRegistry window, in seconds, or mainnet's 3600 if unset.
+
+    Parsed rather than `int()`d, for two failure modes that both cost more than the
+    guard does. `cast call` prints `3600 [3.6e3]`, so an operator who follows the
+    refusal message and pastes a raw reading straight in gets a bare ValueError
+    traceback out of a script whose whole job is to explain itself — scripts/e2e-
+    market.sh pipes it through `awk '{print $1}'` for exactly this reason. And a
+    negative value would sail through `int()` and make the sum SMALLER than
+    `resolvesBy`, silently turning the refusal off in the one place that can catch
+    an unsettlable market at all.
+    """
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return 3600
+    # Tolerate cast's `3600 [3.6e3]` annotation rather than only diagnosing it: the
+    # first field is the exact integer, and the bracket is decoration.
+    head = raw.strip().split()[0]
+    try:
+        seconds = int(head)
+    except ValueError:
+        sys.exit(
+            f"market-spec: {name}={raw!r} is not a whole number of seconds.\n"
+            f"  Read it from the deployment's ConfigRegistry, e.g.\n"
+            f"    {name}=$(cast call $CONFIG 'params(bytes32)(uint256)' $(cast keccak {name}) | awk '{{print $1}}')"
+        )
+    if seconds < 0:
+        sys.exit(f"market-spec: {name}={seconds} is negative; a window cannot run backwards.")
+    return seconds
+
+
+# ── the check that has to happen here, because nothing downstream can do it ──
+#
+# A market whose question cannot be answered AND VOTED THROUGH before its own
+# settlement deadline can never be settled. No resolver, however good, can
+# observe a thing that has not happened. It is not a bad market, it is an
+# impossible one — and three of them were created on this testnet: questions
+# dated a month to sixteen months out, given a three-hour window. All three ran
+# their clock down and had to be failed.
+#
+# The contract cannot catch this: `createMarket` sees a `bytes32` spec root and
+# has no idea what the question means. The resolver cannot catch it either — by
+# the time it looks, the market exists and the money is in it. This script is the
+# last place that holds the question and the deadline at the same time, so the
+# refusal belongs here.
+def _refuse_if_unsettlable(category: str, resolves_by: int, settlement_deadline: int) -> None:
+    """Stop unless a whole commit-reveal round still fits AFTER the event.
+
+    THE DEADLINE IS NOT THE BINDING CONSTRAINT; THE ROUND IS. This used to ask
+    `resolvesBy > settlementDeadline`, which admits a question that first becomes
+    decidable one second before the deadline — and a resolver who learns the
+    answer then still has to COMMIT a hash on chain and then REVEAL it, one
+    window each, both before that same deadline. So the test is
+
+        resolvesBy + COMMIT_WINDOW + REVEAL_WINDOW <= settlementDeadline
+
+    CALIBRATION — DO NOT TIGHTEN THIS UNTIL IT REJECTS MAINNET MARKET 1.
+    0xCDc13Cc2830240518ce76a0a6ecbA51a4DBA8c35 asked for a baseball score with
+    resolvesBy 1788316800 against settlementDeadline 1788331216, and it PASSES
+    here with 7,216 seconds to spare — correctly, because the game was decidable
+    with a full round still left in the window. It died anyway, with commits=0,
+    because the KEEPER drew its committee 117 seconds after tradingEnd and so
+    shut the reveal window 1h58m before the game could be Final. That is a defect
+    in WHEN THE DRAW HAPPENS and is fixed at the draw. A check bent here until
+    market 1 failed it would refuse answerable questions and leave the real
+    defect standing.
+
+    COMMIT_WINDOW and REVEAL_WINDOW are ConfigRegistry parameters rather than
+    protocol constants, so they are read from the environment — the same numbers
+    the shell callers pull off the chain with `cfg COMMIT_WINDOW`. The defaults
+    are what 0G mainnet (16661, ConfigRegistry 0x3289fcb307714774ac45de9606af6f95d2b2b4dd)
+    has deployed today: 3600 seconds apiece. A deployment that has moved them —
+    committee-run.mjs shortens both so a demo runs in minutes — must pass its own
+    values in, or this refuses specs its chain could settle and admits specs it
+    could not.
+
+    `resolvesBy == 0` means the question resolves from the market's own state
+    (`selftest`), which is answerable the moment it closes.
+    """
+    if not resolves_by:
+        return
+    commit_window = _window_from_env("COMMIT_WINDOW")
+    reveal_window = _window_from_env("REVEAL_WINDOW")
+    votable_by = resolves_by + commit_window + reveal_window
+    if votable_by <= settlement_deadline:
+        return
+    # Seconds first, and hours only once there are any. A shortfall of one second
+    # is a real refusal and reads as "0.0 hours too early" in the units the old
+    # message used — which is the shape of a rounding bug, not of a reason.
+    short = votable_by - settlement_deadline
+    gap = f"{short:,} second{'' if short == 1 else 's'}"
+    if short >= 3600:
+        gap += f" ({short / 3600:,.1f} hours)"
+    sys.exit(
+        f"market-spec: {category!r} cannot be settled in this window.\n"
+        f"  the question resolves at {resolves_by} ({_iso(resolves_by)})\n"
+        f"  a commit window ({commit_window}s) and a reveal window ({reveal_window}s) after that\n"
+        f"    run to {votable_by} ({_iso(votable_by)})\n"
+        f"  the market must be settled by {settlement_deadline} ({_iso(settlement_deadline)})\n"
+        f"  that is {gap} short — a resolver could learn the answer and still have\n"
+        f"    nowhere to commit and reveal it.\n"
+        f"  Use a settlementDeadline of at least {votable_by} ({_iso(votable_by)}), or a category\n"
+        f"  whose question resolves sooner. If this deployment's windows are not mainnet's 3600s\n"
+        f"  apiece, pass COMMIT_WINDOW= and REVEAL_WINDOW= read from its ConfigRegistry."
+    )
+
+
 trading_end, settlement_deadline, tier, agent_id = (int(a) for a in sys.argv[1:5])
 category = sys.argv[5] if len(sys.argv) > 5 else "crypto"
 _live_of = category[5:] if category.startswith("live-") else None
@@ -525,32 +632,10 @@ elif category == "live":
 else:
     spec = SPECS[category]
 
-# ── the check that has to happen here, because nothing downstream can do it ──
-#
-# A market whose question resolves AFTER its own settlement deadline can never be
-# settled. No resolver, however good, can observe a thing that has not happened.
-# It is not a bad market, it is an impossible one — and three of them were created
-# on this testnet: questions dated a month to sixteen months out, given a
-# three-hour window. All three ran their clock down and had to be failed.
-#
-# The contract cannot catch this: `createMarket` sees a `bytes32` spec root and
-# has no idea what the question means. The resolver cannot catch it either — by
-# the time it looks, the market exists and the money is in it. This script is the
-# last place that holds the question and the deadline at the same time, so the
-# refusal belongs here.
-#
-# `resolvesBy == 0` means the question resolves from the market's own state
-# (`selftest`), which is answerable the moment it closes.
 resolves_by = spec["resolvesBy"]
-if resolves_by and resolves_by > settlement_deadline:
-    late = (resolves_by - settlement_deadline) / 3600
-    sys.exit(
-        f"market-spec: {category!r} cannot be settled in this window.\n"
-        f"  the question resolves at {resolves_by} ({_iso(resolves_by)})\n"
-        f"  the market must be settled by {settlement_deadline} ({_iso(settlement_deadline)})\n"
-        f"  that is {late:,.1f} hours too early — no observation before the deadline can decide it.\n"
-        f"  Use a longer settlementDeadline, or a category whose question resolves sooner."
-    )
+# A whole commit-reveal round has to still fit AFTER the question becomes
+# decidable, or no resolver can vote it through however good it is.
+_refuse_if_unsettlable(category, resolves_by, settlement_deadline)
 # `selftest` is a demo scaffold; on chain it is filed under crypto, which the
 # registry knows. Inventing a category the registry has never heard of would make
 # `createMarket` revert with UnknownCategory, which is exactly right of it.

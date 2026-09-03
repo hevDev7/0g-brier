@@ -2,7 +2,7 @@
 
 build:      ; cd contracts && forge build
 prod:       ; cd contracts && FOUNDRY_PROFILE=prod forge build
-test:       ; cd contracts && forge test -vv && npm test --workspaces --if-present
+test:       ; cd contracts && forge test -vv && npm test --workspaces --if-present && python3 -m unittest discover -s $(CURDIR)/scripts -t $(CURDIR)/scripts -p "test_*.py"
 fmt:        ; cd contracts && forge fmt
 fmt-check:  ; cd contracts && forge fmt --check
 invariant:  ; cd contracts && FOUNDRY_PROFILE=ci forge test --match-path 'test/invariant/*' -vv

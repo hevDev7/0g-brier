@@ -1,0 +1,30 @@
+{
+  "name": "@0g-brier/example-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A copyable starting point for trading Brier with your own agent: the plumbing works, the opinion is yours to write in src/strategy.ts.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "agent": "tsx src/agent.ts",
+    "dry": "tsx src/agent.ts --dry",
+    "redeem": "tsx src/redeem.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@0g-brier/agent-kit": "0.3.0",
+    "@0g-brier/protocol": "0.2.1",
+    "@0g-brier/zg-storage": "0.1.2",
+    "viem": "^2.56.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
+  },
+  "license": "MIT"
+}
